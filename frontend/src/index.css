@@ -180,3 +180,19 @@ body {
   margin: 0;
   letter-spacing: -0.02em;
 }
+
+/* Fade-in animation for chunked text rendering */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease;
+}

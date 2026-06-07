@@ -1,39 +1,35 @@
-import { useState, useEffect, useTransition, Suspense, lazy, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, RefreshCw, Download, AlertCircle, Loader2, TrendingUp, AlertTriangle, Target, CheckCircle, Clock, BarChart3, Brain } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import { reportApi } from '../services/api'
+import LazyChart from '../components/LazyChart'
 
-const SimpleChart = lazy(() => import('../components/SimpleChart'))
+const CHUNK_INTERVAL = 30
 
-const CHUNK_SIZE = 500
-const RENDER_INTERVAL = 30
-
-function useChunkedText(text: string, chunkSize: number) {
-  const [displayed, setDisplayed] = useState<string[]>([])
+function useChunkedParagraphs(text: string) {
+  const [visible, setVisible] = useState<string[]>([])
   const [done, setDone] = useState(false)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    if (!text) { setDisplayed([]); setDone(true); return }
-    const chunks: string[] = []
-    for (let i = 0; i < text.length; i += chunkSize) {
-      chunks.push(text.slice(i, i + chunkSize))
-    }
-    setDisplayed([])
+    if (!text) { setVisible([]); setDone(true); return }
+    const paragraphs = text.split(/\n\n+/).filter(Boolean)
+    setVisible([])
     setDone(false)
     let idx = 0
-    intervalRef.current = setInterval(() => {
-      idx++
-      setDisplayed(chunks.slice(0, idx))
-      if (idx >= chunks.length) {
-        if (intervalRef.current) clearInterval(intervalRef.current)
+    const timer = setInterval(() => {
+      if (idx >= paragraphs.length) {
+        clearInterval(timer)
         setDone(true)
+        return
       }
-    }, RENDER_INTERVAL)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [text, chunkSize])
+      setVisible(prev => [...prev, paragraphs[idx]])
+      idx++
+    }, CHUNK_INTERVAL)
+    return () => clearInterval(timer)
+  }, [text])
 
-  return { displayed, done }
+  return { visible, done }
 }
 
 export default function Report() {
@@ -41,7 +37,6 @@ export default function Report() {
   const [report, setReport] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [, startTransition] = useTransition()
 
   useEffect(() => {
     if (taskId) fetchReport(taskId)
@@ -51,8 +46,9 @@ export default function Report() {
     try {
       setLoading(true)
       setError(null)
+      setReport(null)
       const data = await reportApi.get(id)
-      startTransition(() => setReport(data))
+      setReport(data)
     } catch (err: any) {
       setError(err.message || 'Failed to fetch report')
     } finally {
@@ -149,8 +145,8 @@ Confidence: ${report.confidence ? `${(report.confidence * 100).toFixed(1)}%` : '
   )
 }
 
-const ReportContent = ({ report }: { report: any }) => {
-  const { displayed, done } = useChunkedText(report.answer || '', CHUNK_SIZE)
+function ReportContent({ report }: { report: any }) {
+  const { visible, done } = useChunkedParagraphs(report.answer || '')
 
   return (
     <>
@@ -186,16 +182,37 @@ const ReportContent = ({ report }: { report: any }) => {
         </div>
       </div>
 
-      {/* Answer - Chunked Rendering */}
+      {/* Answer - Chunked Markdown Rendering */}
       {report.answer && (
         <div className="card">
           <h3 className="text-lg font-semibold text-primary-50 mb-3">
             <Brain className="w-5 h-5 inline mr-2 text-blue-500" />
             分析结果
           </h3>
-          <div className="bg-dark-bg rounded-lg p-4 border border-dark-border max-h-[500px] overflow-auto">
-            {displayed.map((chunk, idx) => (
-              <span key={idx} className="text-sm text-primary-200 whitespace-pre-wrap leading-relaxed">{chunk}</span>
+          <div className="bg-dark-bg rounded-lg p-4 border border-dark-border max-h-[600px] overflow-y-auto">
+            {visible.map((paragraph, idx) => (
+              <div key={idx} className="animate-fade-in mb-4">
+                <ReactMarkdown
+                  components={{
+                    h1: ({children}) => <h1 className="text-xl font-bold text-primary-50 mb-2">{children}</h1>,
+                    h2: ({children}) => <h2 className="text-lg font-semibold text-primary-100 mb-2">{children}</h2>,
+                    h3: ({children}) => <h3 className="text-base font-semibold text-primary-200 mb-1">{children}</h3>,
+                    p: ({children}) => <p className="text-sm text-primary-200 leading-relaxed mb-2">{children}</p>,
+                    ul: ({children}) => <ul className="list-disc list-inside text-sm text-primary-200 mb-2 space-y-1">{children}</ul>,
+                    ol: ({children}) => <ol className="list-decimal list-inside text-sm text-primary-200 mb-2 space-y-1">{children}</ol>,
+                    li: ({children}) => <li className="text-primary-200">{children}</li>,
+                    strong: ({children}) => <strong className="font-semibold text-primary-100">{children}</strong>,
+                    em: ({children}) => <em className="italic text-primary-300">{children}</em>,
+                    table: ({children}) => <table className="w-full text-sm border-collapse mb-4">{children}</table>,
+                    th: ({children}) => <th className="border border-dark-border px-3 py-2 text-left text-primary-200 bg-dark-card">{children}</th>,
+                    td: ({children}) => <td className="border border-dark-border px-3 py-2 text-primary-300">{children}</td>,
+                    code: ({children}) => <code className="bg-dark-card px-1 py-0.5 rounded text-xs text-primary-300 font-mono">{children}</code>,
+                    hr: () => <hr className="border-dark-border my-4" />,
+                  }}
+                >
+                  {paragraph}
+                </ReactMarkdown>
+              </div>
             ))}
             {!done && (
               <div className="flex items-center gap-2 mt-2">
@@ -268,7 +285,7 @@ const ReportContent = ({ report }: { report: any }) => {
         </div>
       )}
 
-      {/* Charts - Lazy Loaded */}
+      {/* Charts - Lazy Loaded with IntersectionObserver */}
       {report.chart_specs && report.chart_specs.length > 0 && (
         <div className="card">
           <div className="flex items-center gap-2 mb-4">
@@ -277,18 +294,14 @@ const ReportContent = ({ report }: { report: any }) => {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {report.chart_specs.map((chart: any, index: number) => (
-              <Suspense key={index} fallback={
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
-                </div>
-              }>
-                <SimpleChart
-                  data={chart.data}
-                  type={chart.chart_type === 'line' ? 'line' : 'bar'}
+              <div key={index} className="bg-dark-bg rounded-lg p-4 border border-dark-border">
+                <LazyChart
+                  labels={chart.data?.map((d: any) => d.label) || []}
+                  values={chart.data?.map((d: any) => d.value) || []}
                   title={chart.title}
-                  height={200}
+                  type={chart.chart_type === 'line' ? 'line' : 'bar'}
                 />
-              </Suspense>
+              </div>
             ))}
           </div>
         </div>
