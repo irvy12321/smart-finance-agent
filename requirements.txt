@@ -1,0 +1,12 @@
+# Smart Finance Agent - Root Dependencies
+# Backend dependencies are in backend/requirements.txt
+# Frontend dependencies are in frontend/package.json
+#
+# Quick start:
+#   Backend:  cd backend && pip install -r requirements.txt
+#   Frontend: cd frontend && npm install
+#
+# Or use Docker:
+#   docker-compose up --build
+
+-r backend/requirements.txt

@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-06-04T17:04:20.221465",
+  "query": "What are the key risks for Tesla investors in 2024?",
+  "total_ms": 183348.78899999967,
+  "success_rate": 1.0,
+  "total_tokens": 0,
+  "agent_stats": {
+    "planner": {
+      "calls": 1,
+      "tokens": 1815,
+      "latency_total_ms": 44519.07019999999
+    },
+    "executor": {
+      "calls": 1,
+      "tokens": 1214,
+      "latency_total_ms": 44019.88680000068
+    },
+    "reasoner": {
+      "calls": 1,
+      "tokens": 2512,
+      "latency_total_ms": 47431.09550000008
+    },
+    "report": {
+      "calls": 1,
+      "tokens": 2025,
+      "latency_total_ms": 47370.610699999816
+    }
+  },
+  "token_budget": {
+    "planner": {
+      "max_tokens": 2000,
+      "used_tokens": 1815,
+      "remaining": 185,
+      "utilization": "91%"
+    },
+    "executor": {
+      "max_tokens": 2000,
+      "used_tokens": 1214,
+      "remaining": 786,
+      "utilization": "61%"
+    },
+    "reasoner": {
+      "max_tokens": 3500,
+      "used_tokens": 2512,
+      "remaining": 988,
+      "utilization": "72%"
+    },
+    "report": {
+      "max_tokens": 2500,
+      "used_tokens": 2025,
+      "remaining": 475,
+      "utilization": "81%"
+    },
+    "chart": {
+      "max_tokens": 2000,
+      "used_tokens": 0,
+      "remaining": 2000,
+      "utilization": "0%"
+    },
+    "synthesizer": {
+      "max_tokens": 3000,
+      "used_tokens": 0,
+      "remaining": 3000,
+      "utilization": "0%"
+    }
+  }
+}

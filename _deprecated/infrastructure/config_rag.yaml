@@ -1,0 +1,14 @@
+# RAG 基础配置
+chunk_size: 500
+chunk_overlap: 50
+embedding_dim: 384
+top_k: 5
+
+# Embedding 配置
+# mode: "dev" = hash mock (快速, 无语义), "prod" = bge-m3 (真实语义)
+embedding:
+  mode: "dev"
+  model_name: "BAAI/bge-m3"
+  dim: 1024
+  batch_size: 32
+  device: "cpu"

@@ -1,0 +1,3 @@
+timeout: 15
+max_content_length: 8000
+user_agent: "SmartFinanceAgent/1.0"
