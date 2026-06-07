@@ -112,6 +112,9 @@ class Orchestrator:
         self.memory.add_user_message(query)
         self.state_tracker.reset()
 
+        if self.router:
+            self.router.token_budget.reset()
+
         await self.event_bus.emit(AgentEvent(
             event_type="pipeline_start",
             agent_name="orchestrator",
@@ -273,6 +276,9 @@ class Orchestrator:
 
         self.memory.add_user_message(query)
         self.state_tracker.reset()
+
+        if self.router:
+            self.router.token_budget.reset()
 
         # Layer 0: Smart Routing
         yield {"stage": "planning", "message": "Analyzing question complexity and selecting strategy..."}

@@ -236,6 +236,8 @@ class LiteLLMRouter:
 
         # Token 预算控制: 取 min(用户指定, 预算剩余)
         budget_limit = self.token_budget.get_max_tokens(agent_name)
+        if budget_limit <= 0:
+            budget_limit = self.llm_config.max_tokens
         if max_tokens is not None:
             kwargs["max_tokens"] = min(max_tokens, budget_limit)
         else:
