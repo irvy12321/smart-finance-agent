@@ -9,19 +9,7 @@ import {
   Activity
 } from 'lucide-react'
 import { toolsApi } from '../services/api'
-
-interface StockData {
-  symbol: string
-  name: string
-  price: number
-  change: number
-  change_percent: number
-  volume: number
-  market_cap: number
-  pe_ratio: number
-  high_52w: number
-  low_52w: number
-}
+import type { StockPriceResponse } from '../types/api'
 
 interface StockPriceCardProps {
   onStockSelect?: (symbol: string) => void
@@ -29,7 +17,7 @@ interface StockPriceCardProps {
 
 export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
   const [symbol, setSymbol] = useState('')
-  const [stockData, setStockData] = useState<StockData | null>(null)
+  const [stockData, setStockData] = useState<StockPriceResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

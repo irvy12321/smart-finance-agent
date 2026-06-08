@@ -2,34 +2,9 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Play, Loader2, CheckCircle, AlertCircle, FileText, Brain, Zap, Lightbulb, Target } from 'lucide-react'
 import { taskApi } from '../services/api'
+import type { TaskStatusResponse, TaskResultResponse } from '../types/api'
 
 type Phase = 'idle' | 'creating' | 'running' | 'completed' | 'error'
-
-interface TaskStatus {
-  status: string
-  progress: number
-  current_stage: string
-  message: string
-}
-
-interface TaskResult {
-  answer: string
-  report_markdown: string
-  report_title: string
-  summary: string
-  key_findings: string[]
-  risk_factors: Array<{ factor: string; severity: string; description: string }>
-  market_trends: string[]
-  recommendations: string[]
-  confidence: number
-  total_tasks: number
-  success_tasks: number
-  failed_tasks: number
-  elapsed: number
-  chart_specs: Array<{ chart_type: string; title: string; x_label: string; y_label: string; data: Array<{ label: string; value: number }> }>
-  plan_reasoning: string
-  reasoning_insights: string[]
-}
 
 const POLL_INTERVAL = 2000
 
@@ -38,8 +13,8 @@ export default function Research() {
   const [query, setQuery] = useState('')
   const [phase, setPhase] = useState<Phase>('idle')
   const [taskId, setTaskId] = useState<string | null>(null)
-  const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null)
-  const [result, setResult] = useState<TaskResult | null>(null)
+  const [taskStatus, setTaskStatus] = useState<TaskStatusResponse | null>(null)
+  const [result, setResult] = useState<TaskResultResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const stopRef = useRef(false)
 
@@ -101,12 +76,12 @@ export default function Research() {
             stopped = true
             try {
               const resultResp = await taskApi.getResult(newTaskId)
-              if (!stopped && !stopRef.current) {
+              if (!stopRef.current) {
                 setResult(resultResp)
                 setPhase('completed')
               }
             } catch {
-              if (!stopped && !stopRef.current) {
+              if (!stopRef.current) {
                 setError('任务完成但获取结果失败')
                 setPhase('error')
               }

@@ -1,12 +1,19 @@
 import { useState, useCallback } from 'react'
 import { taskApi, reportApi, systemApi } from '../services/api'
+import type {
+  TaskResultResponse,
+  ReportResponse,
+  SystemStatusResponse,
+  SystemMetricsResponse,
+  AgentStatusResponse,
+} from '../types/api'
 
 interface TaskState {
   taskId: string | null
   status: 'idle' | 'pending' | 'running' | 'completed' | 'error'
   progress: number
   currentStage: string
-  result: any
+  result: TaskResultResponse | null
   error: string | null
 }
 
@@ -88,7 +95,7 @@ export function useTask() {
               setTaskState(prev => ({
                 ...prev,
                 status: 'completed',
-                result: { message: 'Task completed but result retrieval failed. Please refresh.' },
+                result: null,
               }))
             }
           } else if (status.status === 'failed') {
@@ -174,7 +181,7 @@ export function useTask() {
 }
 
 export function useReport() {
-  const [report, setReport] = useState<any>(null)
+  const [report, setReport] = useState<ReportResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -217,9 +224,9 @@ export function useReport() {
 }
 
 export function useSystem() {
-  const [systemStatus, setSystemStatus] = useState<any>(null)
-  const [metrics, setMetrics] = useState<any>(null)
-  const [agentStatus, setAgentStatus] = useState<any>(null)
+  const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null)
+  const [metrics, setMetrics] = useState<SystemMetricsResponse | null>(null)
+  const [agentStatus, setAgentStatus] = useState<AgentStatusResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

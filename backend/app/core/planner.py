@@ -99,12 +99,37 @@ PLAN_SIZE_HINTS = {
 
 
 class PlannerAgent:
+    # Prompt injection 危险模式
+    _INJECTION_PATTERNS = [
+        "ignore previous instructions",
+        "ignore all instructions",
+        "forget your instructions",
+        "you are now",
+        "new instructions:",
+        "system prompt",
+        "override instructions",
+        "disregard",
+        "bypass",
+    ]
+
     def __init__(self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None):
         self.router = router
         self.llm = llm_client or LLMClient.get_instance()
 
+    @classmethod
+    def _sanitize_query(cls, query: str) -> str:
+        """清理用户输入，防止 prompt injection"""
+        sanitized = query.strip()
+        lower_query = sanitized.lower()
+        for pattern in cls._INJECTION_PATTERNS:
+            if pattern in lower_query:
+                logger.warning(f"Potential prompt injection detected: '{pattern}'")
+                sanitized = sanitized.replace(pattern, "").replace(pattern.upper(), "").replace(pattern.title(), "")
+        return sanitized[:2000]
+
     async def plan(self, query: str, route_decision: RouteDecision | None = None) -> Plan:
-        logger.info(f"Planning for query: {query[:80]}...")
+        safe_query = self._sanitize_query(query)
+        logger.info(f"Planning for query: {safe_query[:80]}...")
 
         try:
             # 构建增强 system prompt
@@ -113,12 +138,12 @@ class PlannerAgent:
             if self.router:
                 response = await self.router.complete(
                     "planner",
-                    prompt=f"User research question: {query}",
+                    prompt=f"User research question: {safe_query}",
                     system=enhanced_system,
                 )
             else:
                 response = await self.llm.complete(
-                    prompt=f"User research question: {query}",
+                    prompt=f"User research question: {safe_query}",
                     system=enhanced_system,
                     temperature=0.2,
                 )

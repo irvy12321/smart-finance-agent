@@ -46,7 +46,7 @@ def _validate_api_key() -> None:
         logger.error(error_msg)
         raise ValueError(error_msg)
 
-    logger.info(f"API Key validated: {api_key_env} = {api_key[:8]}...")
+    logger.info(f"API Key validated: {api_key_env} = ***configured***")
 
     # Validate LLM connectivity
     try:

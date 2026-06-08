@@ -13,30 +13,25 @@ import {
   BarChart3
 } from 'lucide-react'
 import { chatApi } from '../services/api'
-
-interface Message {
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: string
-}
-
-interface Conversation {
-  conversation_id: string
-  created_at: string
-  updated_at: string
-  message_count: number
-}
+import type { ChatMessage, ConversationListItem } from '../types/api'
 
 export default function Chat() {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
-  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [conversations, setConversations] = useState<ConversationListItem[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    fetchConversations()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+    fetchConversations(controller.signal)
+    return () => {
+      controller.abort()
+      abortControllerRef.current = null
+    }
   }, [])
 
   useEffect(() => {
@@ -47,11 +42,12 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (signal?: AbortSignal) => {
     try {
-      const data = await chatApi.listConversations()
+      const data = await chatApi.listConversations({ signal })
       setConversations(data.conversations || [])
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') return
       console.error('Failed to fetch conversations:', error)
     }
   }
@@ -93,7 +89,7 @@ export default function Chat() {
   const handleSend = async () => {
     if (!input.trim() || loading) return
 
-    const userMessage: Message = {
+    const userMessage: ChatMessage = {
       role: 'user',
       content: input,
       timestamp: new Date().toISOString(),
@@ -114,7 +110,7 @@ export default function Chat() {
 
       const data = await chatApi.sendMessage(convId!, input)
       
-      const assistantMessage: Message = {
+      const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: data.response,
         timestamp: data.timestamp,
@@ -123,7 +119,7 @@ export default function Chat() {
       setMessages(prev => [...prev, assistantMessage])
     } catch (error) {
       console.error('Failed to send message:', error)
-      const errorMessage: Message = {
+      const errorMessage: ChatMessage = {
         role: 'assistant',
         content: 'Sorry, I encountered an error. Please try again.',
         timestamp: new Date().toISOString(),

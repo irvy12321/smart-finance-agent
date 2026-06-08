@@ -27,6 +27,26 @@ FINANCIAL_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
+INJECTION_PATTERNS = [
+    "ignore previous instructions",
+    "ignore all instructions",
+    "forget your instructions",
+    "you are now",
+    "new instructions:",
+    "system prompt",
+    "override instructions",
+]
+
+
+def _check_prompt_injection(message: str) -> bool:
+    """检查潜在的 prompt injection，记录警告"""
+    lower_msg = message.lower()
+    for pattern in INJECTION_PATTERNS:
+        if pattern in lower_msg:
+            logger.warning(f"Potential prompt injection in chat: '{pattern}' detected")
+            return True
+    return False
+
 
 # ============================================================
 # Pydantic Models
@@ -122,6 +142,9 @@ async def send_message(conversation_id: str, request: ChatRequest, req: Request,
             content=request.message,
         )
         storage.add_message(conversation_id, "user", request.message)
+
+        # 检测 prompt injection 并记录日志
+        _check_prompt_injection(request.message)
 
         # 判断是否为金融研究查询 → 走 orchestrator
         is_financial = bool(FINANCIAL_KEYWORDS.search(request.message))

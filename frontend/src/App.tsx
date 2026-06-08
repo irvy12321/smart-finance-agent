@@ -9,7 +9,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 
 function App() {
   return (
-    <Router>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ErrorBoundary>
         <div className="flex h-screen bg-dark-bg">
           <Sidebar />

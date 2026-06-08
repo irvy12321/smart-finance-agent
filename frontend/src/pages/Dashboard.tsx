@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { 
   Search, 
@@ -12,28 +12,14 @@ import {
 } from 'lucide-react'
 import { taskApi } from '../services/api'
 import StockPriceCard from '../components/StockPriceCard'
-
-interface Task {
-  task_id: string
-  query: string
-  status: string
-  created_at: string
-  updated_at: string
-}
+import type { TaskListItem } from '../types/api'
 
 export default function Dashboard() {
-  const [tasks, setTasks] = useState<Task[]>([])
+  const [tasks, setTasks] = useState<TaskListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchTasks()
-    // Auto refresh every 10 seconds
-    const interval = setInterval(fetchTasks, 10000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -44,7 +30,31 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const response = await taskApi.list()
+        if (!cancelled) setTasks(response.tasks || [])
+      } catch (err: any) {
+        if (!cancelled) setError(err.message || 'Failed to fetch tasks')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadData()
+    const interval = setInterval(loadData, 10000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 
   const getStatusIcon = (status: string) => {
     switch (status) {

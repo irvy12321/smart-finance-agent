@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, RefreshCw, Download, AlertCircle, Loader2, TrendingUp, AlertTriangle, Target, CheckCircle, Clock, BarChart3, Brain } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import rehypeSanitize from 'rehype-sanitize'
 import { reportApi } from '../services/api'
 import LazyChart from '../components/LazyChart'
+import type { ReportResponse } from '../types/api'
 
 const markdownComponents = {
   h1: ({children}: any) => <h1 className="text-xl font-bold text-primary-50 mb-2">{children}</h1>,
@@ -24,22 +26,25 @@ const markdownComponents = {
 
 export default function Report() {
   const { taskId } = useParams<{ taskId: string }>()
-  const [report, setReport] = useState<any>(null)
+  const [report, setReport] = useState<ReportResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (taskId) fetchReport(taskId)
+    const controller = new AbortController()
+    if (taskId) fetchReport(taskId, controller.signal)
+    return () => controller.abort()
   }, [taskId])
 
-  const fetchReport = async (id: string) => {
+  const fetchReport = async (id: string, signal?: AbortSignal) => {
     try {
       setLoading(true)
       setError(null)
       setReport(null)
-      const data = await reportApi.get(id)
+      const data = await reportApi.get(id, { signal })
       setReport(data)
     } catch (err: any) {
+      if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') return
       setError(err.message || 'Failed to fetch report')
     } finally {
       setLoading(false)
@@ -178,7 +183,7 @@ function ReportContent({ report }: { report: any }) {
             分析结果
           </h3>
           <div className="bg-dark-bg rounded-lg p-4 border border-dark-border max-h-[600px] overflow-y-auto">
-            <ReactMarkdown components={markdownComponents}>
+            <ReactMarkdown rehypePlugins={[rehypeSanitize]} components={markdownComponents}>
               {report.answer}
             </ReactMarkdown>
           </div>

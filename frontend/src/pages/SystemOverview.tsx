@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { 
   Activity, 
@@ -21,48 +21,33 @@ import {
 } from 'lucide-react'
 import { systemApi, taskApi } from '../services/api'
 import SimpleChart from '../components/SimpleChart'
-
-interface Task {
-  task_id: string
-  query: string
-  status: string
-  created_at: string
-  updated_at: string
-}
+import type { 
+  SystemStatusResponse, 
+  SystemMetricsResponse, 
+  AgentStatusResponse, 
+  TaskListItem 
+} from '../types/api'
 
 export default function SystemOverview() {
-  const [systemStatus, setSystemStatus] = useState<any>(null)
-  const [metrics, setMetrics] = useState<any>(null)
-  const [agentStatus, setAgentStatus] = useState<any>(null)
-  const [tasks, setTasks] = useState<Task[]>([])
+  const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null)
+  const [metrics, setMetrics] = useState<SystemMetricsResponse | null>(null)
+  const [agentStatus, setAgentStatus] = useState<AgentStatusResponse | null>(null)
+  const [tasks, setTasks] = useState<TaskListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
-  useEffect(() => {
-    fetchSystemData()
-  }, [])
-
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null
-    if (autoRefresh) {
-      interval = setInterval(fetchSystemData, 5000)
-    }
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [autoRefresh])
-
-  const fetchSystemData = async () => {
+  const fetchSystemData = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoading(true)
       setError(null)
       
       const [statusRes, metricsRes, agentsRes, tasksRes] = await Promise.all([
-        systemApi.getStatus(),
-        systemApi.getMetrics(),
-        systemApi.getAgentStatus(),
-        taskApi.list(),
+        systemApi.getStatus({ signal }),
+        systemApi.getMetrics({ signal }),
+        systemApi.getAgentStatus({ signal }),
+        taskApi.list({ signal }),
       ])
       
       setSystemStatus(statusRes)
@@ -70,11 +55,45 @@ export default function SystemOverview() {
       setAgentStatus(agentsRes)
       setTasks(tasksRes.tasks || [])
     } catch (err: any) {
+      if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') return
       setError(err.message || 'Failed to fetch system data')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  const handleRefresh = useCallback(() => {
+    const controller = new AbortController()
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = controller
+    fetchSystemData(controller.signal)
+  }, [fetchSystemData])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+    fetchSystemData(controller.signal)
+    return () => {
+      controller.abort()
+      abortControllerRef.current = null
+    }
+  }, [fetchSystemData])
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null
+    if (autoRefresh) {
+      interval = setInterval(() => {
+        const controller = new AbortController()
+        abortControllerRef.current?.abort()
+        abortControllerRef.current = controller
+        fetchSystemData(controller.signal)
+      }, 5000)
+    }
+    return () => {
+      if (interval) clearInterval(interval)
+      abortControllerRef.current?.abort()
+    }
+  }, [autoRefresh, fetchSystemData])
 
   const formatUptime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600)
@@ -155,7 +174,7 @@ export default function SystemOverview() {
             </div>
           </div>
           <button
-            onClick={fetchSystemData}
+            onClick={handleRefresh}
             className="mt-3 text-sm text-red-500 hover:text-red-400"
           >
             Try again
@@ -184,7 +203,7 @@ export default function SystemOverview() {
             {autoRefresh ? 'Live' : 'Auto Refresh'}
           </button>
           <button
-            onClick={fetchSystemData}
+            onClick={handleRefresh}
             className="flex items-center gap-2 text-sm text-primary-400 hover:text-primary-200 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -435,7 +454,7 @@ export default function SystemOverview() {
               <h3 className="text-sm font-semibold text-primary-200">Throughput</h3>
             </div>
             <p className="text-2xl font-bold text-green-500">
-              {metrics?.total_requests ? `${(metrics.total_requests / (systemStatus?.uptime / 3600 || 1)).toFixed(1)}/h` : '0/h'}
+              {metrics?.total_requests ? `${(metrics.total_requests / ((systemStatus?.uptime || 0) / 3600 || 1)).toFixed(1)}/h` : '0/h'}
             </p>
             <div className="flex items-center gap-1 mt-2">
               <ArrowUpRight className="w-3 h-3 text-green-500" />
