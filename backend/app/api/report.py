@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, List
 
 from app.utils.logger import get_logger
+from app import storage
 
 logger = get_logger("api.report")
 
@@ -54,32 +55,23 @@ class ReportSummaryResponse(BaseModel):
 
 
 # ============================================================
-# Task Storage (shared with task.py)
-# ============================================================
-
-# Import task storage from task module
-# In production, this should be a proper database
-from app.api.task import tasks_storage
-
-
-# ============================================================
 # API Routes
 # ============================================================
 
 @router.get("/{task_id}", response_model=ReportResponse)
 async def get_report(task_id: str):
     """Get full research report for a task"""
-    if task_id not in tasks_storage:
+    task = storage.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_storage[task_id]
+
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
-    
+
     result = task.get("result", {})
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
-    
+
     return ReportResponse(
         task_id=task_id,
         **result
@@ -89,17 +81,17 @@ async def get_report(task_id: str):
 @router.get("/{task_id}/summary", response_model=ReportSummaryResponse)
 async def get_report_summary(task_id: str):
     """Get report summary for a task"""
-    if task_id not in tasks_storage:
+    task = storage.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_storage[task_id]
+
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
-    
+
     result = task.get("result", {})
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
-    
+
     return ReportSummaryResponse(
         task_id=task_id,
         report_title=result.get("report_title", ""),
@@ -115,17 +107,17 @@ async def get_report_summary(task_id: str):
 @router.get("/{task_id}/markdown")
 async def get_report_markdown(task_id: str):
     """Get report in markdown format"""
-    if task_id not in tasks_storage:
+    task = storage.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_storage[task_id]
+
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
-    
+
     result = task.get("result", {})
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
-    
+
     return {
         "task_id": task_id,
         "markdown": result.get("report_markdown", ""),
@@ -136,17 +128,17 @@ async def get_report_markdown(task_id: str):
 @router.get("/{task_id}/charts")
 async def get_report_charts(task_id: str):
     """Get chart specifications for a task"""
-    if task_id not in tasks_storage:
+    task = storage.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_storage[task_id]
+
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
-    
+
     result = task.get("result", {})
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
-    
+
     return {
         "task_id": task_id,
         "chart_paths": result.get("chart_paths", []),
@@ -157,17 +149,17 @@ async def get_report_charts(task_id: str):
 @router.get("/{task_id}/analysis")
 async def get_report_analysis(task_id: str):
     """Get detailed analysis for a task"""
-    if task_id not in tasks_storage:
+    task = storage.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_storage[task_id]
+
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
-    
+
     result = task.get("result", {})
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
-    
+
     return {
         "task_id": task_id,
         "key_findings": result.get("key_findings", []),
@@ -182,17 +174,17 @@ async def get_report_analysis(task_id: str):
 @router.get("/{task_id}/sources")
 async def get_report_sources(task_id: str):
     """Get data sources for a task"""
-    if task_id not in tasks_storage:
+    task = storage.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_storage[task_id]
+
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
-    
+
     result = task.get("result", {})
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
-    
+
     return {
         "task_id": task_id,
         "sources": result.get("sources", []),
@@ -204,17 +196,17 @@ async def get_report_sources(task_id: str):
 @router.get("/{task_id}/process")
 async def get_report_process(task_id: str):
     """Get agent process information for a task"""
-    if task_id not in tasks_storage:
+    task = storage.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_storage[task_id]
+
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
-    
+
     result = task.get("result", {})
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
-    
+
     return {
         "task_id": task_id,
         "plan_reasoning": result.get("plan_reasoning", ""),

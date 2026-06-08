@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 
 from app.utils.logger import get_logger
+from app import storage
 
 logger = get_logger("api.system")
 
@@ -103,15 +104,15 @@ async def get_system_status():
 async def get_system_metrics():
     """Get system metrics"""
     try:
-        from app.api.task import tasks_storage
-        
+        tasks = storage.list_tasks()
+
         # Count tasks by status
-        total_tasks = len(tasks_storage)
-        completed_tasks = sum(1 for t in tasks_storage.values() if t["status"] == "completed")
-        pending_tasks = sum(1 for t in tasks_storage.values() if t["status"] == "pending")
-        running_tasks = sum(1 for t in tasks_storage.values() if t["status"] == "running")
-        failed_tasks = sum(1 for t in tasks_storage.values() if t["status"] == "failed")
-        
+        total_tasks = len(tasks)
+        completed_tasks = sum(1 for t in tasks if t["status"] == "completed")
+        pending_tasks = sum(1 for t in tasks if t["status"] == "pending")
+        running_tasks = sum(1 for t in tasks if t["status"] == "running")
+        failed_tasks = sum(1 for t in tasks if t["status"] == "failed")
+
         return SystemMetricsResponse(
             total_requests=request_count,
             successful_requests=successful_requests,

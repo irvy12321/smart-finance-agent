@@ -7,7 +7,7 @@ Chat API routes - 提供聊天接口
 import re
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 
@@ -17,9 +17,6 @@ from app import storage
 logger = get_logger("api.chat")
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-# Global orchestrator instance (set by main.py during startup)
-orchestrator = None
 
 # 金融关键词，匹配时走 orchestrator 全流水线
 FINANCIAL_KEYWORDS = re.compile(
@@ -79,6 +76,15 @@ class ConversationHistoryResponse(BaseModel):
 
 
 # ============================================================
+# Helper: Get orchestrator from app.state
+# ============================================================
+
+def _get_orchestrator(request: Request):
+    """Get orchestrator from app.state, returns None if not available"""
+    return getattr(request.app.state, "orchestrator", None)
+
+
+# ============================================================
 # API Routes
 # ============================================================
 
@@ -102,7 +108,7 @@ async def create_conversation():
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=ChatResponse)
-async def send_message(conversation_id: str, request: ChatRequest, background_tasks: BackgroundTasks):
+async def send_message(conversation_id: str, request: ChatRequest, req: Request, background_tasks: BackgroundTasks):
     """Send a message in a conversation - 自动路由到 LLM 直答或 Orchestrator 全流水线"""
     try:
         # Get or create conversation
@@ -122,8 +128,11 @@ async def send_message(conversation_id: str, request: ChatRequest, background_ta
         sources: List[Dict[str, Any]] = []
         confidence = 0.85
 
+        # Get orchestrator from app.state
+        orchestrator = _get_orchestrator(req)
+
         if is_financial and orchestrator is not None:
-            response_text, sources, confidence = await generate_orchestrator_response(request.message)
+            response_text, sources, confidence = await generate_orchestrator_response(request.message, orchestrator)
         else:
             response_text = await generate_chat_response(request.message, conversation_id)
 
@@ -185,7 +194,7 @@ async def delete_conversation(conversation_id: str):
 # Helper Functions
 # ============================================================
 
-async def generate_orchestrator_response(message: str) -> tuple[str, list, float]:
+async def generate_orchestrator_response(message: str, orchestrator) -> tuple[str, list, float]:
     """
     使用 Orchestrator 全流水线处理金融研究查询
     带 90 秒超时保护，超时自动降级到直接 LLM

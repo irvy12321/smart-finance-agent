@@ -18,29 +18,64 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from app.core.orchestrator import Orchestrator
 from app.utils.logger import get_logger
 from app.api import api_router
 
 logger = get_logger("fastapi_backend")
 
-# Global orchestrator instance (shared with api modules)
-orchestrator = None
+
+def _validate_api_key() -> None:
+    """Validate that required API keys are configured"""
+    from app.infrastructure.config import get_active_provider, get_provider_config
+
+    provider = get_active_provider()
+    provider_config = get_provider_config()
+    api_key_env = provider_config["api_key_env"]
+    api_key = os.getenv(api_key_env, "")
+
+    if not api_key or api_key.startswith("your-"):
+        error_msg = (
+            f"\n{'='*60}\n"
+            f"ERROR: {api_key_env} is not configured!\n\n"
+            f"Please set your API key in backend/.env:\n"
+            f"  {api_key_env}=your-actual-api-key\n\n"
+            f"Active provider: {provider}\n"
+            f"Required env var: {api_key_env}\n"
+            f"{'='*60}"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    logger.info(f"API Key validated: {api_key_env} = {api_key[:8]}...")
+
+    # Validate LLM connectivity
+    try:
+        from app.infrastructure.llm_client import LLMClient
+        llm = LLMClient.get_instance()
+        logger.info(f"LLM client initialized: model={llm.config.model}")
+    except Exception as e:
+        logger.warning(f"LLM client initialization warning: {e}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    global orchestrator
     logger.info("Initializing Smart Finance Agent Orchestrator...")
+
+    # Validate API keys before initializing orchestrator
+    try:
+        _validate_api_key()
+    except ValueError as e:
+        logger.error(f"API key validation failed: {e}")
+        # Still allow startup but log the error
+        # The orchestrator will fail when actually called
+
+    from app.core.orchestrator import Orchestrator
     orchestrator = Orchestrator(use_router=True)
-    
-    # Share orchestrator with api modules
-    from app.api import task as task_module
-    from app.api import chat as chat_module
-    task_module.orchestrator = orchestrator
-    chat_module.orchestrator = orchestrator
-    
+
+    # Store orchestrator in app.state for dependency injection
+    app.state.orchestrator = orchestrator
+
     logger.info("Orchestrator initialized successfully")
     yield
     logger.info("Shutting down Smart Finance Agent...")

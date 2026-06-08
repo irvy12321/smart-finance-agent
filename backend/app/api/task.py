@@ -2,18 +2,16 @@
 Task API routes
 """
 import asyncio
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List
 import uuid
 from datetime import datetime
 
 from app.utils.logger import get_logger
+from app import storage
 
 logger = get_logger("api.task")
-
-# Global orchestrator instance (set by main.py during startup)
-orchestrator = None
 
 router = APIRouter(prefix="/task", tags=["task"])
 
@@ -90,11 +88,15 @@ class TaskListResponse(BaseModel):
 
 
 # ============================================================
-# Task Storage (in-memory for simplicity)
+# Helper: Get orchestrator from app.state
 # ============================================================
 
-# This should be replaced with a proper database in production
-tasks_storage: Dict[str, Dict[str, Any]] = {}
+def _get_orchestrator(request: Request):
+    """Get orchestrator from app.state"""
+    orch = getattr(request.app.state, "orchestrator", None)
+    if not orch:
+        raise RuntimeError("Orchestrator not initialized. Check server startup logs.")
+    return orch
 
 
 # ============================================================
@@ -106,23 +108,12 @@ async def create_task(request: TaskCreateRequest, background_tasks: BackgroundTa
     """Create a new research task"""
     try:
         task_id = str(uuid.uuid4())[:8]
-        
-        # Store task in memory
-        tasks_storage[task_id] = {
-            "task_id": task_id,
-            "query": request.query,
-            "priority": request.priority,
-            "status": "pending",
-            "progress": 0.0,
-            "current_stage": "",
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-            "result": None,
-            "events": [],
-        }
-        
+
+        # Store task in SQLite
+        storage.create_task(task_id, request.query, request.priority)
+
         logger.info(f"Created task {task_id} for query: {request.query[:50]}...")
-        
+
         return TaskCreateResponse(
             task_id=task_id,
             status="pending",
@@ -136,10 +127,10 @@ async def create_task(request: TaskCreateRequest, background_tasks: BackgroundTa
 @router.get("/{task_id}/status", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str):
     """Get task status"""
-    if task_id not in tasks_storage:
+    task = storage.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_storage[task_id]
+
     return TaskStatusResponse(
         task_id=task_id,
         status=task["status"],
@@ -150,35 +141,38 @@ async def get_task_status(task_id: str):
 
 
 @router.post("/{task_id}/run")
-async def run_task(task_id: str, background_tasks: BackgroundTasks):
+async def run_task(task_id: str, background_tasks: BackgroundTasks, request: Request):
     """Execute a research task"""
-    if task_id not in tasks_storage:
+    task = storage.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_storage[task_id]
+
     if task["status"] != "pending":
         raise HTTPException(status_code=400, detail=f"Task is already {task['status']}")
-    
+
+    # Get orchestrator from app.state
+    orchestrator = _get_orchestrator(request)
+
     # Start task execution in background
-    background_tasks.add_task(execute_task_background, task_id)
-    
+    background_tasks.add_task(execute_task_background, task_id, orchestrator)
+
     return {"message": "Task execution started", "task_id": task_id}
 
 
 @router.get("/{task_id}/result", response_model=TaskResultResponse)
 async def get_task_result(task_id: str):
     """Get task result"""
-    if task_id not in tasks_storage:
+    task = storage.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_storage[task_id]
+
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
-    
+
     result = task.get("result", {})
     if not result:
         raise HTTPException(status_code=404, detail="No result available")
-    
+
     return TaskResultResponse(
         task_id=task_id,
         status="completed",
@@ -190,15 +184,7 @@ async def get_task_result(task_id: str):
 @router.get("/list", response_model=TaskListResponse)
 async def list_tasks():
     """List all tasks"""
-    task_list = []
-    for task_id, task in tasks_storage.items():
-        task_list.append({
-            "task_id": task_id,
-            "query": task["query"],
-            "status": task["status"],
-            "created_at": task["created_at"],
-            "updated_at": task["updated_at"],
-        })
+    task_list = storage.list_tasks()
     return TaskListResponse(tasks=task_list)
 
 
@@ -206,25 +192,22 @@ async def list_tasks():
 # Background Task Execution
 # ============================================================
 
-async def execute_task_background(task_id: str):
+async def execute_task_background(task_id: str, orchestrator):
     """Execute task in background with overall timeout"""
-    global orchestrator
 
-    task = tasks_storage[task_id]
+    task = storage.get_task(task_id)
+    if not task:
+        logger.error(f"[task:{task_id}] Task not found in storage")
+        return
+
     query = task["query"]
 
     try:
-        task["status"] = "running"
-        task["current_stage"] = "planning"
-        task["updated_at"] = datetime.now().isoformat()
+        storage.update_task(task_id, status="running", current_stage="planning", progress=10.0)
 
         logger.info(f"[task:{task_id}] Starting execution: {query[:80]}...")
 
-        # Use global orchestrator (initialized in main.py)
-        if not orchestrator:
-            raise RuntimeError("Orchestrator not initialized. Check server startup logs.")
-
-        # Run with overall timeout (120s, reduced from 180s)
+        # Run with overall timeout (180s)
         events = []
         last_event_time = datetime.now().timestamp()
 
@@ -237,30 +220,27 @@ async def execute_task_background(task_id: str):
                 # Update task progress based on events
                 stage = event.get("stage", "")
                 if stage == "planning":
-                    task["progress"] = 10.0
-                    task["current_stage"] = "planning"
+                    storage.update_task(task_id, progress=10.0, current_stage="planning")
                     logger.info(f"[task:{task_id}] Stage: planning")
                 elif stage == "plan_ready":
-                    task["progress"] = 30.0
-                    task["current_stage"] = "executing"
+                    storage.update_task(task_id, progress=30.0, current_stage="executing")
                     subtask_count = len(event.get("subtasks", []))
                     logger.info(f"[task:{task_id}] Plan ready: {subtask_count} subtasks")
                 elif stage == "task_done":
-                    task["progress"] = min(task["progress"] + 10.0, 80.0)
+                    task = storage.get_task(task_id)
+                    new_progress = min(task["progress"] + 10.0, 80.0) if task else 40.0
+                    storage.update_task(task_id, progress=new_progress)
                     success = event.get("success", False)
                     tool = event.get("tool", "")
                     logger.info(f"[task:{task_id}] Subtask done: tool={tool} success={success}")
                 elif stage == "reasoning":
-                    task["progress"] = 85.0
-                    task["current_stage"] = "reasoning"
+                    storage.update_task(task_id, progress=85.0, current_stage="reasoning")
                     logger.info(f"[task:{task_id}] Stage: reasoning")
                 elif stage == "reporting":
-                    task["progress"] = 90.0
-                    task["current_stage"] = "reporting"
+                    storage.update_task(task_id, progress=90.0, current_stage="reporting")
                     logger.info(f"[task:{task_id}] Stage: reporting")
                 elif stage == "complete":
-                    task["progress"] = 100.0
-                    task["current_stage"] = "completed"
+                    storage.update_task(task_id, progress=100.0, current_stage="completed")
                     logger.info(f"[task:{task_id}] Stage: complete")
                 elif stage == "plan_fallback":
                     logger.warning(f"[task:{task_id}] Using fallback plan")
@@ -269,33 +249,21 @@ async def execute_task_background(task_id: str):
                 elif stage == "report_fallback":
                     logger.warning(f"[task:{task_id}] Using fallback report")
 
-        await asyncio.wait_for(_run_pipeline(), timeout=180)
+        await asyncio.wait_for(_run_pipeline(), timeout=600)
 
         # Process events and create result
         result = process_events(events, query)
-        task["result"] = result
-        task["events"] = events
-        task["status"] = "completed"
-        task["progress"] = 100.0
-        task["current_stage"] = "completed"
-        task["message"] = "Task completed successfully."
-        task["updated_at"] = datetime.now().isoformat()
+        storage.update_task_result(task_id, result, events)
 
         logger.info(f"[task:{task_id}] Completed successfully. Events: {len(events)}")
 
     except asyncio.TimeoutError:
         elapsed = datetime.now().timestamp() - last_event_time
-        logger.error(f"[task:{task_id}] Timed out after 120s (last event {elapsed:.0f}s ago). Events collected: {len(events)}")
-        task["status"] = "failed"
-        task["current_stage"] = "timeout"
-        task["message"] = "Research pipeline timed out. Please try a simpler query or try again later."
-        task["updated_at"] = datetime.now().isoformat()
+        logger.error(f"[task:{task_id}] Timed out after 180s (last event {elapsed:.0f}s ago). Events collected: {len(events)}")
+        storage.update_task_failure(task_id, "failed", "timeout", "Research pipeline timed out. Please try a simpler query or try again later.")
     except Exception as e:
         logger.error(f"[task:{task_id}] Failed with error: {type(e).__name__}: {e}", exc_info=True)
-        task["status"] = "failed"
-        task["current_stage"] = "error"
-        task["message"] = f"Task failed: {type(e).__name__}: {str(e)[:200]}"
-        task["updated_at"] = datetime.now().isoformat()
+        storage.update_task_failure(task_id, "failed", "error", f"Task failed: {type(e).__name__}: {str(e)[:200]}")
 
 
 def process_events(events: list, query: str) -> Dict[str, Any]:

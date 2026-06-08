@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, RefreshCw, Download, AlertCircle, Loader2, TrendingUp, AlertTriangle, Target, CheckCircle, Clock, BarChart3, Brain } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
@@ -6,6 +6,23 @@ import { reportApi } from '../services/api'
 import LazyChart from '../components/LazyChart'
 
 const CHUNK_INTERVAL = 30
+
+const markdownComponents = {
+  h1: ({children}: any) => <h1 className="text-xl font-bold text-primary-50 mb-2">{children}</h1>,
+  h2: ({children}: any) => <h2 className="text-lg font-semibold text-primary-100 mb-2">{children}</h2>,
+  h3: ({children}: any) => <h3 className="text-base font-semibold text-primary-200 mb-1">{children}</h3>,
+  p: ({children}: any) => <p className="text-sm text-primary-200 leading-relaxed mb-2">{children}</p>,
+  ul: ({children}: any) => <ul className="list-disc list-inside text-sm text-primary-200 mb-2 space-y-1">{children}</ul>,
+  ol: ({children}: any) => <ol className="list-decimal list-inside text-sm text-primary-200 mb-2 space-y-1">{children}</ol>,
+  li: ({children}: any) => <li className="text-primary-200">{children}</li>,
+  strong: ({children}: any) => <strong className="font-semibold text-primary-100">{children}</strong>,
+  em: ({children}: any) => <em className="italic text-primary-300">{children}</em>,
+  table: ({children}: any) => <table className="w-full text-sm border-collapse mb-4">{children}</table>,
+  th: ({children}: any) => <th className="border border-dark-border px-3 py-2 text-left text-primary-200 bg-dark-card">{children}</th>,
+  td: ({children}: any) => <td className="border border-dark-border px-3 py-2 text-primary-300">{children}</td>,
+  code: ({children}: any) => <code className="bg-dark-card px-1 py-0.5 rounded text-xs text-primary-300 font-mono">{children}</code>,
+  hr: () => <hr className="border-dark-border my-4" />,
+}
 
 function useChunkedParagraphs(text: string) {
   const [visible, setVisible] = useState<string[]>([])
@@ -17,16 +34,28 @@ function useChunkedParagraphs(text: string) {
     setVisible([])
     setDone(false)
     let idx = 0
+    let cancelled = false
+
     const timer = setInterval(() => {
-      if (idx >= paragraphs.length) {
+      if (cancelled) {
         clearInterval(timer)
-        setDone(true)
         return
       }
-      setVisible(prev => [...prev, paragraphs[idx]])
+      if (idx >= paragraphs.length) {
+        clearInterval(timer)
+        if (!cancelled) setDone(true)
+        return
+      }
+      if (!cancelled) {
+        setVisible(prev => [...prev, paragraphs[idx]])
+      }
       idx++
     }, CHUNK_INTERVAL)
-    return () => clearInterval(timer)
+
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
   }, [text])
 
   return { visible, done }
@@ -192,24 +221,7 @@ function ReportContent({ report }: { report: any }) {
           <div className="bg-dark-bg rounded-lg p-4 border border-dark-border max-h-[600px] overflow-y-auto">
             {visible.map((paragraph, idx) => (
               <div key={idx} className="animate-fade-in mb-4">
-                <ReactMarkdown
-                  components={{
-                    h1: ({children}) => <h1 className="text-xl font-bold text-primary-50 mb-2">{children}</h1>,
-                    h2: ({children}) => <h2 className="text-lg font-semibold text-primary-100 mb-2">{children}</h2>,
-                    h3: ({children}) => <h3 className="text-base font-semibold text-primary-200 mb-1">{children}</h3>,
-                    p: ({children}) => <p className="text-sm text-primary-200 leading-relaxed mb-2">{children}</p>,
-                    ul: ({children}) => <ul className="list-disc list-inside text-sm text-primary-200 mb-2 space-y-1">{children}</ul>,
-                    ol: ({children}) => <ol className="list-decimal list-inside text-sm text-primary-200 mb-2 space-y-1">{children}</ol>,
-                    li: ({children}) => <li className="text-primary-200">{children}</li>,
-                    strong: ({children}) => <strong className="font-semibold text-primary-100">{children}</strong>,
-                    em: ({children}) => <em className="italic text-primary-300">{children}</em>,
-                    table: ({children}) => <table className="w-full text-sm border-collapse mb-4">{children}</table>,
-                    th: ({children}) => <th className="border border-dark-border px-3 py-2 text-left text-primary-200 bg-dark-card">{children}</th>,
-                    td: ({children}) => <td className="border border-dark-border px-3 py-2 text-primary-300">{children}</td>,
-                    code: ({children}) => <code className="bg-dark-card px-1 py-0.5 rounded text-xs text-primary-300 font-mono">{children}</code>,
-                    hr: () => <hr className="border-dark-border my-4" />,
-                  }}
-                >
+                <ReactMarkdown components={markdownComponents}>
                   {paragraph}
                 </ReactMarkdown>
               </div>

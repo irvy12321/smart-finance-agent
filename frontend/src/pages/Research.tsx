@@ -42,13 +42,9 @@ export default function Research() {
   const [result, setResult] = useState<TaskResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const stopRef = useRef(false)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    return () => {
-      stopRef.current = true
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
+    return () => { stopRef.current = true }
   }, [])
 
   const startResearch = async () => {
@@ -70,19 +66,16 @@ export default function Research() {
       await taskApi.run(newTaskId)
       setPhase('running')
 
-      // Step 3: Poll status
+      // Step 3: Poll status (recursive setTimeout, not setInterval)
       let pollCount = 0
-      const maxPolls = 120 // 4 minutes max
+      const maxPolls = 120
+      let stopped = false
 
-      intervalRef.current = setInterval(async () => {
-        if (stopRef.current) {
-          if (intervalRef.current) clearInterval(intervalRef.current)
-          return
-        }
-
+      const poll = async () => {
+        if (stopped || stopRef.current) return
         pollCount++
         if (pollCount > maxPolls) {
-          if (intervalRef.current) clearInterval(intervalRef.current)
+          stopped = true
           setError('任务超时（4分钟），请重试')
           setPhase('error')
           return
@@ -90,27 +83,48 @@ export default function Research() {
 
         try {
           const statusResp = await taskApi.getStatus(newTaskId)
+          if (stopped || stopRef.current) return
+
           setTaskStatus(statusResp)
 
           if (statusResp.status === 'completed') {
-            if (intervalRef.current) clearInterval(intervalRef.current)
+            stopped = true
             try {
               const resultResp = await taskApi.getResult(newTaskId)
-              setResult(resultResp)
-              setPhase('completed')
+              if (!stopped && !stopRef.current) {
+                setResult(resultResp)
+                setPhase('completed')
+              }
             } catch {
-              setError('任务完成但获取结果失败')
+              if (!stopped && !stopRef.current) {
+                setError('任务完成但获取结果失败')
+                setPhase('error')
+              }
+            }
+            return
+          }
+
+          if (statusResp.status === 'failed') {
+            stopped = true
+            if (!stopRef.current) {
+              setError(statusResp.message || '任务执行失败')
               setPhase('error')
             }
-          } else if (statusResp.status === 'failed') {
-            if (intervalRef.current) clearInterval(intervalRef.current)
-            setError(statusResp.message || '任务执行失败')
-            setPhase('error')
+            return
+          }
+
+          // Continue polling
+          if (!stopped && !stopRef.current) {
+            setTimeout(poll, POLL_INTERVAL)
           }
         } catch {
-          // Network error - keep polling, might recover
+          if (!stopped && !stopRef.current) {
+            setTimeout(poll, POLL_INTERVAL)
+          }
         }
-      }, POLL_INTERVAL)
+      }
+
+      poll()
     } catch (err: any) {
       setError(err.message || '任务启动失败')
       setPhase('error')
@@ -119,7 +133,6 @@ export default function Research() {
 
   const handleReset = () => {
     stopRef.current = true
-    if (intervalRef.current) clearInterval(intervalRef.current)
     setPhase('idle')
     setTaskId(null)
     setTaskStatus(null)
