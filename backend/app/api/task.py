@@ -141,7 +141,7 @@ async def get_task_status(task_id: str):
 
 
 @router.post("/{task_id}/run")
-async def run_task(task_id: str, background_tasks: BackgroundTasks, request: Request):
+async def run_task(task_id: str, request: Request):
     """Execute a research task"""
     task = storage.get_task(task_id)
     if task is None:
@@ -153,8 +153,8 @@ async def run_task(task_id: str, background_tasks: BackgroundTasks, request: Req
     # Get orchestrator from app.state
     orchestrator = _get_orchestrator(request)
 
-    # Start task execution in background
-    background_tasks.add_task(execute_task_background, task_id, orchestrator)
+    # Start task execution in background using asyncio.create_task
+    asyncio.create_task(execute_task_background(task_id, orchestrator))
 
     return {"message": "Task execution started", "task_id": task_id}
 
