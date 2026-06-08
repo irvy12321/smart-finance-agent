@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Play, Loader2, CheckCircle, AlertCircle, FileText, Brain, Zap, Lightbulb, Target } from 'lucide-react'
 import { taskApi } from '../services/api'
@@ -47,7 +47,17 @@ export default function Research() {
     return () => { stopRef.current = true }
   }, [])
 
-  const startResearch = async () => {
+  const handleReset = useCallback(() => {
+    stopRef.current = true
+    setPhase('idle')
+    setTaskId(null)
+    setTaskStatus(null)
+    setResult(null)
+    setError(null)
+    setQuery('')
+  }, [])
+
+  const startResearch = useCallback(async () => {
     if (!query.trim() || phase === 'running' || phase === 'creating') return
 
     stopRef.current = false
@@ -129,17 +139,7 @@ export default function Research() {
       setError(err.message || '任务启动失败')
       setPhase('error')
     }
-  }
-
-  const handleReset = () => {
-    stopRef.current = true
-    setPhase('idle')
-    setTaskId(null)
-    setTaskStatus(null)
-    setResult(null)
-    setError(null)
-    setQuery('')
-  }
+  }, [query, phase])
 
   const getStageLabel = (stage: string) => {
     switch (stage) {

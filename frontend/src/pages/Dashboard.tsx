@@ -28,6 +28,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchTasks()
+    // Auto refresh every 10 seconds
+    const interval = setInterval(fetchTasks, 10000)
+    return () => clearInterval(interval)
   }, [])
 
   const fetchTasks = async () => {
