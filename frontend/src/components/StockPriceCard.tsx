@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -20,8 +20,14 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
   const [stockData, setStockData] = useState<StockPriceResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const mountedRef = useRef(true)
 
   const popularStocks = ['AAPL', 'TSLA', 'GOOGL', 'MSFT', 'AMZN', 'NVDA', 'META']
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   const handleSearch = async (searchSymbol?: string) => {
     const targetSymbol = searchSymbol || symbol
@@ -32,21 +38,31 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
 
     try {
       const data = await toolsApi.getStockPrice(targetSymbol.toUpperCase())
-      setStockData(data)
-      setSymbol(targetSymbol.toUpperCase())
+      if (mountedRef.current) {
+        setStockData(data)
+        setSymbol(targetSymbol.toUpperCase())
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch stock data')
-      setStockData(null)
+      if (mountedRef.current) {
+        setError(err.message || 'Failed to fetch stock data')
+        setStockData(null)
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
   }
 
-  const formatNumber = (num: number) => {
+  const formatNumber = (num: number): string => {
     if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`
     if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`
     if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`
-    return `$${num.toLocaleString()}`
+    return `$${num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
+  }
+
+  const formatVolume = (num: number): string => {
+    return num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   }
 
   return (
@@ -145,7 +161,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
                 <p className="text-xs text-primary-400">Volume</p>
               </div>
               <p className="text-sm font-semibold text-primary-200">
-                {stockData.volume.toLocaleString()}
+                {formatVolume(stockData.volume)}
               </p>
             </div>
             <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
