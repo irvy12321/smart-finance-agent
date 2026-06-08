@@ -54,10 +54,24 @@ def init_db() -> None:
     conn = _get_connection()
     try:
         conn.executescript("""
-            CREATE TABLE IF NOT EXISTS conversations (
-                conversation_id TEXT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS users (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                username        TEXT NOT NULL UNIQUE,
+                email           TEXT NOT NULL UNIQUE,
+                hashed_password TEXT NOT NULL,
+                is_active       BOOLEAN DEFAULT 1,
                 created_at      TEXT NOT NULL,
                 updated_at      TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+            CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+            CREATE TABLE IF NOT EXISTS conversations (
+                conversation_id TEXT PRIMARY KEY,
+                user_id         INTEGER DEFAULT NULL,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             );
             CREATE TABLE IF NOT EXISTS messages (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,6 +85,7 @@ def init_db() -> None:
 
             CREATE TABLE IF NOT EXISTS tasks (
                 task_id         TEXT PRIMARY KEY,
+                user_id         INTEGER DEFAULT NULL,
                 query           TEXT NOT NULL,
                 priority        INTEGER DEFAULT 1,
                 status          TEXT NOT NULL DEFAULT 'pending',
@@ -80,13 +95,30 @@ def init_db() -> None:
                 created_at      TEXT NOT NULL,
                 updated_at      TEXT NOT NULL,
                 result_json     TEXT DEFAULT NULL,
-                events_json     TEXT DEFAULT NULL
+                events_json     TEXT DEFAULT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             );
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
         """)
+
+        # Migrate existing tables: add user_id column if missing
+        _migrate_add_column(conn, "conversations", "user_id", "INTEGER DEFAULT NULL")
+        _migrate_add_column(conn, "tasks", "user_id", "INTEGER DEFAULT NULL")
+
         conn.commit()
     finally:
         conn.close()
+
+
+def _migrate_add_column(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
+    """Add a column to a table if it doesn't already exist"""
+    try:
+        cursor = conn.execute(f"PRAGMA table_info({table})")
+        columns = [row[1] for row in cursor.fetchall()]
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+    except Exception:
+        pass
 
 
 # Initialize on import

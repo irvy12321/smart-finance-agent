@@ -1,21 +1,25 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import { 
   LayoutDashboard, 
-  Search, 
+  FlaskConical, 
   Settings, 
   Zap,
-  MessageSquare
+  MessageSquare,
+  LogOut,
+  User
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Research', href: '/research', icon: Search },
+  { name: 'Research', href: '/research', icon: FlaskConical },
   { name: 'Chat', href: '/chat', icon: MessageSquare },
   { name: 'System', href: '/system', icon: Settings },
 ]
 
 export default function Sidebar() {
   const location = useLocation()
+  const { user, logout } = useAuth()
 
   return (
     <div className="w-64 bg-dark-sub border-r border-dark-border flex flex-col">
@@ -73,19 +77,28 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Configuration */}
+      {/* User Info */}
       <div className="p-4 border-t border-dark-border">
-        <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider mb-3 px-3">
-          Configuration
-        </p>
-        <div className="px-3 space-y-1">
-          <p className="text-xs text-primary-400">
-            Model: <span className="text-primary-200 font-mono">gpt-4</span>
-          </p>
-          <p className="text-xs text-primary-400">
-            Embedding: <span className="text-primary-200 font-mono">dev (hash)</span>
-          </p>
+        <div className="flex items-center gap-3 px-3 mb-3">
+          <div className="w-8 h-8 bg-primary-500/10 rounded-full flex items-center justify-center">
+            <User className="w-4 h-4 text-primary-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-primary-200 truncate">
+              {user?.username || 'User'}
+            </p>
+            <p className="text-xs text-primary-400 truncate">
+              {user?.email || ''}
+            </p>
+          </div>
         </div>
+        <button
+          onClick={logout}
+          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sign Out</span>
+        </button>
       </div>
     </div>
   )

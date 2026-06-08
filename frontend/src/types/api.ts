@@ -1,3 +1,30 @@
+// Auth API Types
+export interface UserCreate {
+  username: string
+  email: string
+  password: string
+}
+
+export interface UserLogin {
+  username: string
+  password: string
+}
+
+export interface UserResponse {
+  id: number
+  username: string
+  email: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface Token {
+  access_token: string
+  token_type: string
+  expires_in: number
+  user: UserResponse
+}
+
 // Task API Types
 export interface TaskCreateResponse {
   task_id: string

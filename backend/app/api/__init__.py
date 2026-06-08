@@ -3,6 +3,7 @@ API routes package
 """
 from fastapi import APIRouter
 
+from app.api.auth import router as auth_router
 from app.api.task import router as task_router
 from app.api.report import router as report_router
 from app.api.system import router as system_router
@@ -13,6 +14,7 @@ from app.api.chat import router as chat_router
 api_router = APIRouter()
 
 # Include sub-routers
+api_router.include_router(auth_router)
 api_router.include_router(task_router)
 api_router.include_router(report_router)
 api_router.include_router(system_router)
@@ -27,6 +29,7 @@ async def api_root():
         "message": "Smart Finance Agent API",
         "version": "1.0.0",
         "endpoints": {
+            "auth": "/api/auth",
             "task": "/api/task",
             "report": "/api/report",
             "system": "/api/system",

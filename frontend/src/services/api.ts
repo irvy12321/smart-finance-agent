@@ -1,5 +1,9 @@
 import axios from 'axios'
 import type {
+  UserCreate,
+  UserLogin,
+  Token,
+  UserResponse,
   TaskCreateResponse,
   TaskStatusResponse,
   TaskResultResponse,
@@ -38,6 +42,18 @@ const api = axios.create({
   },
 })
 
+// Request interceptor - add auth token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('auth_token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
@@ -58,9 +74,15 @@ api.interceptors.response.use(
       message,
     })
 
-    // Enhance error with user-friendly message
+    // Handle 401 - redirect to login
     if (error.response?.status === 401) {
-      error.userMessage = 'Authentication failed. Please check API key configuration.'
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('auth_user')
+      // Only redirect if not already on login/register page
+      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
+        window.location.href = '/login'
+      }
+      error.userMessage = 'Session expired. Please login again.'
     } else if (error.response?.status === 404) {
       error.userMessage = 'Resource not found.'
     } else if (error.response?.status === 500) {
@@ -240,6 +262,29 @@ export const chatApi = {
 
   deleteConversation: async (conversationId: string): Promise<{ message: string }> => {
     const response = await api.delete(`/chat/conversations/${conversationId}`)
+    return response.data
+  },
+}
+
+// Auth API
+export const authApi = {
+  register: async (data: UserCreate): Promise<Token> => {
+    const response = await api.post<Token>('/auth/register', data)
+    return response.data
+  },
+
+  login: async (data: UserLogin): Promise<Token> => {
+    const response = await api.post<Token>('/auth/login', data)
+    return response.data
+  },
+
+  getMe: async (): Promise<UserResponse> => {
+    const response = await api.get<UserResponse>('/auth/me')
+    return response.data
+  },
+
+  refreshToken: async (): Promise<Token> => {
+    const response = await api.post<Token>('/auth/refresh')
     return response.data
   },
 }
