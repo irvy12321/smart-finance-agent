@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Play, Loader2, CheckCircle, AlertCircle, FileText, Brain, Zap, Lightbulb, Target } from 'lucide-react'
+import { Rocket, Loader2, CheckCircle, AlertCircle, FileText, Brain, Zap, Lightbulb, Target } from 'lucide-react'
 import { taskApi } from '../services/api'
 import type { TaskStatusResponse, TaskResultResponse } from '../types/api'
 
@@ -151,7 +151,7 @@ export default function Research() {
             disabled={!query.trim() || phase === 'running' || phase === 'creating'}
             className="btn-primary flex items-center gap-2 disabled:opacity-50"
           >
-            <Play className={`w-4 h-4 ${phase === 'running' || phase === 'creating' ? 'hidden' : ''}`} />
+            <Rocket className={`w-4 h-4 ${phase === 'running' || phase === 'creating' ? 'hidden' : ''}`} />
             <Loader2 className={`w-4 h-4 animate-spin ${phase === 'running' || phase === 'creating' ? '' : 'hidden'}`} />
             {phase === 'creating' ? '创建中...' : phase === 'running' ? '运行中...' : 'Run Research'}
           </button>

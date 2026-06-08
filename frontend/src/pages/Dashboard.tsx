@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { 
-  Search, 
+  FlaskConical, 
   FileText, 
   Activity, 
   Clock,
   CheckCircle,
   AlertCircle,
   Plus,
-  MessageSquare
+  MessageSquare,
+  Search
 } from 'lucide-react'
 import { taskApi } from '../services/api'
 import StockPriceCard from '../components/StockPriceCard'
@@ -182,7 +183,7 @@ export default function Dashboard() {
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
-              <Search className="w-5 h-5 text-blue-500" />
+              <FlaskConical className="w-5 h-5 text-blue-500" />
             </div>
             <div>
               <p className="text-sm font-semibold text-primary-200">New Research</p>
