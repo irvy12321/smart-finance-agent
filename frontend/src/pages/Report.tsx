@@ -1,11 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, RefreshCw, Download, AlertCircle, Loader2, TrendingUp, AlertTriangle, Target, CheckCircle, Clock, BarChart3, Brain } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { reportApi } from '../services/api'
 import LazyChart from '../components/LazyChart'
-
-const CHUNK_INTERVAL = 30
 
 const markdownComponents = {
   h1: ({children}: any) => <h1 className="text-xl font-bold text-primary-50 mb-2">{children}</h1>,
@@ -22,43 +20,6 @@ const markdownComponents = {
   td: ({children}: any) => <td className="border border-dark-border px-3 py-2 text-primary-300">{children}</td>,
   code: ({children}: any) => <code className="bg-dark-card px-1 py-0.5 rounded text-xs text-primary-300 font-mono">{children}</code>,
   hr: () => <hr className="border-dark-border my-4" />,
-}
-
-function useChunkedParagraphs(text: string) {
-  const [visible, setVisible] = useState<string[]>([])
-  const [done, setDone] = useState(false)
-
-  useEffect(() => {
-    if (!text) { setVisible([]); setDone(true); return }
-    const paragraphs = text.split(/\n\n+/).filter(Boolean)
-    setVisible([])
-    setDone(false)
-    let idx = 0
-    let cancelled = false
-
-    const timer = setInterval(() => {
-      if (cancelled) {
-        clearInterval(timer)
-        return
-      }
-      if (idx >= paragraphs.length) {
-        clearInterval(timer)
-        if (!cancelled) setDone(true)
-        return
-      }
-      if (!cancelled) {
-        setVisible(prev => [...prev, paragraphs[idx]])
-      }
-      idx++
-    }, CHUNK_INTERVAL)
-
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
-  }, [text])
-
-  return { visible, done }
 }
 
 export default function Report() {
@@ -175,8 +136,6 @@ Confidence: ${report.confidence ? `${(report.confidence * 100).toFixed(1)}%` : '
 }
 
 function ReportContent({ report }: { report: any }) {
-  const { visible, done } = useChunkedParagraphs(report.answer || '')
-
   return (
     <>
       {/* Title & Stats */}
@@ -211,7 +170,7 @@ function ReportContent({ report }: { report: any }) {
         </div>
       </div>
 
-      {/* Answer - Chunked Markdown Rendering */}
+      {/* Answer - Markdown Rendering */}
       {report.answer && (
         <div className="card">
           <h3 className="text-lg font-semibold text-primary-50 mb-3">
@@ -219,19 +178,9 @@ function ReportContent({ report }: { report: any }) {
             分析结果
           </h3>
           <div className="bg-dark-bg rounded-lg p-4 border border-dark-border max-h-[600px] overflow-y-auto">
-            {visible.map((paragraph, idx) => (
-              <div key={idx} className="animate-fade-in mb-4">
-                <ReactMarkdown components={markdownComponents}>
-                  {paragraph}
-                </ReactMarkdown>
-              </div>
-            ))}
-            {!done && (
-              <div className="flex items-center gap-2 mt-2">
-                <Loader2 className="w-4 h-4 text-primary-500 animate-spin" />
-                <span className="text-xs text-primary-500">渲染中...</span>
-              </div>
-            )}
+            <ReactMarkdown components={markdownComponents}>
+              {report.answer}
+            </ReactMarkdown>
           </div>
         </div>
       )}
