@@ -232,7 +232,19 @@ class ReportAgent:
         json_str = re.sub(r"[\x00-\x1f\x7f]", "", json_str)
 
         try:
-            return json.loads(json_str)
+            data = json.loads(json_str)
+            # Ensure summary is a string, not a JSON object
+            if isinstance(data.get("summary"), dict):
+                data["summary"] = json.dumps(data["summary"], ensure_ascii=False)[:200]
+            elif isinstance(data.get("summary"), str) and data["summary"].startswith("{"):
+                # Try to parse as JSON and extract meaningful text
+                try:
+                    summary_obj = json.loads(data["summary"])
+                    if "summary" in summary_obj:
+                        data["summary"] = summary_obj["summary"]
+                except:
+                    pass
+            return data
         except json.JSONDecodeError as e:
             logger.warning(f"JSON parse failed: {e}")
             return {"title": "Research Report", "summary": text[:200], "key_findings": [text[:200]]}
