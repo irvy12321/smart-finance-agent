@@ -231,7 +231,7 @@ export default function Research() {
 
       {/* Completed Result */}
       {phase === 'completed' && result && (
-        <>
+        <div className="space-y-6">
           {/* Success Banner */}
           <div className="card border-green-500/30">
             <div className="flex items-center justify-between">
@@ -240,7 +240,7 @@ export default function Research() {
                 <div>
                   <p className="text-sm font-medium text-green-500">研究完成</p>
                   <p className="text-xs text-green-400 mt-1">
-                    {result.total_tasks} 个任务 | 置信度: {result.confidence ? `${(result.confidence * 100).toFixed(0)}%` : '-'}
+                    {result.total_tasks || 0} 个任务 | 置信度: {result.confidence ? `${(result.confidence * 100).toFixed(0)}%` : '-'}
                   </p>
                 </div>
               </div>
@@ -256,12 +256,14 @@ export default function Research() {
           </div>
 
           {/* Answer */}
-          <div className="card">
-            <h2 className="text-lg font-semibold text-primary-50 mb-3">分析结果</h2>
-            <div className="bg-dark-bg rounded-lg p-4 border border-dark-border">
-              <p className="text-sm text-primary-200 whitespace-pre-wrap leading-relaxed">{result.answer}</p>
+          {result.answer && (
+            <div className="card">
+              <h2 className="text-lg font-semibold text-primary-50 mb-3">分析结果</h2>
+              <div className="bg-dark-bg rounded-lg p-4 border border-dark-border">
+                <p className="text-sm text-primary-200 whitespace-pre-wrap leading-relaxed">{result.answer}</p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Key Findings */}
           {result.key_findings && result.key_findings.length > 0 && (
@@ -272,7 +274,7 @@ export default function Research() {
               </div>
               <div className="space-y-2">
                 {result.key_findings.map((finding, i) => (
-                  <div key={i} className="flex items-start gap-3 p-3 bg-dark-bg rounded-lg border border-dark-border">
+                  <div key={`finding-${i}`} className="flex items-start gap-3 p-3 bg-dark-bg rounded-lg border border-dark-border">
                     <div className="w-6 h-6 bg-blue-500/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-xs font-bold text-blue-500">{i + 1}</span>
                     </div>
@@ -292,7 +294,7 @@ export default function Research() {
               </div>
               <div className="space-y-2">
                 {result.recommendations.map((rec, i) => (
-                  <div key={i} className="flex items-start gap-3 p-3 bg-dark-bg rounded-lg border border-dark-border">
+                  <div key={`rec-${i}`} className="flex items-start gap-3 p-3 bg-dark-bg rounded-lg border border-dark-border">
                     <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                     <p className="text-sm text-primary-200">{rec}</p>
                   </div>
@@ -324,7 +326,7 @@ export default function Research() {
               <p className="text-2xl font-bold text-purple-500">{result.reasoning_insights?.length || 0}</p>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* Idle State */}
