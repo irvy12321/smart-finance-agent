@@ -43,7 +43,15 @@ export default function Register() {
       await register(username, email, password)
       navigate('/', { replace: true })
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed. Please try again.')
+      console.error('Registration error:', err)
+      const detail = err.response?.data?.detail
+      if (typeof detail === 'string') {
+        setError(detail)
+      } else if (Array.isArray(detail)) {
+        setError(detail.map((d: any) => d.msg || d).join(', '))
+      } else {
+        setError(err.userMessage || err.message || 'Registration failed. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
