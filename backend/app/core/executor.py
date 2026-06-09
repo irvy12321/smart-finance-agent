@@ -75,6 +75,7 @@ class ExecutorAgent:
             llm_client=self.llm,
             router=self.router,
         )
+        self._current_language = "en"
 
     async def execute(self, plan: Plan) -> ExecutionResult:
         trace = TraceContext()
@@ -306,12 +307,20 @@ class ExecutorAgent:
         synthesis_prompt = task.params.get("prompt", "Analyze and summarize the following information:")
         full_prompt = f"{synthesis_prompt}\n\n" + "\n\n".join(context_parts) if context_parts else synthesis_prompt
 
+        language = getattr(self, '_current_language', 'en')
+        if language == "zh":
+            system = "你是一位研究分析师。根据提供的数据提供清晰、结构化、全面的分析。必须使用中文回复。"
+            full_prompt += "\n\n请使用中文回复。"
+        else:
+            system = "You are a research analyst. Provide a clear, structured, and comprehensive analysis based on the provided data. You MUST reply in English."
+            full_prompt += "\n\nYou MUST reply in English."
+
         with trace.span("llm_synthesize", task_id=task.task_id):
             if self.router:
                 answer = await self.router.complete(
                     "executor",
                     prompt=full_prompt,
-                    system="You are a research analyst. Provide a clear, structured, and comprehensive analysis based on the provided data.",
+                    system=system,
                     max_tokens=4096,
                 )
             else:
@@ -333,19 +342,35 @@ class ExecutorAgent:
                 context_parts.append(f"=== {r.tool_name} ({r.task_id}) ===\n{self._format_data(r.data)}")
 
         if not context_parts:
-            return "No successful task results to synthesize."
+            logger.warning("No successful task results to synthesize")
+            return "No successful task results to synthesize." if self._current_language == "en" else "没有成功的任务结果可供综合分析。"
 
-        prompt = (
-            f"Based on the following research results about: {plan.original_query}\n\n"
-            + "\n\n".join(context_parts)
-            + "\n\nPlease provide a comprehensive, well-structured analysis answering the user's question."
-        )
+        language = getattr(self, '_current_language', 'en')
+        logger.info(f"Auto-synthesizing with language={language}, {len(context_parts)} context parts")
+        
+        if language == "zh":
+            prompt = (
+                f"基于以下关于'{plan.original_query}'的研究结果\n\n"
+                + "\n\n".join(context_parts)
+                + "\n\n请提供全面、结构清晰的分析来回答用户的问题。必须使用中文回复。"
+            )
+            system = "你是一位研究分析师。根据提供的数据提供清晰、结构化、全面的分析。必须使用中文回复。"
+        else:
+            prompt = (
+                f"Based on the following research results about: {plan.original_query}\n\n"
+                + "\n\n".join(context_parts)
+                + "\n\nPlease provide a comprehensive, well-structured analysis answering the user's question. You MUST reply in English."
+            )
+            system = "You are a research analyst. Provide a clear, structured, and comprehensive analysis based on the provided data. You MUST reply in English."
 
         with trace.span("auto_synthesize"):
             if self.router:
-                return await self.router.complete("executor", prompt=prompt, max_tokens=4096)
+                result = await self.router.complete("executor", prompt=prompt, system=system, max_tokens=4096)
             else:
-                return await self.llm.complete(prompt=prompt, temperature=0.3, max_tokens=4096)
+                result = await self.llm.complete(prompt=prompt, system=system, temperature=0.3, max_tokens=4096)
+            
+            logger.info(f"Auto-synthesize result length: {len(result) if result else 0}")
+            return result
 
     @staticmethod
     def _build_task_graph(subtasks: list[SubTask]) -> dict[str, list[str]]:

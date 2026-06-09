@@ -460,6 +460,24 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
                 answer = event["answer"]
                 break
 
+    # If still no answer, try to get from task results
+    if not answer:
+        for event in events:
+            if event.get("stage") == "task_done" and event.get("success"):
+                # This is a completed task, but we need the actual data
+                pass
+
+    # If we have report_md but no parsed findings, try to extract from answer
+    if not key_findings and answer:
+        # Try to extract key findings from answer if it contains numbered lists
+        lines = answer.split("\n")
+        for line in lines:
+            line_stripped = line.strip()
+            if line_stripped.startswith(("1.", "2.", "3.", "4.", "5.", "- ", "* ")):
+                item = line_stripped.lstrip("0123456789.-* ").strip()
+                if item and len(item) > 10:  # Only add meaningful items
+                    key_findings.append(item)
+
     summary = summary.strip()
 
     # Compute task stats

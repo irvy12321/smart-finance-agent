@@ -115,7 +115,8 @@ class StockPriceTool(BaseTool):
             return await self._get_mock_price(symbol)
 
     async def _fetch_real_price(self, symbol: str) -> ToolResult:
-        """从真实API获取股价（示例使用Alpha Vantage）"""
+        """从真实API获取股价（使用Alpha Vantage）"""
+        import os
         url = "https://www.alphavantage.co/query"
         params = {
             "function": "GLOBAL_QUOTE",
@@ -123,29 +124,37 @@ class StockPriceTool(BaseTool):
             "apikey": self.api_key,
         }
 
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, params=params) as resp:
-                data = await resp.json()
-                quote = data.get("Global Quote", {})
+        proxy = os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
+        
+        timeout = aiohttp.ClientTimeout(total=20)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url, params=params, proxy=proxy) as resp:
+                    data = await resp.json()
+                    quote = data.get("Global Quote", {})
 
-                if not quote:
-                    return await self._get_mock_price(symbol)
+                    if not quote:
+                        logger.warning(f"Alpha Vantage returned empty quote for {symbol}")
+                        return await self._get_mock_price(symbol)
 
-                result = {
-                    "symbol": symbol,
-                    "price": float(quote.get("05. price", 0)),
-                    "change": float(quote.get("09. change", 0)),
-                    "change_percent": quote.get("10. change percent", "0%"),
-                    "volume": int(quote.get("06. volume", 0)),
-                    "latest_trading_day": quote.get("07. latest trading day", ""),
-                    "previous_close": float(quote.get("08. previous close", 0)),
-                    "open": float(quote.get("02. open", 0)),
-                    "high": float(quote.get("03. high", 0)),
-                    "low": float(quote.get("04. low", 0)),
-                }
+                    result = {
+                        "symbol": symbol,
+                        "price": float(quote.get("05. price", 0)),
+                        "change": float(quote.get("09. change", 0)),
+                        "change_percent": quote.get("10. change percent", "0%"),
+                        "volume": int(quote.get("06. volume", 0)),
+                        "latest_trading_day": quote.get("07. latest trading day", ""),
+                        "previous_close": float(quote.get("08. previous close", 0)),
+                        "open": float(quote.get("02. open", 0)),
+                        "high": float(quote.get("03. high", 0)),
+                        "low": float(quote.get("04. low", 0)),
+                        "source": "alpha_vantage",
+                    }
 
-                return ToolResult(success=True, data=result, tool_name=self.name)
+                    return ToolResult(success=True, data=result, tool_name=self.name)
+        except Exception as e:
+            logger.error(f"Alpha Vantage API error for {symbol}: {e}")
+            return await self._get_mock_price(symbol)
 
     async def _get_mock_price(self, symbol: str) -> ToolResult:
         """获取模拟股价数据"""

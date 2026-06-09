@@ -365,6 +365,9 @@ class Orchestrator:
         self.event_bus.subscribe("task_start", _on_task_start)
         self.event_bus.subscribe("task_complete", _on_task_complete)
 
+        # Set executor language
+        self.executor._current_language = getattr(self, '_current_language', 'en')
+
         with trace.span("execution"):
             try:
                 exec_result = await self.executor.execute(plan)

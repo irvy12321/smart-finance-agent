@@ -172,6 +172,7 @@ class NewsSummaryTool(BaseTool):
 
     async def _search_real_news(self, query: str, max_results: int) -> ToolResult:
         """从真实API搜索新闻（使用NewsAPI）"""
+        import os
         url = "https://newsapi.org/v2/everything"
         params = {
             "q": query,
@@ -181,11 +182,21 @@ class NewsSummaryTool(BaseTool):
             "apiKey": self.api_key,
         }
 
-        timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, params=params) as resp:
-                data = await resp.json()
-                articles = data.get("articles", [])
+        # Check for proxy settings
+        proxy = os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
+        
+        timeout = aiohttp.ClientTimeout(total=30)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url, params=params, proxy=proxy) as resp:
+                    data = await resp.json()
+                    
+                    if data.get("status") != "ok":
+                        error_msg = data.get("message", "Unknown error")
+                        logger.warning(f"NewsAPI error: {error_msg}")
+                        return await self._get_mock_news(query, max_results)
+                    
+                    articles = data.get("articles", [])
 
                 results = []
                 for article in articles:
