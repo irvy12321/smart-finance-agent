@@ -35,3 +35,7 @@ Thumbs.db
 # Output
 output/
 *.log
+
+# Deprecated and experimental
+_deprecated/
+backend/_experimental/
