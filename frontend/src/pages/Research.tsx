@@ -134,7 +134,7 @@ export default function Research() {
 
       {/* Input */}
       <div className="card">
-        <div className="flex gap-4">
+        <div className="flex gap-3">
           <input
             type="text"
             value={query}
@@ -147,11 +147,13 @@ export default function Research() {
           <button
             onClick={startResearch}
             disabled={!query.trim() || phase === 'running' || phase === 'creating'}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 disabled:from-primary-500/50 disabled:to-primary-600/50 disabled:cursor-not-allowed text-white rounded-full shadow-lg shadow-primary-500/20 transition-all duration-200 hover:shadow-primary-500/30 hover:scale-[1.02] disabled:hover:scale-100"
           >
             <Rocket className={`w-4 h-4 ${phase === 'running' || phase === 'creating' ? 'hidden' : ''}`} />
             <Loader2 className={`w-4 h-4 animate-spin ${phase === 'running' || phase === 'creating' ? '' : 'hidden'}`} />
-            {phase === 'creating' ? t('research.analyzing') : phase === 'running' ? t('research.analyzing') : t('research.startResearch')}
+            <span className="font-medium">
+              {phase === 'creating' ? t('research.analyzing') : phase === 'running' ? t('research.analyzing') : t('research.startResearch')}
+            </span>
           </button>
         </div>
       </div>

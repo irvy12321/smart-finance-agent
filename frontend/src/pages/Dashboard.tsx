@@ -97,21 +97,21 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 lg:p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-end justify-between">
+        <div className="pb-1">
           <h1 className="text-2xl font-bold text-primary-50">{t('dashboard.title')}</h1>
-          <p className="text-sm text-primary-400 mt-1">
+          <p className="text-sm text-primary-400 mt-1.5">
             {t('dashboard.welcome')}
           </p>
         </div>
         <Link
           to="/research"
-          className="btn-primary flex items-center gap-2"
+          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white rounded-full shadow-lg shadow-primary-500/20 transition-all duration-200 hover:shadow-primary-500/30 hover:scale-[1.02]"
         >
           <Plus className="w-4 h-4" />
-          {t('research.newTask')}
+          <span className="font-medium">{t('research.newTask')}</span>
         </Link>
       </div>
 
