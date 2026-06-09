@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import axios from 'axios'
-import { taskApi, reportApi, systemApi, authApi } from '../services/api'
+import { taskApi, authApi } from '../services/api'
 
 vi.mock('axios', () => {
   const mockAxios = {

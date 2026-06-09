@@ -1,18 +1,24 @@
 import asyncio
 import time
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine
+from typing import Any
 
-from app.core.planner import Plan, SubTask
-from app.core.agent_status import TaskStatus, TaskStateTracker, EventBus, AgentEvent, AgentStage
-from app.tools.registry import ToolRegistry
-from app.tools.base_tool import ToolResult
-from app.infrastructure.llm_client import LLMClient, LiteLLMRouter
-from app.utils.logger import get_logger
-from app.utils.exceptions import ExecutorError, CircuitBreakerOpenError
-from app.utils.tracing import TraceContext
-from app.utils.circuit_breaker import CircuitBreakerManager
+from app.core.agent_status import (
+    AgentEvent,
+    EventBus,
+    TaskStateTracker,
+    TaskStatus,
+)
 from app.core.fallback_manager import FallbackManager
+from app.core.planner import Plan, SubTask
+from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
+from app.tools.base_tool import ToolResult
+from app.tools.registry import ToolRegistry
+from app.utils.circuit_breaker import CircuitBreakerManager
+from app.utils.exceptions import CircuitBreakerOpenError
+from app.utils.logger import get_logger
+from app.utils.tracing import TraceContext
 
 logger = get_logger("executor")
 
@@ -119,7 +125,7 @@ class ExecutorAgent:
                         return_exceptions=True,
                     )
 
-                for tid, res in zip(ready, batch_results):
+                for tid, res in zip(ready, batch_results, strict=False):
                     if isinstance(res, Exception):
                         tr = TaskResult(
                             task_id=tid, tool_name="unknown", success=False,
@@ -293,7 +299,7 @@ class ExecutorAgent:
                 context_parts.append(f"=== {dep.tool_name} ({dep.task_id}) ===\n{self._format_data(dep.data)}")
 
         if not context_parts:
-            for dep_id, dep in completed.items():
+            for _dep_id, dep in completed.items():
                 if dep.success and dep.data:
                     context_parts.append(f"=== {dep.tool_name} ({dep.task_id}) ===\n{self._format_data(dep.data)}")
 

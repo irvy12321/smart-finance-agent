@@ -32,10 +32,7 @@ def chunk_text(text: str, chunk_size: int | None = None, overlap: int | None = N
                         if sub_chunk:
                             chunks.append(sub_chunk.strip())
                         sub_chunk = word
-                if sub_chunk:
-                    current = sub_chunk
-                else:
-                    current = ""
+                current = sub_chunk or ""
             else:
                 current = para
 

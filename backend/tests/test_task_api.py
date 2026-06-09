@@ -1,7 +1,10 @@
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import FastAPI
-from httpx import AsyncClient, ASGITransport
+from httpx import AsyncClient
+
+from app.auth.dependencies import get_current_user
+from app.auth.models import UserResponse
 
 
 @pytest.fixture
@@ -14,9 +17,38 @@ def mock_storage():
         yield mock
 
 
+@pytest.fixture
+def mock_current_user():
+    """Mock authenticated user for testing."""
+    return UserResponse(
+        id=1,
+        username="testuser",
+        email="test@example.com",
+        is_active=True,
+        created_at="2026-01-01T00:00:00",
+    )
+
+
+@pytest.fixture
+def auth_app(test_app, mock_current_user):
+    """Override auth dependency for testing."""
+    test_app.dependency_overrides[get_current_user] = lambda: mock_current_user
+    yield test_app
+    test_app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def auth_client(auth_app) -> AsyncClient:
+    """Get an async HTTP client with auth override."""
+    from httpx import ASGITransport
+    transport = ASGITransport(app=auth_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
 @pytest.mark.asyncio
-async def test_create_task(client: AsyncClient, mock_storage):
-    response = await client.post(
+async def test_create_task(auth_client: AsyncClient, mock_storage):
+    response = await auth_client.post(
         "/api/task/create",
         json={"query": "Analyze AAPL stock price and trends", "priority": 1}
     )
@@ -27,7 +59,7 @@ async def test_create_task(client: AsyncClient, mock_storage):
 
 
 @pytest.mark.asyncio
-async def test_get_task_status(client: AsyncClient, mock_storage):
+async def test_get_task_status(auth_client: AsyncClient, mock_storage):
     mock_storage.get_task.return_value = {
         "task_id": "test-123",
         "status": "running",
@@ -36,7 +68,7 @@ async def test_get_task_status(client: AsyncClient, mock_storage):
         "message": "Task is running"
     }
 
-    response = await client.get("/api/task/test-123/status")
+    response = await auth_client.get("/api/task/test-123/status")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "running"
@@ -44,15 +76,15 @@ async def test_get_task_status(client: AsyncClient, mock_storage):
 
 
 @pytest.mark.asyncio
-async def test_get_task_status_not_found(client: AsyncClient, mock_storage):
+async def test_get_task_status_not_found(auth_client: AsyncClient, mock_storage):
     mock_storage.get_task.return_value = None
 
-    response = await client.get("/api/task/nonexistent/status")
+    response = await auth_client.get("/api/task/nonexistent/status")
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_get_task_result(client: AsyncClient, mock_storage):
+async def test_get_task_result(auth_client: AsyncClient, mock_storage):
     mock_storage.get_task.return_value = {
         "task_id": "test-123",
         "status": "completed",
@@ -66,7 +98,7 @@ async def test_get_task_result(client: AsyncClient, mock_storage):
         }
     }
 
-    response = await client.get("/api/task/test-123/result")
+    response = await auth_client.get("/api/task/test-123/result")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "completed"
@@ -74,7 +106,7 @@ async def test_get_task_result(client: AsyncClient, mock_storage):
 
 
 @pytest.mark.asyncio
-async def test_get_task_result_not_completed(client: AsyncClient, mock_storage):
+async def test_get_task_result_not_completed(auth_client: AsyncClient, mock_storage):
     mock_storage.get_task.return_value = {
         "task_id": "test-123",
         "status": "running",
@@ -82,18 +114,18 @@ async def test_get_task_result_not_completed(client: AsyncClient, mock_storage):
         "current_stage": "executing"
     }
 
-    response = await client.get("/api/task/test-123/result")
+    response = await auth_client.get("/api/task/test-123/result")
     assert response.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_list_tasks(client: AsyncClient, mock_storage):
+async def test_list_tasks(auth_client: AsyncClient, mock_storage):
     mock_storage.list_tasks.return_value = [
         {"task_id": "task1", "query": "Query 1", "status": "completed"},
         {"task_id": "task2", "query": "Query 2", "status": "pending"},
     ]
 
-    response = await client.get("/api/task/list")
+    response = await auth_client.get("/api/task/list")
     assert response.status_code == 200
     data = response.json()
     assert len(data["tasks"]) == 2

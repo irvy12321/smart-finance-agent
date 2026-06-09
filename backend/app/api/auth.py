@@ -3,17 +3,18 @@ Authentication API routes
 """
 import traceback
 from datetime import timedelta
-from fastapi import APIRouter, HTTPException, status, Depends
 
-from app.auth import get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
-from app.auth.models import UserCreate, UserLogin, UserResponse, Token
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.auth import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, get_password_hash
 from app.auth.dependencies import (
-    get_user_by_username,
-    get_user_by_email,
-    create_user,
     authenticate_user,
+    create_user,
     get_current_user,
+    get_user_by_email,
+    get_user_by_username,
 )
+from app.auth.models import Token, UserCreate, UserLogin, UserResponse
 from app.utils.logger import get_logger
 
 logger = get_logger("api.auth")
@@ -26,7 +27,7 @@ async def register(user_data: UserCreate):
     """Register a new user"""
     try:
         logger.info(f"Register attempt: username={user_data.username}, email={user_data.email}")
-        
+
         # Check if username already exists
         existing_user = get_user_by_username(user_data.username)
         if existing_user:
@@ -34,7 +35,7 @@ async def register(user_data: UserCreate):
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Username already registered"
             )
-        
+
         # Check if email already exists
         existing_email = get_user_by_email(user_data.email)
         if existing_email:
@@ -42,19 +43,19 @@ async def register(user_data: UserCreate):
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Email already registered"
             )
-        
+
         # Create user
         hashed_password = get_password_hash(user_data.password)
         user = create_user(user_data.username, user_data.email, hashed_password)
-        
+
         logger.info(f"User created: id={user['id']}, username={user['username']}")
-        
+
         # Generate token
         access_token = create_access_token(
             data={"user_id": user["id"], "username": user["username"]},
             expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
-        
+
         return Token(
             access_token=access_token,
             token_type="bearer",
@@ -73,8 +74,8 @@ async def register(user_data: UserCreate):
         logger.error(f"Registration failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {str(e)}"
-        )
+            detail=f"Registration failed: {e!s}"
+        ) from e
 
 
 @router.post("/login", response_model=Token)
@@ -89,19 +90,19 @@ async def login(user_data: UserLogin):
                 detail="Incorrect username or password",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         if not user.get("is_active", True):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is disabled"
             )
-        
+
         # Generate token
         access_token = create_access_token(
             data={"user_id": user["id"], "username": user["username"]},
             expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
-        
+
         return Token(
             access_token=access_token,
             token_type="bearer",
@@ -120,8 +121,8 @@ async def login(user_data: UserLogin):
         logger.error(f"Login failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {str(e)}"
-        )
+            detail=f"Login failed: {e!s}"
+        ) from e
 
 
 @router.get("/me", response_model=UserResponse)
@@ -137,7 +138,7 @@ async def refresh_token(current_user: UserResponse = Depends(get_current_user)):
         data={"user_id": current_user.id, "username": current_user.username},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    
+
     return Token(
         access_token=access_token,
         token_type="bearer",

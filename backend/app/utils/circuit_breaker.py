@@ -4,12 +4,13 @@ CLOSED: 正常放行
 OPEN: 熔断拒绝，等待恢复
 HALF_OPEN: 探测恢复
 """
-import time
 import threading
-from enum import Enum
+import time
 from dataclasses import dataclass, field
-from app.utils.logger import get_logger
+from enum import Enum
+
 from app.utils.exceptions import CircuitBreakerOpenError
+from app.utils.logger import get_logger
 
 logger = get_logger("circuit_breaker")
 

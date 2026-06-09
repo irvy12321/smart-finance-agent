@@ -2,9 +2,8 @@
 Dashboard Integration - 无侵入式集成
 通过 EventBus 订阅自动收集指标，不修改 Orchestrator
 """
-import time
+from app.core.agent_status import AgentEvent, EventBus
 from app.core.metrics_dashboard import get_dashboard
-from app.core.agent_status import EventBus, AgentEvent
 from app.utils.logger import get_logger
 
 logger = get_logger("dashboard_integration")

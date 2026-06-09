@@ -3,14 +3,12 @@ Metrics Dashboard - 轻量级指标聚合器
 从现有数据源聚合指标，不修改主流程
 数据源: MetricsCollector / EventBus / TaskStateTracker
 """
-import time
 import threading
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any
 
-from app.core.observability.metrics import MetricsCollector, get_metrics_summary
-from app.core.agent_status import EventBus, TaskStateTracker, AgentEvent
+from app.core.observability.metrics import get_metrics_summary
 from app.utils.logger import get_logger
 
 logger = get_logger("metrics_dashboard")

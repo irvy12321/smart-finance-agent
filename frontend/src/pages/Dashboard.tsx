@@ -28,8 +28,8 @@ export default function Dashboard() {
       setError(null)
       const response = await taskApi.list()
       setTasks(response.tasks || [])
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch tasks')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch tasks')
     } finally {
       setLoading(false)
     }
@@ -44,8 +44,8 @@ export default function Dashboard() {
         setError(null)
         const response = await taskApi.list()
         if (!cancelled) setTasks(response.tasks || [])
-      } catch (err: any) {
-        if (!cancelled) setError(err.message || 'Failed to fetch tasks')
+      } catch (err: unknown) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to fetch tasks')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -76,14 +76,14 @@ export default function Dashboard() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
-        return <span className="badge badge-success">COMPLETED</span>
+        return <span className="badge badge-success">{t('research.completed')}</span>
       case 'running':
-        return <span className="badge badge-running">RUNNING</span>
+        return <span className="badge badge-running">{t('dashboard.runningTasks')}</span>
       case 'error':
       case 'failed':
-        return <span className="badge badge-error">FAILED</span>
+        return <span className="badge badge-error">{t('dashboard.failedTasks')}</span>
       default:
-        return <span className="badge badge-pending">PENDING</span>
+        return <span className="badge badge-pending">{t('dashboard.pendingTasks')}</span>
     }
   }
 
@@ -152,7 +152,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
-                Running
+                {t('dashboard.runningTasks')}
               </p>
               <p className="text-2xl font-bold text-blue-500">
                 {tasks.filter(t => t.status === 'running').length}
@@ -189,7 +189,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-sm font-semibold text-primary-200">{t('research.newTask')}</p>
-              <p className="text-xs text-primary-400">Start a comprehensive research task</p>
+              <p className="text-xs text-primary-400">{t('dashboard.startResearchDesc')}</p>
             </div>
           </div>
         </Link>
@@ -202,8 +202,8 @@ export default function Dashboard() {
               <MessageSquare className="w-5 h-5 text-purple-500" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-primary-200">AI Chat</p>
-              <p className="text-xs text-primary-400">Chat with the financial assistant</p>
+              <p className="text-sm font-semibold text-primary-200">{t('dashboard.aiChat')}</p>
+              <p className="text-xs text-primary-400">{t('dashboard.aiChatDesc')}</p>
             </div>
           </div>
         </Link>
@@ -251,7 +251,7 @@ export default function Dashboard() {
               <Search className="w-8 h-8 text-primary-400 mx-auto mb-4" />
               <p className="text-primary-400">{t('research.noResults')}</p>
               <p className="text-xs text-primary-500 mt-1">
-                Create a new research task to get started
+                {t('dashboard.createTaskToStart')}
               </p>
               <Link
                 to="/research"
@@ -287,7 +287,7 @@ export default function Dashboard() {
                       to={`/report/${task.task_id}`}
                       className="text-sm text-primary-500 hover:text-primary-300 transition-colors"
                     >
-                      View Report
+                      {t('report.viewFullReport')}
                     </Link>
                   )}
                 </div>

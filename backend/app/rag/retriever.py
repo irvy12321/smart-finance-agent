@@ -1,8 +1,7 @@
-import numpy as np
-from app.rag.embed import create_embedder, BaseEmbedder
-from app.rag.vector_store import VectorStore
-from app.rag.chunker import chunk_text
 from app.infrastructure.config import get_rag_config
+from app.rag.chunker import chunk_text
+from app.rag.embed import BaseEmbedder, create_embedder
+from app.rag.vector_store import VectorStore
 from app.utils.logger import get_logger
 
 logger = get_logger("retriever")

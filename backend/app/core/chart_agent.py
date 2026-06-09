@@ -5,8 +5,9 @@ Chart Agent - 财务数据可视化
 """
 import json
 from dataclasses import dataclass
-from app.infrastructure.llm_client import LLMClient, LiteLLMRouter
-from app.core.agent_status import EventBus, AgentEvent
+
+from app.core.agent_status import AgentEvent, EventBus
+from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
 from app.utils.logger import get_logger
 
 logger = get_logger("chart_agent")
@@ -130,7 +131,7 @@ class ChartAgent:
         # 移除 markdown 代码块
         if "```" in text:
             lines = text.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
+            lines = [line for line in lines if not line.strip().startswith("```")]
             text = "\n".join(lines).strip()
 
         # 提取最外层 JSON 对象
@@ -203,14 +204,14 @@ class ChartAgent:
         types = re.findall(r'"chart_type"\s*:\s*"(\w+)"', text)
         titles = re.findall(r'"title"\s*:\s*"([^"]+)"', text)
 
-        for i, (ctype, title) in enumerate(zip(types, titles)):
+        for i, (ctype, title) in enumerate(zip(types, titles, strict=False)):
             # 提取该图表的 data 数组
             data_pattern = r'"data"\s*:\s*\[(.*?)\]'
             data_matches = re.findall(data_pattern, text, re.DOTALL)
             chart_data = []
             if i < len(data_matches):
                 items = re.findall(r'"label"\s*:\s*"([^"]+)".*?"value"\s*:\s*([\d.]+)', data_matches[i])
-                chart_data = [{"label": l, "value": float(v)} for l, v in items]
+                chart_data = [{"label": label, "value": float(v)} for label, v in items]
 
             charts.append(ChartSpec(
                 chart_type=ctype,
@@ -234,7 +235,7 @@ class ChartAgent:
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
 
-            fig, ax = plt.subplots(figsize=(10, 6))
+            _fig, ax = plt.subplots(figsize=(10, 6))
 
             labels = [d.get("label", "") for d in chart.data]
             values = [d.get("value", 0) for d in chart.data]

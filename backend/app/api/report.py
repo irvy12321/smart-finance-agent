@@ -1,12 +1,13 @@
 """
 Report API routes
 """
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from typing import Dict, Any, List
+from typing import Any
 
-from app.utils.logger import get_logger
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
 from app import storage
+from app.utils.logger import get_logger
 
 logger = get_logger("api.report")
 
@@ -23,22 +24,22 @@ class ReportResponse(BaseModel):
     report_markdown: str = ""
     report_title: str = ""
     summary: str = ""
-    key_findings: List[str] = []
-    risk_factors: List[Dict[str, Any]] = []
-    market_trends: List[str] = []
-    recommendations: List[str] = []
+    key_findings: list[str] = []
+    risk_factors: list[dict[str, Any]] = []
+    market_trends: list[str] = []
+    recommendations: list[str] = []
     confidence: float = 0.0
-    chart_paths: List[str] = []
-    chart_specs: List[Dict[str, Any]] = []
-    sources: List[Dict[str, Any]] = []
-    dag_subtasks: List[Dict[str, Any]] = []
-    task_states: Dict[str, Any] = {}
+    chart_paths: list[str] = []
+    chart_specs: list[dict[str, Any]] = []
+    sources: list[dict[str, Any]] = []
+    dag_subtasks: list[dict[str, Any]] = []
+    task_states: dict[str, Any] = {}
     elapsed: float = 0.0
     total_tasks: int = 0
     success_tasks: int = 0
     failed_tasks: int = 0
     plan_reasoning: str = ""
-    reasoning_insights: List[str] = []
+    reasoning_insights: list[str] = []
     updated_at: str = ""
 
 
@@ -47,7 +48,7 @@ class ReportSummaryResponse(BaseModel):
     task_id: str
     report_title: str = ""
     summary: str = ""
-    key_findings: List[str] = []
+    key_findings: list[str] = []
     confidence: float = 0.0
     total_tasks: int = 0
     success_tasks: int = 0

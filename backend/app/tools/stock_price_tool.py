@@ -1,8 +1,10 @@
 """
 股票价格查询工具 - 支持实时股价查询和历史数据
 """
-import aiohttp
 from datetime import datetime, timedelta
+
+import aiohttp
+
 from app.tools.base_tool import BaseTool, ToolResult
 from app.utils.logger import get_logger
 
@@ -274,7 +276,7 @@ class StockHistoryTool(BaseTool):
                 "period": period,
                 "history": history,
                 "source": "mock_data",
-                "note": f"Simulated data. Configure ALPHA_VANTAGE_API_KEY for real data.",
+                "note": "Simulated data. Configure ALPHA_VANTAGE_API_KEY for real data.",
             },
             tool_name=self.name,
         )

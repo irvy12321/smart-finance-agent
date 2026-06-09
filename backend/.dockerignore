@@ -64,3 +64,4 @@ demo_*.py
 verify_*.py
 test_*.py
 STEP*.md
+_experimental/

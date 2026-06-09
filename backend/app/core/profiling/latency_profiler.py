@@ -2,10 +2,10 @@
 Latency Profiler - Pipeline 全链路延迟分析
 通过 EventBus 订阅零侵入采集，不修改执行逻辑
 """
-import time
 import threading
-from dataclasses import dataclass, field
+import time
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.utils.logger import get_logger
@@ -98,7 +98,7 @@ class ProfilingReport:
         print(f"  Report:    {self.report_latency_ms:>8.0f}ms")
         if self.tool_latency:
             print(f"{'-'*60}")
-            print(f"  Tool Latencies:")
+            print("  Tool Latencies:")
             for tool, ms in sorted(self.tool_latency.items(), key=lambda x: -x[1]):
                 print(f"    {tool:20s} {ms:>8.0f}ms")
         print(f"{'-'*60}")
@@ -253,8 +253,7 @@ class LatencyProfiler:
                 if "reasoner" in self._stages and self._stages["reasoner"].end_time == 0:
                     self.mark_stage_end("reasoner")
                 self.mark_stage_start("report")
-            elif stage == "complete":
-                if "report" in self._stages and self._stages["report"].end_time == 0:
+            elif stage == "complete" and "report" in self._stages and self._stages["report"].end_time == 0:
                     self.mark_stage_end("report")
 
         elif event_type == "task_start":

@@ -1,11 +1,12 @@
 """
 FAISS 向量存储 - 支持增量添加 + 磁盘持久化
 """
-import os
 import json
-import numpy as np
+import os
+
 import faiss
-from pathlib import Path
+import numpy as np
+
 from app.utils.logger import get_logger
 
 logger = get_logger("vector_store")
@@ -41,7 +42,7 @@ class VectorStore:
         k = min(top_k, self.index.ntotal)
         scores, indices = self.index.search(query_embedding, k)
         results = []
-        for score, idx in zip(scores[0], indices[0]):
+        for score, idx in zip(scores[0], indices[0], strict=False):
             if idx < 0:
                 continue
             results.append({
@@ -89,16 +90,16 @@ class VectorStore:
             return False
 
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = json.load(f)
             if config.get("dim") != self.dim:
                 logger.warning(f"Dimension mismatch: stored={config.get('dim')}, current={self.dim}")
                 return False
 
             self.index = faiss.read_index(index_path)
-            with open(texts_path, "r", encoding="utf-8") as f:
+            with open(texts_path, encoding="utf-8") as f:
                 self.texts = json.load(f)
-            with open(meta_path, "r", encoding="utf-8") as f:
+            with open(meta_path, encoding="utf-8") as f:
                 self.metadata = json.load(f)
 
             self._loaded = True

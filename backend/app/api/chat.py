@@ -7,12 +7,13 @@ Chat API routes - 提供聊天接口
 import re
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
-from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Optional
+from typing import Any
 
-from app.utils.logger import get_logger
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from pydantic import BaseModel, Field
+
 from app import storage
+from app.utils.logger import get_logger
 
 logger = get_logger("api.chat")
 
@@ -62,7 +63,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """Request model for chat"""
     message: str = Field(..., min_length=1, max_length=2000, description="User message")
-    conversation_id: Optional[str] = Field(default=None, description="Conversation ID for context")
+    conversation_id: str | None = Field(default=None, description="Conversation ID for context")
     stream: bool = Field(default=False, description="Enable streaming response")
 
 
@@ -71,7 +72,7 @@ class ChatResponse(BaseModel):
     conversation_id: str
     message: ChatMessage
     response: str
-    sources: List[Dict[str, Any]] = []
+    sources: list[dict[str, Any]] = []
     confidence: float = 0.0
     timestamp: str
 
@@ -86,7 +87,7 @@ class ConversationCreateResponse(BaseModel):
 class ConversationHistoryResponse(BaseModel):
     """Response model for conversation history"""
     conversation_id: str
-    messages: List[ChatMessage]
+    messages: list[ChatMessage]
     total_messages: int
 
 
@@ -124,7 +125,7 @@ async def create_conversation():
         )
     except Exception as e:
         logger.error(f"Error creating conversation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=ChatResponse)
@@ -137,7 +138,7 @@ async def send_message(conversation_id: str, request: ChatRequest, req: Request,
             storage.create_conversation(conversation_id)
 
         # Add user message
-        user_message = ChatMessage(
+        ChatMessage(
             role="user",
             content=request.message,
         )
@@ -146,18 +147,25 @@ async def send_message(conversation_id: str, request: ChatRequest, req: Request,
         # 检测 prompt injection 并记录日志
         _check_prompt_injection(request.message)
 
+        # Get language from Accept-Language header
+        language = req.headers.get("accept-language", "en")
+        if language.startswith("zh"):
+            language = "zh"
+        else:
+            language = "en"
+
         # 判断是否为金融研究查询 → 走 orchestrator
         is_financial = bool(FINANCIAL_KEYWORDS.search(request.message))
-        sources: List[Dict[str, Any]] = []
+        sources: list[dict[str, Any]] = []
         confidence = 0.85
 
         # Get orchestrator from app.state
         orchestrator = _get_orchestrator(req)
 
         if is_financial and orchestrator is not None:
-            response_text, sources, confidence = await generate_orchestrator_response(request.message, orchestrator)
+            response_text, sources, confidence = await generate_orchestrator_response(request.message, orchestrator, language)
         else:
-            response_text = await generate_chat_response(request.message, conversation_id)
+            response_text = await generate_chat_response(request.message, conversation_id, language)
 
         # Add assistant message
         assistant_message = ChatMessage(
@@ -178,7 +186,7 @@ async def send_message(conversation_id: str, request: ChatRequest, req: Request,
         raise
     except Exception as e:
         logger.error(f"Error sending message: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationHistoryResponse)
@@ -217,7 +225,7 @@ async def delete_conversation(conversation_id: str):
 # Helper Functions
 # ============================================================
 
-async def generate_orchestrator_response(message: str, orchestrator) -> tuple[str, list, float]:
+async def generate_orchestrator_response(message: str, orchestrator, language: str = "en") -> tuple[str, list, float]:
     """
     使用 Orchestrator 全流水线处理金融研究查询
     带 90 秒超时保护，超时自动降级到直接 LLM
@@ -243,28 +251,34 @@ async def generate_orchestrator_response(message: str, orchestrator) -> tuple[st
         if result.report and result.report.summary and len(result.report.summary) > 30:
             response_text = result.report.summary
             if result.report.analysis.key_findings:
-                response_text += "\n\n**Key Findings:**\n"
+                if language == "zh":
+                    response_text += "\n\n关键发现:\n"
+                else:
+                    response_text += "\n\nKey Findings:\n"
                 for f in result.report.analysis.key_findings[:5]:
                     response_text += f"- {f}\n"
         elif result.answer and len(result.answer) > 30:
             response_text = _clean_json_response(result.answer)
         else:
-            response_text = "Research completed but no summary was generated."
+            if language == "zh":
+                response_text = "研究已完成。"
+            else:
+                response_text = "Research completed."
 
         confidence = 0.9 if result.reasoning_result else 0.75
         return response_text, sources, confidence
 
     except asyncio.TimeoutError:
         logger.warning("[orchestrator] Pipeline timed out (90s), falling back to direct LLM")
-        fallback = await generate_chat_response(message, "")
+        fallback = await generate_chat_response(message, "", language)
         return fallback, [], 0.5
     except Exception as e:
         logger.error(f"[orchestrator] Error: {type(e).__name__}: {e}")
-        fallback = await generate_chat_response(message, "")
+        fallback = await generate_chat_response(message, "", language)
         return fallback, [], 0.5
 
 
-def _clean_json_response(text: str) -> str:
+def _clean_json_response(text: str, language: str = "en") -> str:
     """从 LLM 响应中提取纯文本摘要，清理 JSON 格式"""
     import json as _json
     # 尝试解析为 JSON 并提取 summary
@@ -278,11 +292,17 @@ def _clean_json_response(text: str) -> str:
             if "summary" in data:
                 parts.append(data["summary"])
             if "key_findings" in data:
-                parts.append("\n**Key Findings:**")
+                if language == "zh":
+                    parts.append("\n关键发现:")
+                else:
+                    parts.append("\nKey Findings:")
                 for f in data["key_findings"][:5]:
                     parts.append(f"- {f}")
             if "recommendations" in data:
-                parts.append("\n**Recommendations:**")
+                if language == "zh":
+                    parts.append("\n建议:")
+                else:
+                    parts.append("\nRecommendations:")
                 for r in data["recommendations"][:3]:
                     parts.append(f"- {r}")
             if parts:
@@ -299,7 +319,7 @@ def _clean_json_response(text: str) -> str:
     return text
 
 
-async def generate_chat_response(message: str, conversation_id: str) -> str:
+async def generate_chat_response(message: str, conversation_id: str, language: str = "en") -> str:
     """Generate a chat response using direct LLM call"""
     from app.infrastructure.llm_client import LLMClient
 
@@ -314,23 +334,26 @@ async def generate_chat_response(message: str, conversation_id: str) -> str:
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
     # Add system prompt for financial assistant persona
-    system_msg = {
-        "role": "system",
-        "content": (
+    if language == "zh":
+        system_content = "你是一个智能金融助手，专注于金融研究和分析。你可以帮助用户查询股票价格、财务报告、新闻分析和市场研究。请简洁明了地回答问题，使用结构化格式。如果用户问到股票或金融相关问题，请提供有用的信息。重要：请始终使用中文回复。不要说我收到了你的问题，直接提供实质性的回答。"
+    else:
+        system_content = (
             "You are a Smart Finance Agent, an AI financial research assistant. "
             "You can help with stock prices, financial reports, news analysis, and market research. "
             "Answer concisely and helpfully in a structured format. "
             "If the user asks about stocks or finance, provide useful information. "
-            "Always reply in the same language as the user's message. "
+            "IMPORTANT: Always reply in English. "
             "Do NOT say 'I received your question' - instead provide a substantive answer."
-        ),
-    }
+        )
 
+    system_msg = {"role": "system", "content": system_content}
     llm_messages = [system_msg, *messages, {"role": "user", "content": message}]
 
     try:
         resp = await llm.chat(llm_messages, max_tokens=1024)
-        return resp.content or "I apologize, but I couldn't generate a response. Please try rephrasing your question."
+        return resp.content or ("抱歉，无法生成回复。请尝试重新表述您的问题。" if language == "zh" else "I apologize, but I couldn't generate a response. Please try rephrasing your question.")
     except Exception as e:
         logger.error(f"LLM chat error: {e}")
+        if language == "zh":
+            return f"遇到错误: {type(e).__name__}。请重试。"
         return f"I encountered an error: {type(e).__name__}. Please try again."

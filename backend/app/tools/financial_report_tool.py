@@ -1,13 +1,20 @@
 """
 财务报告分析工具 - 支持财务数据查询和分析
 """
+import os
 from datetime import datetime
+
+import aiohttp
+
 from app.tools.base_tool import BaseTool, ToolResult
 from app.utils.logger import get_logger
 
 logger = get_logger("financial_report_tool")
 
-# 模拟财务数据（生产环境应接入真实API）
+# Financial Modeling Prep API
+FMP_BASE_URL = "https://financialmodelingprep.com/api/v3"
+
+# 模拟财务数据（API 不可用时的降级方案）
 MOCK_FINANCIAL_DATA = {
     "AAPL": {
         "name": "Apple Inc.",
@@ -77,7 +84,7 @@ class FinancialReportTool(BaseTool):
     description = "Retrieves financial report data and key metrics for a given company"
 
     def __init__(self, api_key: str = ""):
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("FMP_API_KEY", "")
 
     async def execute(self, **kwargs) -> ToolResult:
         symbol = kwargs.get("symbol", "").upper()
@@ -87,13 +94,127 @@ class FinancialReportTool(BaseTool):
             return ToolResult(success=False, error="No stock symbol provided", tool_name=self.name)
 
         try:
-            return await self._get_financial_data(symbol, report_type)
+            # 尝试使用真实 API
+            if self.api_key:
+                return await self._fetch_real_data(symbol, report_type)
+            else:
+                return await self._get_mock_data(symbol, report_type)
         except Exception as e:
             logger.error(f"Financial report query failed for {symbol}: {e}")
-            return ToolResult(success=False, error=str(e), tool_name=self.name)
+            return await self._get_mock_data(symbol, report_type)
 
-    async def _get_financial_data(self, symbol: str, report_type: str) -> ToolResult:
-        """获取财务数据"""
+    async def _fetch_real_data(self, symbol: str, report_type: str) -> ToolResult:
+        """从 Financial Modeling Prep API 获取真实财务数据"""
+        timeout = aiohttp.ClientTimeout(total=15)
+
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            # 获取公司概况
+            profile_url = f"{FMP_BASE_URL}/profile/{symbol}?apikey={self.api_key}"
+            async with session.get(profile_url) as resp:
+                profile_data = await resp.json()
+
+            if not profile_data or not isinstance(profile_data, list) or len(profile_data) == 0:
+                return await self._get_mock_data(symbol, report_type)
+
+            profile = profile_data[0]
+
+            # 获取财务报表
+            income_url = f"{FMP_BASE_URL}/income-statement/{symbol}?limit=3&apikey={self.api_key}"
+            async with session.get(income_url) as resp:
+                income_data = await resp.json()
+
+            # 获取资产负债表
+            balance_url = f"{FMP_BASE_URL}/balance-sheet-statement/{symbol}?limit=3&apikey={self.api_key}"
+            async with session.get(balance_url) as resp:
+                balance_data = await resp.json()
+
+            # 获取关键指标
+            metrics_url = f"{FMP_BASE_URL}/key-metrics/{symbol}?limit=3&apikey={self.api_key}"
+            async with session.get(metrics_url) as resp:
+                metrics_data = await resp.json()
+
+            # 构建财务数据
+            financials = self._parse_financials(income_data, balance_data, metrics_data)
+
+            result = {
+                "symbol": symbol,
+                "name": profile.get("companyName", f"{symbol} Corp."),
+                "sector": profile.get("sector", "Unknown"),
+                "industry": profile.get("industry", "Unknown"),
+                "current_price": profile.get("price", 0),
+                "market_cap": profile.get("mktCap", 0),
+                "beta": profile.get("beta", 0),
+                "description": profile.get("description", ""),
+                "financials": financials,
+                "timestamp": datetime.now().isoformat(),
+                "source": "financialmodelingprep.com",
+            }
+
+            if report_type == "quarterly":
+                # 获取季度数据
+                quarterly_url = f"{FMP_BASE_URL}/income-statement/{symbol}?limit=4&period=quarter&apikey={self.api_key}"
+                async with session.get(quarterly_url) as resp:
+                    quarterly_data = await resp.json()
+                result["quarterly"] = self._parse_quarterly(quarterly_data)
+
+            return ToolResult(success=True, data=result, tool_name=self.name)
+
+    def _parse_financials(self, income_data: list, balance_data: list, metrics_data: list) -> dict:
+        """解析财务报表数据"""
+        financials = {
+            "revenue": {},
+            "net_income": {},
+            "eps": {},
+            "pe_ratio": {},
+            "dividend_yield": {},
+            "debt_to_equity": {},
+            "return_on_equity": {},
+        }
+
+        for item in income_data:
+            year = item.get("calendarYear", "")
+            if year:
+                financials["revenue"][year] = item.get("revenue", 0)
+                financials["net_income"][year] = item.get("netIncome", 0)
+                financials["eps"][year] = item.get("eps", 0)
+
+        for item in metrics_data:
+            year = item.get("calendarYear", "")
+            if year:
+                financials["pe_ratio"][year] = item.get("peRatio", 0)
+                financials["dividend_yield"][year] = item.get("dividendYield", 0)
+
+        for item in balance_data:
+            year = item.get("calendarYear", "")
+            if year:
+                total_equity = item.get("totalStockholdersEquity", 1)
+                total_debt = item.get("totalDebt", 0)
+                financials["debt_to_equity"][year] = total_debt / total_equity if total_equity else 0
+
+        # 计算 ROE
+        for year in financials["net_income"]:
+            for balance in balance_data:
+                if balance.get("calendarYear") == year:
+                    equity = balance.get("totalStockholdersEquity", 1)
+                    net_income = financials["net_income"].get(year, 0)
+                    financials["return_on_equity"][year] = net_income / equity if equity else 0
+
+        return financials
+
+    def _parse_quarterly(self, quarterly_data: list) -> dict:
+        """解析季度数据"""
+        quarterly = {}
+        for item in quarterly_data:
+            period = f"{item.get('period', '')} {item.get('calendarYear', '')}"
+            quarterly[period] = {
+                "revenue": item.get("revenue", 0),
+                "net_income": item.get("netIncome", 0),
+                "eps": item.get("eps", 0),
+            }
+        return quarterly
+
+    async def _get_mock_data(self, symbol: str, report_type: str) -> ToolResult:
+        """获取模拟数据（降级方案）"""
         if symbol in MOCK_FINANCIAL_DATA:
             data = MOCK_FINANCIAL_DATA[symbol].copy()
             data["symbol"] = symbol
@@ -160,6 +281,9 @@ class FinancialAnalysisTool(BaseTool):
     name = "financial_analysis"
     description = "Performs financial analysis and generates insights for a company"
 
+    def __init__(self, api_key: str = ""):
+        self.api_key = api_key or os.getenv("FMP_API_KEY", "")
+
     async def execute(self, **kwargs) -> ToolResult:
         symbol = kwargs.get("symbol", "").upper()
         analysis_type = kwargs.get("analysis_type", "comprehensive")  # comprehensive, valuation, profitability, growth
@@ -169,7 +293,7 @@ class FinancialAnalysisTool(BaseTool):
 
         try:
             # 获取财务数据
-            report_tool = FinancialReportTool()
+            report_tool = FinancialReportTool(api_key=self.api_key)
             report_result = await report_tool.execute(symbol=symbol, report_type="detailed")
 
             if not report_result.success:

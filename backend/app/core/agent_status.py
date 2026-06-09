@@ -3,9 +3,11 @@ Agent 状态管理 - EventBus + 状态机
 支持任务状态跟踪和实时事件回调
 """
 import asyncio
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine
+from typing import Any
+
 from app.utils.logger import get_logger
 
 logger = get_logger("agent_status")

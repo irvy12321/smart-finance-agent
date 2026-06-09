@@ -1,14 +1,15 @@
 """
 System API routes
 """
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from typing import Dict, Any, List
 import time
 from datetime import datetime
+from typing import Any
 
-from app.utils.logger import get_logger
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
 from app import storage
+from app.utils.logger import get_logger
 
 logger = get_logger("api.system")
 
@@ -47,18 +48,18 @@ class SystemMetricsResponse(BaseModel):
 
 class AgentStatusResponse(BaseModel):
     """Response model for agent status"""
-    planner: Dict[str, Any]
-    executor: Dict[str, Any]
-    reasoner: Dict[str, Any]
-    report_agent: Dict[str, Any]
-    orchestrator: Dict[str, Any]
+    planner: dict[str, Any]
+    executor: dict[str, Any]
+    reasoner: dict[str, Any]
+    report_agent: dict[str, Any]
+    orchestrator: dict[str, Any]
 
 
 class SystemConfigResponse(BaseModel):
     """Response model for system configuration"""
     model: str
     embedding: str
-    features: Dict[str, bool]
+    features: dict[str, bool]
     version: str
 
 
@@ -85,7 +86,7 @@ async def get_system_status():
     """Get system status"""
     try:
         uptime = time.time() - system_start_time
-        
+
         return SystemStatusResponse(
             status="healthy",
             version="1.0.0",
@@ -97,7 +98,7 @@ async def get_system_status():
         )
     except Exception as e:
         logger.error(f"Error getting system status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/metrics", response_model=SystemMetricsResponse)
@@ -128,7 +129,7 @@ async def get_system_metrics():
         )
     except Exception as e:
         logger.error(f"Error getting system metrics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/agents", response_model=AgentStatusResponse)
@@ -171,7 +172,7 @@ async def get_agent_status():
         )
     except Exception as e:
         logger.error(f"Error getting agent status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/config", response_model=SystemConfigResponse)
@@ -191,7 +192,7 @@ async def get_system_config():
         )
     except Exception as e:
         logger.error(f"Error getting system config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/health")

@@ -4,21 +4,14 @@ import { useTranslation } from 'react-i18next'
 import { 
   Activity, 
   Server, 
-  Database, 
   Clock, 
   CheckCircle, 
   AlertCircle,
   RefreshCw,
   Loader2,
-  TrendingUp,
   Zap,
   FileText,
-  Settings,
-  Cpu,
-  HardDrive,
-  Wifi,
-  ArrowUpRight,
-  ArrowDownRight
+  Wifi
 } from 'lucide-react'
 import { systemApi, taskApi } from '../services/api'
 import SimpleChart from '../components/SimpleChart'
@@ -56,9 +49,9 @@ export default function SystemOverview() {
       setMetrics(metricsRes)
       setAgentStatus(agentsRes)
       setTasks(tasksRes.tasks || [])
-    } catch (err: any) {
-      if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') return
-      setError(err.message || t('error.serverError'))
+    } catch (err: unknown) {
+      if (err instanceof Error && (err.name === 'AbortError' || (err as { code?: string }).code === 'ERR_CANCELED')) return
+      setError(err instanceof Error ? err.message : t('error.serverError'))
     } finally {
       setLoading(false)
     }
@@ -146,7 +139,7 @@ export default function SystemOverview() {
     { label: t('dashboard.failedTasks'), value: metrics?.failed_tasks || 0, color: '#ef4444' },
   ]
 
-  const agentPerformanceData = agentStatus ? Object.entries(agentStatus).map(([name, status]: [string, any]) => ({
+  const agentPerformanceData = agentStatus ? Object.entries(agentStatus).map(([name, status]: [string, { avg_latency_ms?: number }]) => ({
     label: name.charAt(0).toUpperCase() + name.slice(1),
     value: status.avg_latency_ms || 0,
     color: '#6366f1',
@@ -307,7 +300,7 @@ export default function SystemOverview() {
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {agentStatus && Object.entries(agentStatus).map(([agent, status]: [string, any]) => (
+          {agentStatus && Object.entries(agentStatus).map(([agent, status]: [string, { status: string; total_calls: number; avg_latency_ms: number; success_rate: number }]) => (
             <div key={agent} className="p-4 bg-dark-bg rounded-lg border border-dark-border hover:border-primary-500/30 transition-colors">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">

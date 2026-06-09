@@ -44,15 +44,16 @@ export default function Register() {
     try {
       await register(username, email, password)
       navigate('/', { replace: true })
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Registration error:', err)
-      const detail = err.response?.data?.detail
+      const axiosErr = err as { response?: { data?: { detail?: string | { msg: string }[] } } }
+      const detail = axiosErr.response?.data?.detail
       if (typeof detail === 'string') {
         setError(detail)
       } else if (Array.isArray(detail)) {
-        setError(detail.map((d: any) => d.msg || d).join(', '))
+        setError(detail.map((d: { msg: string }) => d.msg || String(d)).join(', '))
       } else {
-        setError(err.userMessage || err.message || t('auth.registerError'))
+        setError((err as { userMessage?: string }).userMessage || (err instanceof Error ? err.message : t('auth.registerError')))
       }
     } finally {
       setLoading(false)

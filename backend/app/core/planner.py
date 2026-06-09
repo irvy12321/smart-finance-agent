@@ -1,9 +1,10 @@
 import json
 from dataclasses import dataclass, field
-from app.infrastructure.llm_client import LLMClient, LiteLLMRouter
+
+from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
 from app.infrastructure.smart_router import RouteDecision
-from app.utils.logger import get_logger
 from app.utils.exceptions import PlannerError
+from app.utils.logger import get_logger
 
 logger = get_logger("planner")
 
@@ -199,17 +200,17 @@ class PlannerAgent:
         text = response.strip()
         if text.startswith("```"):
             lines = text.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
+            lines = [line for line in lines if not line.strip().startswith("```")]
             text = "\n".join(lines)
 
         try:
             return json.loads(text)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             start = text.find("{")
             end = text.rfind("}") + 1
             if start >= 0 and end > start:
                 return json.loads(text[start:end])
-            raise PlannerError(f"Cannot parse planner response as JSON: {text[:200]}")
+            raise PlannerError(f"Cannot parse planner response as JSON: {text[:200]}") from e
 
     def _build_subtasks(
         self, plan_data: dict, route_decision: RouteDecision | None = None

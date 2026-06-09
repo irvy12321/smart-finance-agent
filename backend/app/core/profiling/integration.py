@@ -2,8 +2,8 @@
 Profiling Integration - 无侵入式 EventBus 集成
 在 app 启动时激活，自动将事件转发给 LatencyProfiler
 """
+from app.core.agent_status import AgentEvent, EventBus
 from app.core.profiling.latency_profiler import get_profiler
-from app.core.agent_status import EventBus, AgentEvent
 from app.utils.logger import get_logger
 
 logger = get_logger("profiling_integration")

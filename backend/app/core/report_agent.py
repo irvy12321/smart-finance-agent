@@ -2,13 +2,15 @@
 Report Agent - 结构化研究报告生成
 输出: summary (短文本) + structured_analysis (JSON)
 """
+import asyncio
 import json
-from datetime import datetime
 from dataclasses import dataclass, field
-from app.infrastructure.llm_client import LLMClient, LiteLLMRouter
-from app.core.agent_status import EventBus, AgentEvent
-from app.core.executor import ExecutionResult, TaskResult
+from datetime import datetime
+
+from app.core.agent_status import AgentEvent, EventBus
+from app.core.executor import ExecutionResult
 from app.core.reasoner import ReasoningResult
+from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
 from app.utils.logger import get_logger
 
 logger = get_logger("report_agent")
@@ -40,7 +42,7 @@ class ResearchReport:
     metadata: dict = field(default_factory=dict)
     trace_id: str = ""
 
-    def to_markdown(self) -> str:
+    def to_markdown(self, language: str = "en") -> str:
         """生成 Markdown 格式报告"""
         sources_md = ""
         for i, src in enumerate(self.sources, 1):
@@ -59,7 +61,8 @@ class ResearchReport:
         success_tasks = self.metadata.get("success_tasks", 0)
         total_ms = self.metadata.get("total_ms", 0)
 
-        return f"""# {self.title}
+        if language == "zh":
+            return f"""# {self.title}
 
 ## 摘要
 {self.summary}
@@ -80,7 +83,30 @@ class ResearchReport:
 {sources_md}
 
 ---
-*生成时间: {timestamp} | 任务: {success_tasks}/{total_tasks} 成功 | 耗时: {total_ms:.0f}ms | Trace: {self.trace_id}*"""
+*生成时间: {timestamp} | 任务: {success_tasks}/{total_tasks} 成功 | 耗时: {total_ms:.0f}ms*"""
+        else:
+            return f"""# {self.title}
+
+## Summary
+{self.summary}
+
+## Key Findings
+{findings_md}
+
+## Risk Factors
+{risks_md}
+
+## Market Trends
+{trends_md}
+
+## Recommendations
+{recs_md}
+
+## Data Sources
+{sources_md}
+
+---
+*Generated: {timestamp} | Tasks: {success_tasks}/{total_tasks} succeeded | Duration: {total_ms:.0f}ms*"""
 
 
 REPORT_SYSTEM = """You are a report generator. Given research data, produce a REAL analysis based on the actual data provided.
@@ -93,7 +119,31 @@ CRITICAL RULES:
 - summary must contain actual information, not templates
 - key_findings must reference specific numbers, companies, or facts from the data
 - If data is limited, summarize what IS available rather than inventing placeholders
-- Reply in the same language as the research question"""
+- YOU MUST reply in the specified language: {language}"""
+
+REPORT_SYSTEM_ZH = """你是一个报告生成器。根据提供的研究数据，生成基于实际数据的真实分析。
+
+只输出有效的JSON：
+{"title":"报告标题","summary":"200字以内的简洁摘要，使用实际数据","key_findings":["来自数据的具体发现","另一个真实发现"],"risk_factors":[{"factor":"名称","severity":"high","description":"简述"}],"market_trends":["趋势1"],"recommendations":["建议1"]}
+
+关键规则：
+- 绝对不要使用"发现1"、"trend 1"这样的占位符，始终使用上下文中的真实数据
+- 摘要必须包含实际信息，而非模板
+- 关键发现必须引用数据中的具体数字、公司或事实
+- 如果数据有限，总结已有内容而非编造占位符
+- 必须使用中文回复"""
+
+REPORT_SYSTEM_EN = """You are a report generator. Given research data, produce a REAL analysis based on the actual data provided.
+
+Output ONLY valid JSON:
+{"title":"Report Title","summary":"concise summary under 200 chars using ACTUAL data","key_findings":["specific finding from data","another real finding"],"risk_factors":[{"factor":"Name","severity":"high","description":"brief"}],"market_trends":["trend 1"],"recommendations":["rec 1"]}
+
+CRITICAL RULES:
+- NEVER use placeholder text like "finding 1", "发现1", "trend 1" - always use REAL data from the context
+- summary must contain actual information, not templates
+- key_findings must reference specific numbers, companies, or facts from the data
+- If data is limited, summarize what IS available rather than inventing placeholders
+- You MUST reply in English"""
 
 
 class ReportAgent:
@@ -108,9 +158,10 @@ class ReportAgent:
         exec_result: ExecutionResult,
         reasoning_result: ReasoningResult | None = None,
         trace_id: str = "",
+        language: str = "en",
     ) -> ResearchReport:
         """生成结构化研究报告"""
-        logger.info("Generating research report...")
+        logger.info(f"Generating research report (language={language})...")
         await self.event_bus.emit(AgentEvent(
             event_type="report_start",
             agent_name="report",
@@ -142,15 +193,25 @@ class ReportAgent:
             f"Generate structured analysis as JSON."
         )
 
+        # Select system prompt based on language
+        if language == "zh":
+            system_prompt = REPORT_SYSTEM_ZH
+        else:
+            system_prompt = REPORT_SYSTEM_EN
+
         try:
+            logger.info(f"Calling LLM for report generation (prompt length: {len(prompt)} chars)")
             if self.router:
-                response = await self.router.complete(
-                    "report", prompt=prompt, system=REPORT_SYSTEM, max_tokens=2000,
+                response = await asyncio.wait_for(
+                    self.router.complete("report", prompt=prompt, system=system_prompt, max_tokens=2000),
+                    timeout=120
                 )
             else:
-                response = await self.llm.complete(
-                    prompt=prompt, system=REPORT_SYSTEM, temperature=0.5, max_tokens=2000,
+                response = await asyncio.wait_for(
+                    self.llm.complete(prompt=prompt, system=system_prompt, temperature=0.5, max_tokens=2000),
+                    timeout=120
                 )
+            logger.info(f"LLM response received ({len(response)} chars)")
 
             report_data = self._parse_response(response)
 
@@ -204,7 +265,7 @@ class ReportAgent:
 
         if "```" in text:
             lines = text.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
+            lines = [line for line in lines if not line.strip().startswith("```")]
             text = "\n".join(lines).strip()
 
         # 找到 JSON 对象
@@ -242,7 +303,7 @@ class ReportAgent:
                     summary_obj = json.loads(data["summary"])
                     if "summary" in summary_obj:
                         data["summary"] = summary_obj["summary"]
-                except:
+                except Exception:
                     pass
             return data
         except json.JSONDecodeError as e:

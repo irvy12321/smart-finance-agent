@@ -1,6 +1,6 @@
 """
 Password hashing utilities
 """
-from app.auth import verify_password, get_password_hash
+from app.auth import get_password_hash, verify_password
 
-__all__ = ["verify_password", "get_password_hash"]
+__all__ = ["get_password_hash", "verify_password"]

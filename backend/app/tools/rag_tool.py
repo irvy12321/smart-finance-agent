@@ -1,5 +1,5 @@
-from app.tools.base_tool import BaseTool, ToolResult
 from app.rag.retriever import Retriever
+from app.tools.base_tool import BaseTool, ToolResult
 from app.utils.logger import get_logger
 
 logger = get_logger("rag_tool")

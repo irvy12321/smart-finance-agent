@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook, act } from '@testing-library/react'
 import { useTask, useReport, useSystem } from '../hooks/useApi'
 import { taskApi, reportApi, systemApi } from '../services/api'
 
@@ -81,6 +81,11 @@ describe('useTask', () => {
   })
 
   it('runs a task and polls for status', async () => {
+    vi.mocked(taskApi.create).mockResolvedValueOnce({
+      task_id: 'test-123',
+      status: 'pending',
+      message: 'Created',
+    })
     vi.mocked(taskApi.run).mockResolvedValueOnce({ message: 'Started', task_id: 'test-123' })
     vi.mocked(taskApi.getStatus).mockResolvedValue({
       task_id: 'test-123',
@@ -92,8 +97,8 @@ describe('useTask', () => {
 
     const { result } = renderHook(() => useTask())
 
-    act(() => {
-      result.current.createTask('Test query')
+    await act(async () => {
+      await result.current.createTask('Test query')
     })
 
     await act(async () => {

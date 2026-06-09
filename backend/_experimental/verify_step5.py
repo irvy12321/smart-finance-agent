@@ -2,8 +2,8 @@
 """
 Step 5 验证脚本: 测试前端组件
 """
-import sys
 import os
+import sys
 
 # 添加backend目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -14,10 +14,10 @@ def test_frontend_files():
     print("=" * 60)
     print("测试前端文件")
     print("=" * 60)
-    
+
     frontend_dir = os.path.join(os.path.dirname(__file__), '..', 'frontend')
-    src_dir = os.path.join(frontend_dir, 'src')
-    
+    os.path.join(frontend_dir, 'src')
+
     expected_files = [
         'src/App.tsx',
         'src/main.tsx',
@@ -35,7 +35,7 @@ def test_frontend_files():
         'src/components/StockPriceCard.tsx',
         'src/services/api.ts',
     ]
-    
+
     success_count = 0
     for file_path in expected_files:
         full_path = os.path.join(frontend_dir, file_path)
@@ -44,7 +44,7 @@ def test_frontend_files():
             success_count += 1
         else:
             print(f"[FAIL] {file_path} 不存在")
-    
+
     print(f"\n文件检查: {success_count}/{len(expected_files)} 成功")
     return success_count == len(expected_files)
 
@@ -54,16 +54,16 @@ def test_api_service():
     print("\n" + "=" * 60)
     print("测试API服务文件")
     print("=" * 60)
-    
+
     api_file = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'src', 'services', 'api.ts')
-    
+
     if not os.path.exists(api_file):
         print("[FAIL] api.ts 文件不存在")
         return False
-    
-    with open(api_file, 'r', encoding='utf-8') as f:
+
+    with open(api_file, encoding='utf-8') as f:
         content = f.read()
-    
+
     # 检查必要的API定义
     required_apis = [
         'taskApi',
@@ -72,7 +72,7 @@ def test_api_service():
         'toolsApi',
         'chatApi',
     ]
-    
+
     success_count = 0
     for api_name in required_apis:
         if api_name in content:
@@ -80,7 +80,7 @@ def test_api_service():
             success_count += 1
         else:
             print(f"[FAIL] {api_name} 未定义")
-    
+
     print(f"\nAPI检查: {success_count}/{len(required_apis)} 成功")
     return success_count == len(required_apis)
 
@@ -90,16 +90,16 @@ def test_chat_page():
     print("\n" + "=" * 60)
     print("测试Chat页面文件")
     print("=" * 60)
-    
+
     chat_file = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'src', 'pages', 'Chat.tsx')
-    
+
     if not os.path.exists(chat_file):
         print("[FAIL] Chat.tsx 文件不存在")
         return False
-    
-    with open(chat_file, 'r', encoding='utf-8') as f:
+
+    with open(chat_file, encoding='utf-8') as f:
         content = f.read()
-    
+
     # 检查必要的组件和功能
     required_features = [
         'chatApi',
@@ -110,7 +110,7 @@ def test_chat_page():
         'Bot',
         'User',
     ]
-    
+
     success_count = 0
     for feature in required_features:
         if feature in content:
@@ -118,7 +118,7 @@ def test_chat_page():
             success_count += 1
         else:
             print(f"[FAIL] {feature} 未实现")
-    
+
     print(f"\n功能检查: {success_count}/{len(required_features)} 成功")
     return success_count == len(required_features)
 
@@ -128,16 +128,16 @@ def test_stock_component():
     print("\n" + "=" * 60)
     print("测试股票组件")
     print("=" * 60)
-    
+
     stock_file = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'src', 'components', 'StockPriceCard.tsx')
-    
+
     if not os.path.exists(stock_file):
         print("[FAIL] StockPriceCard.tsx 文件不存在")
         return False
-    
-    with open(stock_file, 'r', encoding='utf-8') as f:
+
+    with open(stock_file, encoding='utf-8') as f:
         content = f.read()
-    
+
     # 检查必要的功能
     required_features = [
         'toolsApi',
@@ -146,7 +146,7 @@ def test_stock_component():
         'handleSearch',
         'popularStocks',
     ]
-    
+
     success_count = 0
     for feature in required_features:
         if feature in content:
@@ -154,7 +154,7 @@ def test_stock_component():
             success_count += 1
         else:
             print(f"[FAIL] {feature} 未实现")
-    
+
     print(f"\n功能检查: {success_count}/{len(required_features)} 成功")
     return success_count == len(required_features)
 
@@ -164,23 +164,23 @@ def test_app_routing():
     print("\n" + "=" * 60)
     print("测试App路由配置")
     print("=" * 60)
-    
+
     app_file = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'src', 'App.tsx')
-    
+
     if not os.path.exists(app_file):
         print("[FAIL] App.tsx 文件不存在")
         return False
-    
-    with open(app_file, 'r', encoding='utf-8') as f:
+
+    with open(app_file, encoding='utf-8') as f:
         content = f.read()
-    
+
     # 检查路由配置
     required_routes = [
         '/chat',
         'Chat',
         'Route',
     ]
-    
+
     success_count = 0
     for route in required_routes:
         if route in content:
@@ -188,7 +188,7 @@ def test_app_routing():
             success_count += 1
         else:
             print(f"[FAIL] {route} 路由未配置")
-    
+
     print(f"\n路由检查: {success_count}/{len(required_routes)} 成功")
     return success_count == len(required_routes)
 
@@ -196,28 +196,28 @@ def test_app_routing():
 if __name__ == "__main__":
     print("Step 5 验证脚本 - 前端组件")
     print("=" * 60)
-    
+
     results = []
-    
+
     # 运行所有测试
     results.append(("前端文件", test_frontend_files()))
     results.append(("API服务", test_api_service()))
     results.append(("Chat页面", test_chat_page()))
     results.append(("股票组件", test_stock_component()))
     results.append(("App路由", test_app_routing()))
-    
+
     # 总结
     print("\n" + "=" * 60)
     print("测试总结")
     print("=" * 60)
-    
+
     for test_name, result in results:
         status = "[OK] 通过" if result else "[FAIL] 失败"
         print(f"{test_name}: {status}")
-    
+
     all_passed = all(r for _, r in results)
     print(f"\n总体结果: {'全部通过' if all_passed else '存在失败'}")
-    
+
     if all_passed:
         print("\n恭喜! Step 5 前端组件验证成功!")
         print("\n启动前端开发服务器:")

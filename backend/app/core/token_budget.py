@@ -1,7 +1,8 @@
 """
 Token 预算管理器 - 控制各 Agent 的 token 消耗上限
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
 from app.utils.logger import get_logger
 
 logger = get_logger("token_budget")

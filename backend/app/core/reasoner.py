@@ -5,8 +5,9 @@ Reasoner - 多步推理 + 可解释分析 + 图表规格输出
 import json
 import re
 from dataclasses import dataclass, field
-from app.infrastructure.llm_client import LLMClient, LiteLLMRouter
-from app.core.agent_status import EventBus, AgentEvent
+
+from app.core.agent_status import AgentEvent, EventBus
+from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
 from app.utils.logger import get_logger
 
 logger = get_logger("reasoner")
@@ -45,7 +46,59 @@ Output ONLY valid JSON:
   ]
 }
 
-Chart types: bar, line, pie, scatter. Each chart needs 3+ data points. Keep reasoning under 300 words."""
+CRITICAL RULES:
+- charts array MUST contain at least 1 chart, up to 3 charts
+- Each chart MUST have 3-6 data points with actual numbers from the context
+- Chart types: bar, line, pie, scatter
+- Extract specific numbers from the data as values
+- Keep reasoning under 300 words
+- Reply in the same language as the question
+
+You MUST output the charts field. This is mandatory."""
+
+REASONER_SYSTEM_ZH = """你是一个推理引擎。根据上下文和问题，生成推理和图表规格。
+
+只输出有效的JSON：
+{
+  "reasoning": "简洁的逐步分析",
+  "key_insights": ["洞察1", "洞察2"],
+  "confidence": 0.8,
+  "critique": "可能不确定的内容",
+  "charts": [
+    {"chart_type":"bar","title":"标题","x_label":"X","y_label":"Y","data":[{"label":"A","value":100},{"label":"B","value":200},{"label":"C","value":150}]}
+  ]
+}
+
+关键规则：
+- charts数组必须包含至少1个图表，最多3个图表
+- 每个图表必须有3-6个数据点
+- 图表类型：bar（柱状图）、line（折线图）、pie（饼图）、scatter（散点图）
+- 从数据中提取具体数字作为value
+- 必须使用中文回复
+
+你必须输出charts字段，这是强制要求。"""
+
+REASONER_SYSTEM_EN = """You are a reasoning engine. Given context and question, produce reasoning AND chart specs.
+
+Output ONLY valid JSON:
+{
+  "reasoning": "concise step-by-step analysis",
+  "key_insights": ["insight 1", "insight 2"],
+  "confidence": 0.8,
+  "critique": "what might be uncertain",
+  "charts": [
+    {"chart_type":"bar","title":"Title","x_label":"X","y_label":"Y","data":[{"label":"A","value":100},{"label":"B","value":200},{"label":"C","value":150}]}
+  ]
+}
+
+CRITICAL RULES:
+- charts array MUST contain at least 1 chart, up to 3 charts
+- Each chart MUST have 3-6 data points with actual numbers from the context
+- Chart types: bar, line, pie, scatter
+- Extract specific numbers from the data as values
+- You MUST reply in English
+
+You MUST output the charts field. This is mandatory."""
 
 
 class Reasoner:
@@ -54,9 +107,9 @@ class Reasoner:
         self.llm = llm_client or LLMClient.get_instance()
         self.event_bus = EventBus.get_instance()
 
-    async def reason(self, context: str, question: str) -> ReasoningResult:
+    async def reason(self, context: str, question: str, language: str = "en") -> ReasoningResult:
         """多步推理 + 图表规格生成"""
-        logger.info(f"Reasoning for: {question[:60]}...")
+        logger.info(f"Reasoning for: {question[:60]}... (language={language})")
         await self.event_bus.emit(AgentEvent(
             event_type="reasoning_start",
             agent_name="reasoner",
@@ -69,14 +122,20 @@ class Reasoner:
             f"Provide reasoning, insights, and chart specifications."
         )
 
+        # Select system prompt based on language
+        if language == "zh":
+            system_prompt = REASONER_SYSTEM_ZH
+        else:
+            system_prompt = REASONER_SYSTEM_EN
+
         try:
             if self.router:
                 response = await self.router.complete(
-                    "reasoner", prompt=prompt, system=REASONER_SYSTEM, max_tokens=1500,
+                    "reasoner", prompt=prompt, system=system_prompt, max_tokens=1500,
                 )
             else:
                 response = await self.llm.complete(
-                    prompt=prompt, system=REASONER_SYSTEM, temperature=0.4, max_tokens=1500,
+                    prompt=prompt, system=system_prompt, temperature=0.4, max_tokens=1500,
                 )
 
             # MiMo reasoning_content fallback
@@ -120,7 +179,7 @@ class Reasoner:
         text = response.strip()
         if "```" in text:
             lines = text.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
+            lines = [line for line in lines if not line.strip().startswith("```")]
             text = "\n".join(lines).strip()
 
         start = text.find("{")
@@ -133,7 +192,8 @@ class Reasoner:
 
         try:
             data = json.loads(text)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON parse failed: {e}")
             return ReasoningResult(
                 reasoning=text[:500],
                 critique="",
@@ -143,18 +203,25 @@ class Reasoner:
 
         # 解析图表规格
         chart_specs = []
-        for c in data.get("charts", []):
+        charts_data = data.get("charts", [])
+        logger.info(f"Found {len(charts_data)} charts in response")
+        
+        for c in charts_data:
             if isinstance(c, dict):
                 raw_data = c.get("data", [])
                 valid_data = [d for d in raw_data if isinstance(d, dict) and "label" in d and "value" in d]
-                chart_specs.append(ChartSpec(
-                    chart_type=str(c.get("chart_type", "bar")),
-                    title=str(c.get("title", "")),
-                    x_label=str(c.get("x_label", "")),
-                    y_label=str(c.get("y_label", "")),
-                    data=valid_data,
-                    description=str(c.get("description", "")),
-                ))
+                if valid_data:  # Only add chart if it has valid data
+                    chart_specs.append(ChartSpec(
+                        chart_type=str(c.get("chart_type", "bar")),
+                        title=str(c.get("title", "")),
+                        x_label=str(c.get("x_label", "")),
+                        y_label=str(c.get("y_label", "")),
+                        data=valid_data,
+                        description=str(c.get("description", "")),
+                    ))
+                    logger.info(f"Added chart: {c.get('title', 'untitled')} with {len(valid_data)} data points")
+                else:
+                    logger.warning(f"Skipping chart with no valid data: {c.get('title', 'untitled')}")
 
         return ReasoningResult(
             reasoning=data.get("reasoning", ""),

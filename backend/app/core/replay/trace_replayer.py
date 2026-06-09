@@ -3,13 +3,14 @@ Trace Replayer - 从保存的 trace 文件回放执行过程
 不调用 LLM，纯日志回放
 """
 import asyncio
-import json
-import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, AsyncIterator
 
-from app.core.replay.trace_recorder import TraceSession, TraceEvent, TraceRecorder, get_recorder
+from app.core.replay.trace_recorder import (
+    TraceEvent,
+    TraceSession,
+    get_recorder,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger("trace_replayer")

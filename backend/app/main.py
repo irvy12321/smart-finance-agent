@@ -2,30 +2,31 @@
 Smart Finance Agent - FastAPI Backend
 Main application entry point
 """
-import sys
-import os
 import logging
-from pathlib import Path
+import os
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 # Add the backend directory to Python path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from dotenv import load_dotenv
+
 # Load .env from backend directory
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+import sentry_sdk
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import uvicorn
-import sentry_sdk
-from sentry_sdk.integrations.logging import LoggingIntegration
-from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration
 
-from app.utils.logger import get_logger
 from app.api import api_router
+from app.utils.logger import get_logger
 
 logger = get_logger("fastapi_backend")
 

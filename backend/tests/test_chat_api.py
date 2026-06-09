@@ -1,7 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import FastAPI
-from httpx import AsyncClient, ASGITransport
+
+import pytest
+from httpx import AsyncClient
 
 
 @pytest.fixture

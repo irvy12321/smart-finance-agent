@@ -1,15 +1,19 @@
-import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
 
 import litellm
 
-from app.infrastructure.config import get_llm_config, get_agent_model_config, LLMConfig, AgentModelConfig, get_active_provider
+from app.infrastructure.config import (
+    AgentModelConfig,
+    LLMConfig,
+    get_active_provider,
+    get_agent_model_config,
+    get_llm_config,
+)
+from app.utils.exceptions import LLMClientError
 from app.utils.logger import get_logger
 from app.utils.retry import async_retry
-from app.utils.exceptions import LLMClientError
 
 logger = get_logger("llm_client")
 
@@ -117,7 +121,7 @@ class LLMClient:
         except Exception as e:
             latency_ms = (time.perf_counter() - start) * 1000
             error_msg = str(e)
-            
+
             # Provide user-friendly error messages
             if "401" in error_msg or "Unauthorized" in error_msg or "invalid api key" in error_msg.lower():
                 user_msg = "LLM authentication failed. Please check MIMO_API_KEY in backend/.env"
@@ -127,7 +131,7 @@ class LLMClient:
                 user_msg = "LLM request timed out. Please try again"
             else:
                 user_msg = f"LLM call failed: {error_msg}"
-            
+
             logger.error(
                 f"[trace:{trace_id}] LLM failed after {latency_ms:.0f}ms: {error_msg}"
             )
@@ -309,7 +313,7 @@ class LiteLLMRouter:
         except Exception as e:
             latency_ms = (time.perf_counter() - start) * 1000
             error_msg = str(e)
-            
+
             # Provide user-friendly error messages
             if "401" in error_msg or "Unauthorized" in error_msg or "invalid api key" in error_msg.lower():
                 user_msg = f"Agent '{agent_name}' authentication failed. Please check MIMO_API_KEY in backend/.env"

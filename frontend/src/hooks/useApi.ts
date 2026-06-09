@@ -37,11 +37,11 @@ export function useTask() {
         status: 'pending',
       }))
       return response.task_id
-    } catch (error: any) {
+    } catch (error: unknown) {
       setTaskState(prev => ({
         ...prev,
         status: 'error',
-        error: error.message || 'Failed to create task',
+        error: error instanceof Error ? error.message : 'Failed to create task',
       }))
       throw error
     }
@@ -90,7 +90,7 @@ export function useTask() {
                 status: 'completed',
                 result,
               }))
-            } catch (resultError: any) {
+            } catch (_resultError: unknown) {
               // Task completed but result fetch failed - still mark as completed with partial info
               setTaskState(prev => ({
                 ...prev,
@@ -106,15 +106,15 @@ export function useTask() {
               error: status.message || 'Task failed',
             }))
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           consecutiveErrors++
-          const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout')
-          const isNetworkError = !error.response
+          const isTimeout = error instanceof Error && (error.message?.includes('timeout') || (error as { code?: string }).code === 'ECONNABORTED')
+          const isNetworkError = !(error as { response?: unknown }).response
 
           console.warn(`Poll error (${consecutiveErrors}/${maxConsecutiveErrors}):`, {
             isTimeout,
             isNetworkError,
-            message: error.message,
+            message: error instanceof Error ? error.message : 'Unknown error',
           })
 
           if (consecutiveErrors >= maxConsecutiveErrors) {
@@ -124,7 +124,7 @@ export function useTask() {
               status: 'error',
               error: isTimeout
                 ? 'Connection to server timed out. Please check if the backend is running.'
-                : `Network error: ${error.message || 'Lost connection to server'}`,
+                : `Network error: ${error instanceof Error ? error.message : 'Lost connection to server'}`,
             }))
           }
           // Otherwise: network hiccup, keep polling (task may still be running server-side)
@@ -132,11 +132,11 @@ export function useTask() {
       }, 1500) // Poll every 1.5s instead of 1s to reduce load
 
       return () => clearInterval(pollInterval)
-    } catch (error: any) {
+    } catch (error: unknown) {
       setTaskState(prev => ({
         ...prev,
         status: 'error',
-        error: error.userMessage || error.message || 'Failed to run task',
+        error: (error as { userMessage?: string }).userMessage || (error instanceof Error ? error.message : 'Failed to run task'),
       }))
       throw error
     }
@@ -151,10 +151,10 @@ export function useTask() {
         status: 'completed',
       }))
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       setTaskState(prev => ({
         ...prev,
-        error: error.message || 'Failed to get task result',
+        error: error instanceof Error ? error.message : 'Failed to get task result',
       }))
       throw error
     }
@@ -192,8 +192,8 @@ export function useReport() {
       const data = await reportApi.get(taskId)
       setReport(data)
       return data
-    } catch (err: any) {
-      setError(err.message || 'Failed to get report')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to get report')
       throw err
     } finally {
       setLoading(false)
@@ -206,8 +206,8 @@ export function useReport() {
       setError(null)
       const data = await reportApi.getSummary(taskId)
       return data
-    } catch (err: any) {
-      setError(err.message || 'Failed to get report summary')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to get report summary')
       throw err
     } finally {
       setLoading(false)
@@ -237,8 +237,8 @@ export function useSystem() {
       const data = await systemApi.getStatus()
       setSystemStatus(data)
       return data
-    } catch (err: any) {
-      setError(err.message || 'Failed to get system status')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to get system status')
       throw err
     } finally {
       setLoading(false)
@@ -252,8 +252,8 @@ export function useSystem() {
       const data = await systemApi.getMetrics()
       setMetrics(data)
       return data
-    } catch (err: any) {
-      setError(err.message || 'Failed to get metrics')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to get metrics')
       throw err
     } finally {
       setLoading(false)
@@ -267,8 +267,8 @@ export function useSystem() {
       const data = await systemApi.getAgentStatus()
       setAgentStatus(data)
       return data
-    } catch (err: any) {
-      setError(err.message || 'Failed to get agent status')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to get agent status')
       throw err
     } finally {
       setLoading(false)

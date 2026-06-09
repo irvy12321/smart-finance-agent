@@ -1,8 +1,9 @@
-import pytest
 import asyncio
-from typing import Generator, AsyncGenerator
+from collections.abc import AsyncGenerator
+
+import pytest
 from fastapi import FastAPI
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 
@@ -48,7 +49,7 @@ def mock_storage(monkeypatch):
 @pytest.fixture
 def mock_llm_client(monkeypatch):
     """Mock the LLM client for isolated tests."""
-    from unittest.mock import MagicMock, AsyncMock, patch
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     mock = MagicMock()
     mock.chat = AsyncMock(return_value=MagicMock(content="Test response"))

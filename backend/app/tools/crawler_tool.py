@@ -1,11 +1,11 @@
 import re
+
 import aiohttp
 from bs4 import BeautifulSoup
 
-from app.tools.base_tool import BaseTool, ToolResult
 from app.infrastructure.config import get_crawler_config
+from app.tools.base_tool import BaseTool, ToolResult
 from app.utils.logger import get_logger
-from app.utils.exceptions import CrawlerError
 
 logger = get_logger("crawler_tool")
 

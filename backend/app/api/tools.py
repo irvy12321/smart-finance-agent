@@ -1,14 +1,15 @@
 """
 Tools API routes - 提供工具查询和执行接口
 """
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Optional
 
+from app.tools.financial_report_tool import FinancialAnalysisTool, FinancialReportTool
+from app.tools.news_summary_tool import NewsAnalysisTool, NewsSummaryTool
 from app.tools.registry import ToolRegistry
-from app.tools.stock_price_tool import StockPriceTool, StockHistoryTool
-from app.tools.financial_report_tool import FinancialReportTool, FinancialAnalysisTool
-from app.tools.news_summary_tool import NewsSummaryTool, NewsAnalysisTool
+from app.tools.stock_price_tool import StockHistoryTool, StockPriceTool
 from app.utils.logger import get_logger
 
 logger = get_logger("api.tools")
@@ -28,7 +29,7 @@ class ToolInfo(BaseModel):
 
 class ToolListResponse(BaseModel):
     """Response model for tool list"""
-    tools: List[ToolInfo]
+    tools: list[ToolInfo]
     total: int
 
 
@@ -63,7 +64,7 @@ class StockHistoryResponse(BaseModel):
     """Response model for stock history"""
     symbol: str
     period: str
-    history: List[Dict[str, Any]]
+    history: list[dict[str, Any]]
     source: str = ""
 
 
@@ -79,8 +80,8 @@ class FinancialReportResponse(BaseModel):
     name: str = ""
     sector: str = ""
     industry: str = ""
-    financials: Dict[str, Any] = {}
-    quarterly: Dict[str, Any] = {}
+    financials: dict[str, Any] = {}
+    quarterly: dict[str, Any] = {}
     timestamp: str
     source: str
 
@@ -95,7 +96,7 @@ class FinancialAnalysisResponse(BaseModel):
     """Response model for financial analysis"""
     symbol: str
     analysis_type: str
-    analysis: Dict[str, Any]
+    analysis: dict[str, Any]
     timestamp: str
 
 
@@ -108,7 +109,7 @@ class NewsRequest(BaseModel):
 class NewsResponse(BaseModel):
     """Response model for news"""
     query: str
-    results: List[Dict[str, Any]]
+    results: list[dict[str, Any]]
     summary: str
     total_results: int
     timestamp: str
@@ -125,7 +126,7 @@ class NewsAnalysisResponse(BaseModel):
     """Response model for news analysis"""
     query: str
     period: str
-    analysis: Dict[str, Any]
+    analysis: dict[str, Any]
     timestamp: str
 
 
@@ -145,7 +146,7 @@ async def list_tools():
         )
     except Exception as e:
         logger.error(f"Error listing tools: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/stock/price", response_model=StockPriceResponse)
@@ -154,10 +155,10 @@ async def get_stock_price(request: StockPriceRequest):
     try:
         tool = StockPriceTool()
         result = await tool.execute(symbol=request.symbol)
-        
+
         if not result.success:
             raise HTTPException(status_code=400, detail=result.error)
-        
+
         data = result.data
         return StockPriceResponse(
             symbol=data.get("symbol", request.symbol),
@@ -177,7 +178,7 @@ async def get_stock_price(request: StockPriceRequest):
         raise
     except Exception as e:
         logger.error(f"Error getting stock price: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/stock/history", response_model=StockHistoryResponse)
@@ -186,10 +187,10 @@ async def get_stock_history(request: StockHistoryRequest):
     try:
         tool = StockHistoryTool()
         result = await tool.execute(symbol=request.symbol, period=request.period)
-        
+
         if not result.success:
             raise HTTPException(status_code=400, detail=result.error)
-        
+
         data = result.data
         return StockHistoryResponse(
             symbol=data.get("symbol", request.symbol),
@@ -201,7 +202,7 @@ async def get_stock_history(request: StockHistoryRequest):
         raise
     except Exception as e:
         logger.error(f"Error getting stock history: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/financial/report", response_model=FinancialReportResponse)
@@ -210,10 +211,10 @@ async def get_financial_report(request: FinancialReportRequest):
     try:
         tool = FinancialReportTool()
         result = await tool.execute(symbol=request.symbol, report_type=request.report_type)
-        
+
         if not result.success:
             raise HTTPException(status_code=400, detail=result.error)
-        
+
         data = result.data
         return FinancialReportResponse(
             symbol=data.get("symbol", request.symbol),
@@ -229,7 +230,7 @@ async def get_financial_report(request: FinancialReportRequest):
         raise
     except Exception as e:
         logger.error(f"Error getting financial report: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/financial/analysis", response_model=FinancialAnalysisResponse)
@@ -238,10 +239,10 @@ async def get_financial_analysis(request: FinancialAnalysisRequest):
     try:
         tool = FinancialAnalysisTool()
         result = await tool.execute(symbol=request.symbol, analysis_type=request.analysis_type)
-        
+
         if not result.success:
             raise HTTPException(status_code=400, detail=result.error)
-        
+
         data = result.data
         return FinancialAnalysisResponse(
             symbol=data.get("symbol", request.symbol),
@@ -253,7 +254,7 @@ async def get_financial_analysis(request: FinancialAnalysisRequest):
         raise
     except Exception as e:
         logger.error(f"Error getting financial analysis: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/news/search", response_model=NewsResponse)
@@ -262,10 +263,10 @@ async def search_news(request: NewsRequest):
     try:
         tool = NewsSummaryTool()
         result = await tool.execute(query=request.query, max_results=request.max_results)
-        
+
         if not result.success:
             raise HTTPException(status_code=400, detail=result.error)
-        
+
         data = result.data
         return NewsResponse(
             query=data.get("query", request.query),
@@ -279,7 +280,7 @@ async def search_news(request: NewsRequest):
         raise
     except Exception as e:
         logger.error(f"Error searching news: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/news/analysis", response_model=NewsAnalysisResponse)
@@ -288,10 +289,10 @@ async def get_news_analysis(request: NewsAnalysisRequest):
     try:
         tool = NewsAnalysisTool()
         result = await tool.execute(query=request.query, period=request.period)
-        
+
         if not result.success:
             raise HTTPException(status_code=400, detail=result.error)
-        
+
         data = result.data
         return NewsAnalysisResponse(
             query=data.get("query", request.query),
@@ -303,4 +304,4 @@ async def get_news_analysis(request: NewsAnalysisRequest):
         raise
     except Exception as e:
         logger.error(f"Error getting news analysis: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

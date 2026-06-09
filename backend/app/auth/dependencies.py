@@ -1,19 +1,19 @@
 """
 User database operations and dependencies
 """
-from typing import Optional
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from app.auth import verify_password, decode_access_token
-from app.auth.models import UserResponse, TokenData
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
 from app import storage
+from app.auth import decode_access_token, verify_password
+from app.auth.models import TokenData, UserResponse
 
 # Security scheme
 security = HTTPBearer()
 
 
-def get_user_by_username(username: str) -> Optional[dict]:
+def get_user_by_username(username: str) -> dict | None:
     """Get user by username from database"""
     conn = storage._get_connection()
     try:
@@ -26,7 +26,7 @@ def get_user_by_username(username: str) -> Optional[dict]:
         conn.close()
 
 
-def get_user_by_email(email: str) -> Optional[dict]:
+def get_user_by_email(email: str) -> dict | None:
     """Get user by email from database"""
     conn = storage._get_connection()
     try:
@@ -39,7 +39,7 @@ def get_user_by_email(email: str) -> Optional[dict]:
         conn.close()
 
 
-def get_user_by_id(user_id: int) -> Optional[dict]:
+def get_user_by_id(user_id: int) -> dict | None:
     """Get user by ID from database"""
     conn = storage._get_connection()
     try:
@@ -76,7 +76,7 @@ def create_user(username: str, email: str, hashed_password: str) -> dict:
         conn.close()
 
 
-def authenticate_user(username: str, password: str) -> Optional[dict]:
+def authenticate_user(username: str, password: str) -> dict | None:
     """Authenticate user with username and password"""
     user = get_user_by_username(username)
     if not user:
@@ -91,27 +91,27 @@ async def get_current_user(
 ) -> UserResponse:
     """Dependency to get current authenticated user from JWT token"""
     token = credentials.credentials
-    
+
     try:
         payload = decode_access_token(token)
         user_id: int = payload.get("user_id")
         username: str = payload.get("username")
-        
+
         if user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token payload",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         token_data = TokenData(user_id=user_id, username=username)
-    except Exception:
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
-        )
-    
+        ) from e
+
     user = get_user_by_id(token_data.user_id)
     if user is None:
         raise HTTPException(
@@ -119,13 +119,13 @@ async def get_current_user(
             detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     if not user.get("is_active", True):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Inactive user"
         )
-    
+
     return UserResponse(
         id=user["id"],
         username=user["username"],
@@ -136,12 +136,12 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))
-) -> Optional[UserResponse]:
+    credentials: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False))
+) -> UserResponse | None:
     """Optional dependency - returns None if no token provided"""
     if credentials is None:
         return None
-    
+
     try:
         return await get_current_user(credentials)
     except HTTPException:

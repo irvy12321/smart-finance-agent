@@ -1,12 +1,13 @@
 import os
 from pathlib import Path
-from pydantic_settings import BaseSettings
-from pydantic import Field
-from typing import Optional
+
 import yaml
 
 # Load .env file at module level for config access
 from dotenv import load_dotenv
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
 _env_path = Path(__file__).parent.parent.parent / ".env"
 if _env_path.exists():
     load_dotenv(_env_path)
@@ -47,7 +48,7 @@ class LLMConfig(BaseSettings):
     model: str = ""
     temperature: float = 0.3
     max_tokens: int = 4096
-    timeout: int = 180
+    timeout: int = 300
     max_retries: int = 3
     api_key: str = ""
     api_base: str = ""
@@ -148,7 +149,7 @@ _CONFIG_DIR = Path(__file__).parent
 def _load_yaml(filename: str) -> dict:
     path = _CONFIG_DIR / filename
     if path.exists():
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     return {}
 

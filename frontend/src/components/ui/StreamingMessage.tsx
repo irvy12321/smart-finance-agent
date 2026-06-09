@@ -66,11 +66,11 @@ export function StreamingMessage({
   }, [onFeedback])
 
   const markdownComponents = {
-    p: ({ children }: any) => <p className="text-sm leading-relaxed mb-2 last:mb-0">{children}</p>,
-    ul: ({ children }: any) => <ul className="list-disc list-inside text-sm mb-2 space-y-1">{children}</ul>,
-    ol: ({ children }: any) => <ol className="list-decimal list-inside text-sm mb-2 space-y-1">{children}</ol>,
-    li: ({ children }: any) => <li>{children}</li>,
-    code: ({ children, className }: any) => {
+    p: ({ children }: { children?: React.ReactNode }) => <p className="text-sm leading-relaxed mb-2 last:mb-0">{children}</p>,
+    ul: ({ children }: { children?: React.ReactNode }) => <ul className="list-disc list-inside text-sm mb-2 space-y-1">{children}</ul>,
+    ol: ({ children }: { children?: React.ReactNode }) => <ol className="list-decimal list-inside text-sm mb-2 space-y-1">{children}</ol>,
+    li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
+    code: ({ children, className }: { children?: React.ReactNode; className?: string }) => {
       const isInline = !className
       return isInline ? (
         <code className="bg-dark-bg px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>
@@ -80,11 +80,11 @@ export function StreamingMessage({
         </pre>
       )
     },
-    strong: ({ children }: any) => <strong className="font-semibold">{children}</strong>,
-    em: ({ children }: any) => <em className="italic">{children}</em>,
-    h1: ({ children }: any) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
-    h2: ({ children }: any) => <h2 className="text-base font-semibold mb-2">{children}</h2>,
-    h3: ({ children }: any) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
+    strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold">{children}</strong>,
+    em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
+    h1: ({ children }: { children?: React.ReactNode }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+    h2: ({ children }: { children?: React.ReactNode }) => <h2 className="text-base font-semibold mb-2">{children}</h2>,
+    h3: ({ children }: { children?: React.ReactNode }) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
   }
 
   return (

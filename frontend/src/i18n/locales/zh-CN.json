@@ -115,7 +115,8 @@
     "executing": "执行中",
     "reasoning": "推理中",
     "reporting": "报告生成中",
-    "completed": "已完成"
+    "completed": "已完成",
+    "confirmDelete": "确定要删除这个研究任务和报告吗？"
   },
   "chat": {
     "title": "聊天",
@@ -129,7 +130,11 @@
     "messageSent": "消息已发送",
     "failedToSend": "发送失败",
     "failedToCreate": "创建对话失败",
-    "confirmDelete": "确定要删除这个对话吗？"
+    "confirmDelete": "确定要删除这个对话吗？",
+    "quickStockPrice": "AAPL 的当前股价是多少？",
+    "quickAnalysis": "提供 Tesla 的财务分析",
+    "quickNews": "Apple 的最新新闻是什么？",
+    "quickTrends": "分析科技股的当前市场趋势"
   },
   "report": {
     "title": "报告",

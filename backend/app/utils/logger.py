@@ -1,9 +1,9 @@
 """
 增强日志模块 - 结构化输出 + trace_id 关联 + 并发安全
 """
+import json
 import logging
 import sys
-import json
 import threading
 from datetime import datetime
 
@@ -119,7 +119,7 @@ class LogContext:
 def log_with_context(logger_name: str, level: str, message: str, **extra):
     """带上下文的日志记录"""
     logger = get_logger(logger_name)
-    log_func = getattr(logger, level, logger.info)
+    getattr(logger, level, logger.info)
 
     # 合并上下文和额外字段
     context = LogContext.get_extra()

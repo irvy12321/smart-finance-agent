@@ -1,10 +1,11 @@
 """
 增强指标收集器 - 并发安全 + Agent 集成 + 实时统计
 """
-import time
 import threading
-from dataclasses import dataclass, field
+import time
 from collections import defaultdict
+from dataclasses import dataclass, field
+
 from app.utils.logger import get_logger
 
 logger = get_logger("metrics")

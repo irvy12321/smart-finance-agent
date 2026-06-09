@@ -44,9 +44,9 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
         setStockData(data)
         setSymbol(targetSymbol.toUpperCase())
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (mountedRef.current) {
-        setError(err.message || t('stock.failedToFetch'))
+        setError(err instanceof Error ? err.message : t('stock.failedToFetch'))
         setStockData(null)
       }
     } finally {

@@ -5,7 +5,9 @@ Embedding 模块 - 支持 dev/prod 模式切换
 """
 import hashlib
 from abc import ABC, abstractmethod
+
 import numpy as np
+
 from app.infrastructure.config import get_embedding_config, get_rag_config
 from app.utils.logger import get_logger
 

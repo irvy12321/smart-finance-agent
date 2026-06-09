@@ -4,9 +4,9 @@ Fallback Manager - 降级链管理器
 所有失败必须记录 trace_id + log
 """
 from typing import Any
+
 from app.tools.base_tool import ToolResult
 from app.utils.logger import get_logger
-from app.utils.exceptions import FallbackError
 
 logger = get_logger("fallback_manager")
 

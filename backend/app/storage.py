@@ -3,12 +3,11 @@ SQLite-based persistent storage for chat conversations and tasks.
 Replaces the in-memory dict with a real database.
 """
 import json
-import os
 import sqlite3
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 DB_DIR = Path(__file__).parent.parent / "data"
 DB_PATH = DB_DIR / "chat.db"
@@ -127,7 +126,7 @@ init_db()
 
 # ── Conversation CRUD ──────────────────────────────────────
 
-def create_conversation(conversation_id: str) -> Dict[str, Any]:
+def create_conversation(conversation_id: str) -> dict[str, Any]:
     now = datetime.now().isoformat()
     conn = _get_connection()
     try:
@@ -141,7 +140,7 @@ def create_conversation(conversation_id: str) -> Dict[str, Any]:
         conn.close()
 
 
-def get_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
+def get_conversation(conversation_id: str) -> dict[str, Any] | None:
     conn = _get_connection()
     try:
         row = conn.execute(
@@ -164,7 +163,7 @@ def get_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
-def list_conversations() -> List[Dict[str, Any]]:
+def list_conversations() -> list[dict[str, Any]]:
     conn = _get_connection()
     try:
         rows = conn.execute(
@@ -199,7 +198,7 @@ def delete_conversation(conversation_id: str) -> bool:
         conn.close()
 
 
-def add_message(conversation_id: str, role: str, content: str) -> Dict[str, Any]:
+def add_message(conversation_id: str, role: str, content: str) -> dict[str, Any]:
     now = datetime.now().isoformat()
     conn = _get_connection()
     try:
@@ -219,17 +218,18 @@ def add_message(conversation_id: str, role: str, content: str) -> Dict[str, Any]
 
 # ── Task CRUD ──────────────────────────────────────────────
 
-def create_task(task_id: str, query: str, priority: int = 1) -> Dict[str, Any]:
+def create_task(task_id: str, query: str, priority: int = 1, user_id: int | None = None) -> dict[str, Any]:
     now = datetime.now().isoformat()
     conn = _get_connection()
     try:
         conn.execute(
-            "INSERT INTO tasks (task_id, query, priority, status, progress, current_stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (task_id, query, priority, "pending", 0.0, "", now, now),
+            "INSERT INTO tasks (task_id, user_id, query, priority, status, progress, current_stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (task_id, user_id, query, priority, "pending", 0.0, "", now, now),
         )
         conn.commit()
         return {
             "task_id": task_id,
+            "user_id": user_id,
             "query": query,
             "priority": priority,
             "status": "pending",
@@ -245,7 +245,7 @@ def create_task(task_id: str, query: str, priority: int = 1) -> Dict[str, Any]:
         conn.close()
 
 
-def get_task(task_id: str) -> Optional[Dict[str, Any]]:
+def get_task(task_id: str) -> dict[str, Any] | None:
     conn = _get_connection()
     try:
         row = conn.execute(
@@ -293,7 +293,7 @@ def update_task(task_id: str, **kwargs) -> bool:
         conn.close()
 
 
-def update_task_result(task_id: str, result: Dict[str, Any], events: list) -> bool:
+def update_task_result(task_id: str, result: dict[str, Any], events: list) -> bool:
     conn = _get_connection()
     try:
         now = datetime.now().isoformat()
@@ -321,12 +321,18 @@ def update_task_failure(task_id: str, status: str, current_stage: str, message: 
         conn.close()
 
 
-def list_tasks() -> List[Dict[str, Any]]:
+def list_tasks(user_id: int | None = None) -> list[dict[str, Any]]:
     conn = _get_connection()
     try:
-        rows = conn.execute(
-            "SELECT task_id, query, status, created_at, updated_at FROM tasks ORDER BY created_at DESC"
-        ).fetchall()
+        if user_id is not None:
+            rows = conn.execute(
+                "SELECT task_id, query, status, created_at, updated_at FROM tasks WHERE user_id = ? ORDER BY created_at DESC",
+                (user_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT task_id, query, status, created_at, updated_at FROM tasks ORDER BY created_at DESC"
+            ).fetchall()
         return [dict(row) for row in rows]
     finally:
         conn.close()

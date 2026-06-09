@@ -1,8 +1,10 @@
 """
 新闻摘要工具 - 支持新闻搜索和摘要生成
 """
-import aiohttp
 from datetime import datetime
+
+import aiohttp
+
 from app.tools.base_tool import BaseTool, ToolResult
 from app.utils.logger import get_logger
 
@@ -153,7 +155,7 @@ class NewsSummaryTool(BaseTool):
     async def execute(self, **kwargs) -> ToolResult:
         query = kwargs.get("query", "")
         max_results = kwargs.get("max_results", 5)
-        topic = kwargs.get("topic", "")  # 可选：指定主题
+        kwargs.get("topic", "")  # 可选：指定主题
 
         if not query:
             return ToolResult(success=False, error="No query provided", tool_name=self.name)

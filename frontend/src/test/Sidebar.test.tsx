@@ -19,6 +19,7 @@ describe('Sidebar', () => {
       login: vi.fn(),
       register: vi.fn(),
       logout: vi.fn(),
+      refreshToken: vi.fn(),
     })
   })
 
@@ -89,6 +90,7 @@ describe('Sidebar', () => {
       login: vi.fn(),
       register: vi.fn(),
       logout: mockLogout,
+      refreshToken: vi.fn(),
     })
 
     render(
@@ -121,6 +123,7 @@ describe('Sidebar', () => {
       login: vi.fn(),
       register: vi.fn(),
       logout: vi.fn(),
+      refreshToken: vi.fn(),
     })
 
     render(
@@ -129,6 +132,6 @@ describe('Sidebar', () => {
       </MemoryRouter>
     )
 
-    expect(screen.getByText('User')).toBeInTheDocument()
+    expect(screen.getByText('Username')).toBeInTheDocument()
   })
 })

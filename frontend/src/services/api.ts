@@ -1,4 +1,5 @@
 import axios from 'axios'
+import i18n from '../i18n'
 import type {
   UserCreate,
   UserLogin,
@@ -42,13 +43,15 @@ const api = axios.create({
   },
 })
 
-// Request interceptor - add auth token
+// Request interceptor - add auth token and language
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('auth_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    // Add language header for i18n
+    config.headers['Accept-Language'] = i18n.language || 'en'
     return config
   },
   (error) => Promise.reject(error)
@@ -276,7 +279,7 @@ export interface DocumentInfo {
   status: 'processing' | 'completed' | 'failed'
   created_at: string
   updated_at: string
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 export interface DocumentListResponse {
@@ -294,7 +297,7 @@ export interface DocumentUploadResponse {
 export interface RAGSearchResult {
   text: string
   score: number
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 export interface RAGSearchResponse {
@@ -316,7 +319,7 @@ export const ragApi = {
     return response.data
   },
 
-  uploadDocument: async (file: File, metadata?: Record<string, any>): Promise<DocumentUploadResponse> => {
+  uploadDocument: async (file: File, metadata?: Record<string, unknown>): Promise<DocumentUploadResponse> => {
     const formData = new FormData()
     formData.append('file', file)
     if (metadata) {

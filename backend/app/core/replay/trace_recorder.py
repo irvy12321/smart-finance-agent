@@ -3,14 +3,14 @@ Trace Recorder - 通过 EventBus 订阅零侵入记录执行 trace
 不修改 Orchestrator / Executor / Planner
 """
 import json
-import time
 import threading
-from dataclasses import dataclass, field, asdict
+import time
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.core.agent_status import EventBus, AgentEvent
+from app.core.agent_status import AgentEvent, EventBus
 from app.utils.logger import get_logger
 
 logger = get_logger("trace_recorder")
@@ -196,7 +196,7 @@ class TraceRecorder:
                 tool = data.get("tool", "")
                 success = data.get("success", False)
                 duration_ms = data.get("duration_ms", 0)
-                start_ts = self._task_starts.pop(task_id, now)
+                self._task_starts.pop(task_id, now)
 
                 self._current_session.events.append(TraceEvent(
                     task_id=task_id,
@@ -252,7 +252,7 @@ class TraceRecorder:
         """获取最新会话"""
         return self._sessions[-1] if self._sessions else None
 
-    def save_session(self, session: TraceSession, filepath: str = None) -> str:
+    def save_session(self, session: TraceSession, filepath: str | None = None) -> str:
         """保存会话到 JSON 文件"""
         self._storage_path.mkdir(parents=True, exist_ok=True)
 
@@ -268,7 +268,7 @@ class TraceRecorder:
 
     def load_session(self, filepath: str) -> TraceSession:
         """从 JSON 文件加载会话"""
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             data = json.load(f)
 
         events = []
@@ -312,7 +312,7 @@ class TraceRecorder:
         traces = []
         for filepath in sorted(self._storage_path.glob("trace_*.json"), reverse=True):
             try:
-                with open(filepath, "r", encoding="utf-8") as f:
+                with open(filepath, encoding="utf-8") as f:
                     data = json.load(f)
                 traces.append({
                     "filepath": str(filepath),

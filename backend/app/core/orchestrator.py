@@ -4,27 +4,32 @@ Layer 1: Planner (任务拆解)
 Layer 2: Executor (并行执行)
 Layer 3: Synthesizer (Reasoner → Report → Chart)
 """
+import os
 from dataclasses import dataclass
-from app.infrastructure.llm_client import LLMClient, LiteLLMRouter
-from app.infrastructure.smart_router import SmartRouter
-from app.core.planner import PlannerAgent, Plan, SubTask
-from app.core.executor import ExecutorAgent, ExecutionResult
+
+from app.core.agent_status import AgentEvent, AgentStage, EventBus, TaskStateTracker
+from app.core.chart_renderer import ChartRenderer
+from app.core.executor import ExecutionResult, ExecutorAgent
+from app.core.fallback_manager import FallbackManager
+from app.core.observability.metrics import (
+    get_metrics_summary,
+    record_task_result,
+)
+from app.core.planner import Plan, PlannerAgent, SubTask
 from app.core.reasoner import Reasoner, ReasoningResult
 from app.core.report_agent import ReportAgent, ResearchReport
-from app.core.chart_renderer import ChartRenderer
-from app.core.fallback_manager import FallbackManager
-from app.core.agent_status import EventBus, AgentEvent, AgentStage, TaskStateTracker
-from app.core.observability.metrics import MetricsCollector, record_task_result, get_metrics_summary
+from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
+from app.infrastructure.smart_router import SmartRouter
 from app.rag.memory import ConversationMemory
-from app.tools.registry import ToolRegistry
 from app.tools.crawler_tool import CrawlerTool
+from app.tools.financial_report_tool import FinancialAnalysisTool, FinancialReportTool
+from app.tools.news_summary_tool import NewsAnalysisTool, NewsSummaryTool
 from app.tools.news_tool import NewsTool
 from app.tools.rag_tool import RAGTool
-from app.tools.stock_price_tool import StockPriceTool, StockHistoryTool
-from app.tools.financial_report_tool import FinancialReportTool, FinancialAnalysisTool
-from app.tools.news_summary_tool import NewsSummaryTool, NewsAnalysisTool
-from app.utils.logger import get_logger, LogContext
-from app.utils.tracing import TraceContext, PipelineTracker
+from app.tools.registry import ToolRegistry
+from app.tools.stock_price_tool import StockHistoryTool, StockPriceTool
+from app.utils.logger import LogContext, get_logger
+from app.utils.tracing import PipelineTracker, TraceContext
 
 logger = get_logger("orchestrator")
 
@@ -88,16 +93,21 @@ class Orchestrator:
         logger.info(f"Orchestrator initialized (3-layer, router={'enabled' if use_router else 'disabled'})")
 
     def _register_tools(self):
+        # Read API keys from environment
+        news_api_key = os.getenv("NEWS_API_KEY", "")
+        alpha_vantage_key = os.getenv("ALPHA_VANTAGE_API_KEY", "")
+        fmp_api_key = os.getenv("FMP_API_KEY", "")
+
         tools = [
             CrawlerTool(),
-            NewsTool(),
+            NewsTool(api_key=news_api_key),
             RAGTool(),
-            StockPriceTool(),
-            StockHistoryTool(),
-            FinancialReportTool(),
-            FinancialAnalysisTool(),
-            NewsSummaryTool(),
-            NewsAnalysisTool(),
+            StockPriceTool(api_key=alpha_vantage_key),
+            StockHistoryTool(api_key=alpha_vantage_key),
+            FinancialReportTool(api_key=fmp_api_key),
+            FinancialAnalysisTool(api_key=fmp_api_key),
+            NewsSummaryTool(api_key=news_api_key),
+            NewsAnalysisTool(),  # NewsAnalysisTool uses NewsSummaryTool internally
         ]
         for tool in tools:
             self.registry.register(tool)
@@ -270,9 +280,10 @@ class Orchestrator:
             trace_id=trace.trace_id,
         )
 
-    async def run_with_streaming(self, query: str):
+    async def run_with_streaming(self, query: str, language: str = "en"):
         """流式输出 (供 UI 使用) - 带容错"""
         trace = TraceContext()
+        self._current_language = language  # Store language for later use
 
         self.memory.add_user_message(query)
         self.state_tracker.reset()
@@ -394,6 +405,7 @@ class Orchestrator:
             try:
                 reasoning_result = await self.reasoner.reason(
                     context=exec_result.final_answer, question=query,
+                    language=getattr(self, '_current_language', 'en'),
                 )
                 yield {
                     "stage": "reasoning_done",
@@ -415,6 +427,7 @@ class Orchestrator:
             report = await self.report_agent.generate(
                 query=query, exec_result=exec_result,
                 reasoning_result=reasoning_result, trace_id=trace.trace_id,
+                language=getattr(self, '_current_language', 'en'),
             )
         except Exception as e:
             logger.error(f"Report generation failed, using fallback: {e}")
@@ -454,7 +467,7 @@ class Orchestrator:
         yield {
             "stage": "complete",
             "answer": exec_result.final_answer,
-            "report_markdown": report.to_markdown() if report else "",
+            "report_markdown": report.to_markdown(language=getattr(self, '_current_language', 'en')) if report else "",
             "report_title": report.title if report else "",
             "chart_paths": chart_paths,
             "chart_specs": [

@@ -80,7 +80,7 @@ export function formatDate(dateString: string): string {
   }
 }
 
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -89,4 +89,32 @@ export function debounce<T extends (...args: any[]) => any>(
     clearTimeout(timeout)
     timeout = setTimeout(() => func(...args), wait)
   }
+}
+
+/**
+ * Clean AI-generated markdown formatting from text.
+ * Removes **bold**, ## headings, etc. while preserving actual content.
+ * Converts * list items to bullet points •
+ */
+export function cleanAIText(text: string): string {
+  if (!text) return ''
+  
+  return text
+    // Remove markdown bold **text** → text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    // Remove markdown headings ## text → text
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove markdown italic *text* → text (but not multiplication like 2*3)
+    .replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g, '$1')
+    // Convert * and - list items to bullet points
+    .replace(/^(\s*)[*-]\s+/gm, '$1• ')
+    // Remove markdown code blocks ```...```
+    .replace(/```[\s\S]*?```/g, (match) => match.replace(/```\w*\n?/g, '').replace(/```/g, ''))
+    // Remove inline code `text`
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove markdown links [text](url) → text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Clean up extra blank lines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }

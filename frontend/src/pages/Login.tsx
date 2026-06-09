@@ -16,7 +16,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const from = (location.state as any)?.from?.pathname || '/'
+  const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname || '/'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,8 +31,9 @@ export default function Login() {
     try {
       await login(username, password)
       navigate(from, { replace: true })
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('auth.loginError'))
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { detail?: string } } }
+      setError(axiosErr.response?.data?.detail || t('auth.loginError'))
     } finally {
       setLoading(false)
     }

@@ -4,6 +4,7 @@ DAG Renderer - 任务依赖图可视化
 使用 networkx + matplotlib 渲染有向图
 """
 from pathlib import Path
+
 from app.utils.logger import get_logger
 
 logger = get_logger("dag_renderer")
@@ -41,11 +42,11 @@ def render_dag(
         图片文件路径，失败时返回空字符串
     """
     try:
-        import networkx as nx
         import matplotlib
+        import networkx as nx
         matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
         import matplotlib.patches as mpatches
+        import matplotlib.pyplot as plt
     except ImportError:
         logger.warning("networkx or matplotlib not installed, falling back to text DAG")
         return ""

@@ -14,17 +14,55 @@ import {
   BarChart3
 } from 'lucide-react'
 import { chatApi } from '../services/api'
+import { cleanAIText } from '../utils/utils'
 import type { ChatMessage, ConversationListItem } from '../types/api'
+
+const CHAT_STORAGE_KEY = 'chat_state'
+
+interface SavedChatState {
+  conversationId: string | null
+  messages: ChatMessage[]
+}
+
+function saveChatState(state: SavedChatState) {
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(state))
+  } catch { /* ignore */ }
+}
+
+function loadChatState(): SavedChatState | null {
+  try {
+    const raw = localStorage.getItem(CHAT_STORAGE_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch { /* ignore */ }
+  return null
+}
+
+function clearChatState() {
+  try {
+    localStorage.removeItem(CHAT_STORAGE_KEY)
+  } catch { /* ignore */ }
+}
 
 export default function Chat() {
   const { t } = useTranslation()
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  
+  // Initialize from localStorage
+  const saved = loadChatState()
+  const [messages, setMessages] = useState<ChatMessage[]>(saved?.messages || [])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(saved?.conversationId || null)
   const [conversations, setConversations] = useState<ConversationListItem[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Persist state when it changes
+  useEffect(() => {
+    if (conversationId && messages.length > 0) {
+      saveChatState({ conversationId, messages })
+    }
+  }, [conversationId, messages])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -48,8 +86,8 @@ export default function Chat() {
     try {
       const data = await chatApi.listConversations({ signal })
       setConversations(data.conversations || [])
-    } catch (error: any) {
-      if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') return
+    } catch (error: unknown) {
+      if (error instanceof Error && (error.name === 'AbortError' || (error as { code?: string }).code === 'ERR_CANCELED')) return
       console.error('Failed to fetch conversations:', error)
     }
   }
@@ -59,6 +97,7 @@ export default function Chat() {
       const data = await chatApi.createConversation()
       setConversationId(data.conversation_id)
       setMessages([])
+      clearChatState()
       fetchConversations()
     } catch (error) {
       console.error('Failed to create conversation:', error)
@@ -70,6 +109,7 @@ export default function Chat() {
       const data = await chatApi.getHistory(convId)
       setConversationId(convId)
       setMessages(data.messages || [])
+      saveChatState({ conversationId: convId, messages: data.messages || [] })
     } catch (error) {
       console.error('Failed to load conversation:', error)
     }
@@ -81,6 +121,7 @@ export default function Chat() {
       if (conversationId === convId) {
         setConversationId(null)
         setMessages([])
+        clearChatState()
       }
       fetchConversations()
     } catch (error) {
@@ -143,28 +184,28 @@ export default function Chat() {
     {
       icon: TrendingUp,
       label: t('stock.price'),
-      query: 'What is the current stock price of AAPL?',
+      query: t('chat.quickStockPrice'),
       color: 'text-green-500',
       bg: 'bg-green-500/10',
     },
     {
       icon: BarChart3,
       label: t('stock.getAnalysis'),
-      query: 'Provide a financial analysis for Tesla',
+      query: t('chat.quickAnalysis'),
       color: 'text-blue-500',
       bg: 'bg-blue-500/10',
     },
     {
       icon: Newspaper,
       label: t('report.sources'),
-      query: 'What are the latest news about Apple?',
+      query: t('chat.quickNews'),
       color: 'text-purple-500',
       bg: 'bg-purple-500/10',
     },
     {
       icon: DollarSign,
       label: t('report.marketTrends'),
-      query: 'Analyze the current market trends for tech stocks',
+      query: t('chat.quickTrends'),
       color: 'text-yellow-500',
       bg: 'bg-yellow-500/10',
     },
@@ -306,7 +347,9 @@ export default function Chat() {
                       : 'bg-dark-card border border-dark-border'
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  <p className="text-sm whitespace-pre-wrap">
+                    {message.role === 'assistant' ? cleanAIText(message.content) : message.content}
+                  </p>
                   <p className={`text-xs mt-2 ${
                     message.role === 'user' ? 'text-white/60' : 'text-primary-400'
                   }`}>

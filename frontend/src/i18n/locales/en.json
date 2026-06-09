@@ -115,7 +115,8 @@
     "executing": "Executing",
     "reasoning": "Reasoning",
     "reporting": "Reporting",
-    "completed": "Completed"
+    "completed": "Completed",
+    "confirmDelete": "Are you sure you want to delete this research task and report?"
   },
   "chat": {
     "title": "Chat",
@@ -129,7 +130,11 @@
     "messageSent": "Message sent",
     "failedToSend": "Failed to send message",
     "failedToCreate": "Failed to create conversation",
-    "confirmDelete": "Are you sure you want to delete this conversation?"
+    "confirmDelete": "Are you sure you want to delete this conversation?",
+    "quickStockPrice": "What is the current stock price of AAPL?",
+    "quickAnalysis": "Provide a financial analysis for Tesla",
+    "quickNews": "What are the latest news about Apple?",
+    "quickTrends": "Analyze the current market trends for tech stocks"
   },
   "report": {
     "title": "Report",

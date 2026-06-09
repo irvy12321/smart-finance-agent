@@ -3,8 +3,9 @@
 - 短期记忆: 最近N轮对话，FIFO淘汰
 - 长期记忆: 向量化存储，语义检索
 """
-from dataclasses import dataclass, field
 from collections import deque
+from dataclasses import dataclass, field
+
 from app.rag.retriever import Retriever
 from app.utils.logger import get_logger
 
@@ -81,7 +82,7 @@ class ConversationMemory:
         long_results = self.retrieve_long_term(query, top_k=long_term_top_k)
         if long_results:
             long_parts = [r["text"] for r in long_results]
-            parts.append(f"=== 相关知识 ===\n" + "\n---\n".join(long_parts))
+            parts.append("=== 相关知识 ===\n" + "\n---\n".join(long_parts))
 
         return "\n\n".join(parts) if parts else ""
 

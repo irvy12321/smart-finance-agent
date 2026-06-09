@@ -4,12 +4,12 @@ API routes package
 from fastapi import APIRouter
 
 from app.api.auth import router as auth_router
-from app.api.task import router as task_router
-from app.api.report import router as report_router
-from app.api.system import router as system_router
-from app.api.tools import router as tools_router
 from app.api.chat import router as chat_router
 from app.api.rag import router as rag_router
+from app.api.report import router as report_router
+from app.api.system import router as system_router
+from app.api.task import router as task_router
+from app.api.tools import router as tools_router
 
 # Create main API router (NO prefix here - will be added in main.py)
 api_router = APIRouter()

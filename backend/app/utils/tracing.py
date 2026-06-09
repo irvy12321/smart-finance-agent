@@ -1,12 +1,13 @@
 """
 增强追踪模块 - 并发安全 + Metrics 集成 + 生命周期追踪
 """
+import threading
 import time
 import uuid
-import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from app.utils.logger import get_logger, LogContext
+
+from app.utils.logger import LogContext, get_logger
 
 logger = get_logger("tracing")
 

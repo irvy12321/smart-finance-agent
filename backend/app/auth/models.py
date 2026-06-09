@@ -1,9 +1,8 @@
 """
 User models and schemas
 """
+
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
-from datetime import datetime
 
 
 class UserCreate(BaseModel):
@@ -38,5 +37,5 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     """Token payload data"""
-    user_id: Optional[int] = None
-    username: Optional[str] = None
+    user_id: int | None = None
+    username: str | None = None
