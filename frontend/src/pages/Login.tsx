@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { LogIn, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react'
 
 export default function Login() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const { login } = useAuth()
@@ -19,7 +21,7 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!username.trim() || !password.trim()) {
-      setError('Please fill in all fields')
+      setError(t('auth.fillAllFields'))
       return
     }
 
@@ -30,7 +32,7 @@ export default function Login() {
       await login(username, password)
       navigate(from, { replace: true })
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed. Please check your credentials.')
+      setError(err.response?.data?.detail || t('auth.loginError'))
     } finally {
       setLoading(false)
     }
@@ -44,8 +46,8 @@ export default function Login() {
           <div className="w-16 h-16 bg-primary-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <LogIn className="w-8 h-8 text-primary-500" />
           </div>
-          <h1 className="text-2xl font-bold text-primary-50">Welcome Back</h1>
-          <p className="text-sm text-primary-400 mt-2">Sign in to Smart Finance Agent</p>
+          <h1 className="text-2xl font-bold text-primary-50">{t('auth.welcomeBack')}</h1>
+          <p className="text-sm text-primary-400 mt-2">{t('auth.signInTo')}</p>
         </div>
 
         {/* Form */}
@@ -62,14 +64,14 @@ export default function Login() {
             {/* Username */}
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-primary-300 mb-1.5">
-                Username
+                {t('auth.username')}
               </label>
               <input
                 id="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
+                placeholder={t('auth.enterUsername')}
                 className="input w-full"
                 disabled={loading}
                 autoComplete="username"
@@ -79,7 +81,7 @@ export default function Login() {
             {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-primary-300 mb-1.5">
-                Password
+                {t('auth.password')}
               </label>
               <div className="relative">
                 <input
@@ -87,7 +89,7 @@ export default function Login() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder={t('auth.enterPassword')}
                   className="input w-full pr-10"
                   disabled={loading}
                   autoComplete="current-password"
@@ -111,12 +113,12 @@ export default function Login() {
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Signing in...
+                  {t('auth.signingIn')}
                 </>
               ) : (
                 <>
                   <LogIn className="w-4 h-4" />
-                  Sign In
+                  {t('auth.login')}
                 </>
               )}
             </button>
@@ -125,9 +127,9 @@ export default function Login() {
           {/* Footer */}
           <div className="mt-6 pt-4 border-t border-dark-border text-center">
             <p className="text-sm text-primary-400">
-              Don't have an account?{' '}
+              {t('auth.noAccount')}{' '}
               <Link to="/register" className="text-primary-500 hover:text-primary-400 font-medium">
-                Sign Up
+                {t('auth.register')}
               </Link>
             </p>
           </div>

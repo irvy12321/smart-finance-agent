@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { 
   Activity, 
   Server, 
@@ -29,6 +30,7 @@ import type {
 } from '../types/api'
 
 export default function SystemOverview() {
+  const { t } = useTranslation()
   const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null)
   const [metrics, setMetrics] = useState<SystemMetricsResponse | null>(null)
   const [agentStatus, setAgentStatus] = useState<AgentStatusResponse | null>(null)
@@ -56,11 +58,11 @@ export default function SystemOverview() {
       setTasks(tasksRes.tasks || [])
     } catch (err: any) {
       if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') return
-      setError(err.message || 'Failed to fetch system data')
+      setError(err.message || t('error.serverError'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   const handleRefresh = useCallback(() => {
     const controller = new AbortController()
@@ -118,13 +120,13 @@ export default function SystemOverview() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
-        return <span className="badge badge-success">COMPLETED</span>
+        return <span className="badge badge-success">{t('dashboard.completedTasks')}</span>
       case 'running':
-        return <span className="badge badge-running">RUNNING</span>
+        return <span className="badge badge-running">{t('dashboard.runningTasks')}</span>
       case 'failed':
-        return <span className="badge badge-error">FAILED</span>
+        return <span className="badge badge-error">{t('dashboard.failedTasks')}</span>
       default:
-        return <span className="badge badge-pending">PENDING</span>
+        return <span className="badge badge-pending">{t('dashboard.pendingTasks')}</span>
     }
   }
 
@@ -137,12 +139,11 @@ export default function SystemOverview() {
     }
   }
 
-  // Prepare chart data
   const taskStatusData = [
-    { label: 'Completed', value: metrics?.completed_tasks || 0, color: '#10b981' },
-    { label: 'Running', value: metrics?.running_tasks || 0, color: '#6366f1' },
-    { label: 'Pending', value: metrics?.pending_tasks || 0, color: '#f59e0b' },
-    { label: 'Failed', value: metrics?.failed_tasks || 0, color: '#ef4444' },
+    { label: t('dashboard.completedTasks'), value: metrics?.completed_tasks || 0, color: '#10b981' },
+    { label: t('dashboard.runningTasks'), value: metrics?.running_tasks || 0, color: '#6366f1' },
+    { label: t('dashboard.pendingTasks'), value: metrics?.pending_tasks || 0, color: '#f59e0b' },
+    { label: t('dashboard.failedTasks'), value: metrics?.failed_tasks || 0, color: '#ef4444' },
   ]
 
   const agentPerformanceData = agentStatus ? Object.entries(agentStatus).map(([name, status]: [string, any]) => ({
@@ -158,7 +159,7 @@ export default function SystemOverview() {
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
             <Loader2 className="w-12 h-12 text-primary-500 animate-spin mx-auto mb-4" />
-            <p className="text-primary-400">Loading system data...</p>
+            <p className="text-primary-400">{t('common.loading')}</p>
           </div>
         </div>
       )}
@@ -169,7 +170,7 @@ export default function SystemOverview() {
           <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-500" />
             <div>
-              <p className="text-sm font-medium text-red-500">Failed to load system data</p>
+              <p className="text-sm font-medium text-red-500">{t('error.serverError')}</p>
               <p className="text-xs text-red-400 mt-1">{error}</p>
             </div>
           </div>
@@ -177,7 +178,7 @@ export default function SystemOverview() {
             onClick={handleRefresh}
             className="mt-3 text-sm text-red-500 hover:text-red-400"
           >
-            Try again
+            {t('error.tryAgain')}
           </button>
         </div>
       )}
@@ -185,9 +186,9 @@ export default function SystemOverview() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-primary-50">System Overview</h1>
+          <h1 className="text-2xl font-bold text-primary-50">{t('system.title')}</h1>
           <p className="text-sm text-primary-400 mt-1">
-            Real-time pipeline monitoring and performance metrics
+            {t('dashboard.systemOverview')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -200,21 +201,20 @@ export default function SystemOverview() {
             }`}
           >
             <Wifi className={`w-4 h-4 ${autoRefresh ? 'animate-pulse' : ''}`} />
-            {autoRefresh ? 'Live' : 'Auto Refresh'}
+            {autoRefresh ? 'Live' : t('common.refresh')}
           </button>
           <button
             onClick={handleRefresh}
             className="flex items-center gap-2 text-sm text-primary-400 hover:text-primary-200 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            {t('common.refresh')}
           </button>
         </div>
       </div>
 
       {/* System Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Status */}
         <div className="card">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
@@ -222,16 +222,15 @@ export default function SystemOverview() {
             </div>
             <div>
               <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider">
-                Status
+                {t('system.status')}
               </p>
               <p className="text-lg font-bold text-green-500">
-                {systemStatus?.status || 'Unknown'}
+                {systemStatus?.status === 'healthy' ? t('system.healthy') : t('system.unhealthy')}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Uptime */}
         <div className="card">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
@@ -239,7 +238,7 @@ export default function SystemOverview() {
             </div>
             <div>
               <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider">
-                Uptime
+                {t('system.uptime')}
               </p>
               <p className="text-lg font-bold text-blue-500">
                 {systemStatus?.uptime ? formatUptime(systemStatus.uptime) : '-'}
@@ -248,7 +247,6 @@ export default function SystemOverview() {
           </div>
         </div>
 
-        {/* Requests */}
         <div className="card">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
@@ -256,7 +254,7 @@ export default function SystemOverview() {
             </div>
             <div>
               <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider">
-                Total Requests
+                {t('system.totalRequests')}
               </p>
               <p className="text-lg font-bold text-purple-500">
                 {metrics?.total_requests || 0}
@@ -265,7 +263,6 @@ export default function SystemOverview() {
           </div>
         </div>
 
-        {/* Success Rate */}
         <div className="card">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
@@ -273,7 +270,7 @@ export default function SystemOverview() {
             </div>
             <div>
               <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider">
-                Success Rate
+                {t('system.successRate')}
               </p>
               <p className="text-lg font-bold text-green-500">
                 {metrics?.success_rate ? `${metrics.success_rate.toFixed(1)}%` : '100%'}
@@ -285,19 +282,17 @@ export default function SystemOverview() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Task Distribution */}
         <SimpleChart 
           data={taskStatusData} 
           type="bar" 
-          title="Task Status Distribution"
+          title={t('dashboard.totalTasks')}
           height={200}
         />
 
-        {/* Agent Latency */}
         <SimpleChart 
           data={agentPerformanceData} 
           type="bar" 
-          title="Agent Latency (ms)"
+          title={t('system.avgLatency')}
           height={200}
         />
       </div>
@@ -305,10 +300,10 @@ export default function SystemOverview() {
       {/* Agent Status */}
       <div className="card">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-primary-50">Agent Status</h2>
+          <h2 className="text-lg font-semibold text-primary-50">{t('system.agents')}</h2>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span className="text-xs text-primary-400">All Systems Operational</span>
+            <span className="text-xs text-primary-400">{t('system.ready')}</span>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -327,7 +322,7 @@ export default function SystemOverview() {
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-xs text-primary-400">Status</span>
+                  <span className="text-xs text-primary-400">{t('system.status')}</span>
                   <span className={`text-xs font-medium ${
                     status.status === 'ready' ? 'text-green-500' : 'text-yellow-500'
                   }`}>
@@ -335,19 +330,19 @@ export default function SystemOverview() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-xs text-primary-400">Calls</span>
+                  <span className="text-xs text-primary-400">{t('system.totalRequests')}</span>
                   <span className="text-xs font-medium text-primary-200">
                     {status.total_calls || 0}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-xs text-primary-400">Latency</span>
+                  <span className="text-xs text-primary-400">{t('system.avgLatency')}</span>
                   <span className="text-xs font-medium text-primary-200">
                     {status.avg_latency_ms ? `${status.avg_latency_ms.toFixed(0)}ms` : '-'}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-xs text-primary-400">Success</span>
+                  <span className="text-xs text-primary-400">{t('system.successRate')}</span>
                   <span className="text-xs font-medium text-primary-200">
                     {status.success_rate ? `${status.success_rate.toFixed(0)}%` : '100%'}
                   </span>
@@ -360,11 +355,11 @@ export default function SystemOverview() {
 
       {/* Task Statistics */}
       <div className="card">
-        <h2 className="text-lg font-semibold text-primary-50 mb-6">Task Statistics</h2>
+        <h2 className="text-lg font-semibold text-primary-50 mb-6">{t('dashboard.totalTasks')}</h2>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="p-4 bg-dark-bg rounded-lg border border-dark-border text-center hover:border-primary-500/30 transition-colors">
             <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider mb-2">
-              Total
+              {t('dashboard.totalTasks')}
             </p>
             <p className="text-3xl font-bold text-primary-50">
               {metrics?.total_tasks || 0}
@@ -372,7 +367,7 @@ export default function SystemOverview() {
           </div>
           <div className="p-4 bg-dark-bg rounded-lg border border-dark-border text-center hover:border-green-500/30 transition-colors">
             <p className="text-xs font-semibold text-green-400 uppercase tracking-wider mb-2">
-              Completed
+              {t('dashboard.completedTasks')}
             </p>
             <p className="text-3xl font-bold text-green-500">
               {metrics?.completed_tasks || 0}
@@ -380,7 +375,7 @@ export default function SystemOverview() {
           </div>
           <div className="p-4 bg-dark-bg rounded-lg border border-dark-border text-center hover:border-blue-500/30 transition-colors">
             <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
-              Running
+              {t('dashboard.runningTasks')}
             </p>
             <p className="text-3xl font-bold text-blue-500">
               {metrics?.running_tasks || 0}
@@ -388,7 +383,7 @@ export default function SystemOverview() {
           </div>
           <div className="p-4 bg-dark-bg rounded-lg border border-dark-border text-center hover:border-yellow-500/30 transition-colors">
             <p className="text-xs font-semibold text-yellow-400 uppercase tracking-wider mb-2">
-              Pending
+              {t('dashboard.pendingTasks')}
             </p>
             <p className="text-3xl font-bold text-yellow-500">
               {metrics?.pending_tasks || 0}
@@ -396,7 +391,7 @@ export default function SystemOverview() {
           </div>
           <div className="p-4 bg-dark-bg rounded-lg border border-dark-border text-center hover:border-red-500/30 transition-colors">
             <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">
-              Failed
+              {t('dashboard.failedTasks')}
             </p>
             <p className="text-3xl font-bold text-red-500">
               {metrics?.failed_tasks || 0}
@@ -405,81 +400,22 @@ export default function SystemOverview() {
         </div>
       </div>
 
-      {/* Performance Metrics */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-primary-50 mb-6">Performance Metrics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 bg-dark-bg rounded-lg border border-dark-border">
-            <div className="flex items-center gap-2 mb-3">
-              <Cpu className="w-5 h-5 text-blue-500" />
-              <h3 className="text-sm font-semibold text-primary-200">Avg Latency</h3>
-            </div>
-            <p className="text-2xl font-bold text-blue-500">
-              {metrics?.avg_latency_ms ? `${metrics.avg_latency_ms.toFixed(0)}ms` : '-'}
-            </p>
-            <div className="flex items-center gap-1 mt-2">
-              <ArrowDownRight className="w-3 h-3 text-green-500" />
-              <span className="text-xs text-green-500">-5% from last hour</span>
-            </div>
-          </div>
-          <div className="p-4 bg-dark-bg rounded-lg border border-dark-border">
-            <div className="flex items-center gap-2 mb-3">
-              <Database className="w-5 h-5 text-purple-500" />
-              <h3 className="text-sm font-semibold text-primary-200">Success Rate</h3>
-            </div>
-            <p className="text-2xl font-bold text-purple-500">
-              {metrics?.success_rate ? `${metrics.success_rate.toFixed(1)}%` : '100%'}
-            </p>
-            <div className="flex items-center gap-1 mt-2">
-              <ArrowUpRight className="w-3 h-3 text-green-500" />
-              <span className="text-xs text-green-500">+2% from last hour</span>
-            </div>
-          </div>
-          <div className="p-4 bg-dark-bg rounded-lg border border-dark-border">
-            <div className="flex items-center gap-2 mb-3">
-              <HardDrive className="w-5 h-5 text-cyan-500" />
-              <h3 className="text-sm font-semibold text-primary-200">Total Tasks</h3>
-            </div>
-            <p className="text-2xl font-bold text-cyan-500">
-              {metrics?.total_tasks || 0}
-            </p>
-            <div className="flex items-center gap-1 mt-2">
-              <ArrowUpRight className="w-3 h-3 text-green-500" />
-              <span className="text-xs text-green-500">+12 today</span>
-            </div>
-          </div>
-          <div className="p-4 bg-dark-bg rounded-lg border border-dark-border">
-            <div className="flex items-center gap-2 mb-3">
-              <TrendingUp className="w-5 h-5 text-green-500" />
-              <h3 className="text-sm font-semibold text-primary-200">Throughput</h3>
-            </div>
-            <p className="text-2xl font-bold text-green-500">
-              {metrics?.total_requests ? `${(metrics.total_requests / ((systemStatus?.uptime || 0) / 3600 || 1)).toFixed(1)}/h` : '0/h'}
-            </p>
-            <div className="flex items-center gap-1 mt-2">
-              <ArrowUpRight className="w-3 h-3 text-green-500" />
-              <span className="text-xs text-green-500">Stable</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Recent Tasks */}
       <div className="card">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-primary-50">Recent Tasks</h2>
+          <h2 className="text-lg font-semibold text-primary-50">{t('dashboard.recentTasks')}</h2>
           <Link
             to="/"
             className="text-sm text-primary-500 hover:text-primary-300 transition-colors"
           >
-            View All
+            {t('common.viewAll')}
           </Link>
         </div>
 
         {tasks.length === 0 ? (
           <div className="text-center py-8">
             <FileText className="w-8 h-8 text-primary-400 mx-auto mb-2" />
-            <p className="text-sm text-primary-400">No tasks yet</p>
+            <p className="text-sm text-primary-400">{t('dashboard.noTasksYet')}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -495,7 +431,7 @@ export default function SystemOverview() {
                       {task.query}
                     </p>
                     <p className="text-xs text-primary-400 mt-1">
-                      ID: {task.task_id} • {formatDate(task.created_at)}
+                      {t('common.id')}: {task.task_id} • {formatDate(task.created_at)}
                     </p>
                   </div>
                 </div>
@@ -506,7 +442,7 @@ export default function SystemOverview() {
                       to={`/report/${task.task_id}`}
                       className="text-sm text-primary-500 hover:text-primary-300 transition-colors"
                     >
-                      View Report
+                      {t('dashboard.viewReport')}
                     </Link>
                   )}
                 </div>
@@ -514,53 +450,6 @@ export default function SystemOverview() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* System Configuration */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-primary-50 mb-6">System Configuration</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 bg-dark-bg rounded-lg border border-dark-border">
-            <div className="flex items-center gap-2 mb-3">
-              <Settings className="w-5 h-5 text-primary-400" />
-              <h3 className="text-sm font-semibold text-primary-200">Model Configuration</h3>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-xs text-primary-400">LLM Model</span>
-                <span className="text-xs font-medium text-primary-200 font-mono">openai/mimo-v2.5-pro</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-xs text-primary-400">Embedding</span>
-                <span className="text-xs font-medium text-primary-200 font-mono">dev (hash)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-xs text-primary-400">Temperature</span>
-                <span className="text-xs font-medium text-primary-200 font-mono">0.3</span>
-              </div>
-            </div>
-          </div>
-          <div className="p-4 bg-dark-bg rounded-lg border border-dark-border">
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="w-5 h-5 text-primary-400" />
-              <h3 className="text-sm font-semibold text-primary-200">Features</h3>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-xs text-primary-400">Streaming</span>
-                <span className="text-xs font-medium text-green-500">Enabled</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-xs text-primary-400">RAG</span>
-                <span className="text-xs font-medium text-green-500">Enabled</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-xs text-primary-400">Smart Router</span>
-                <span className="text-xs font-medium text-green-500">Enabled</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   )

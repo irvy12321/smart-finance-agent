@@ -4,6 +4,7 @@ Main application entry point
 """
 import sys
 import os
+import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -14,14 +15,65 @@ from dotenv import load_dotenv
 # Load .env from backend directory
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import uvicorn
+import sentry_sdk
+from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
 
 from app.utils.logger import get_logger
 from app.api import api_router
 
 logger = get_logger("fastapi_backend")
+
+
+def init_sentry():
+    """Initialize Sentry SDK for error monitoring"""
+    sentry_dsn = os.getenv("SENTRY_DSN")
+    environment = os.getenv("ENVIRONMENT", "development")
+
+    if not sentry_dsn:
+        logger.warning("SENTRY_DSN not configured. Sentry monitoring disabled.")
+        return
+
+    sentry_logging = LoggingIntegration(
+        level=logging.INFO,
+        event_level=logging.ERROR,
+    )
+
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        environment=environment,
+        integrations=[
+            FastApiIntegration(),
+            AsyncioIntegration(),
+            sentry_logging,
+        ],
+        traces_sample_rate=0.1 if environment == "production" else 1.0,
+        profiles_sample_rate=0.1 if environment == "production" else 0,
+        before_send=_before_send,
+        attach_stacktrace=True,
+        send_default_pii=False,
+    )
+
+    logger.info(f"Sentry initialized for environment: {environment}")
+
+
+def _before_send(event, hint):
+    """Filter sensitive data before sending to Sentry"""
+    if event.get("request", {}).get("headers"):
+        headers = event["request"]["headers"]
+        for key in ["authorization", "cookie", "x-api-key"]:
+            if key in headers:
+                headers[key] = "[FILTERED]"
+
+    if event.get("extra", {}).get("password"):
+        event["extra"]["password"] = "[FILTERED]"
+
+    return event
 
 
 def _validate_api_key() -> None:
@@ -62,13 +114,15 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     logger.info("Initializing Smart Finance Agent Orchestrator...")
 
+    # Initialize Sentry
+    init_sentry()
+
     # Validate API keys before initializing orchestrator
     try:
         _validate_api_key()
     except ValueError as e:
         logger.error(f"API key validation failed: {e}")
-        # Still allow startup but log the error
-        # The orchestrator will fail when actually called
+        sentry_sdk.capture_exception(e)
 
     from app.core.orchestrator import Orchestrator
     orchestrator = Orchestrator(use_router=True)
@@ -98,6 +152,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler that reports to Sentry"""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+
+    sentry_sdk.capture_exception(exc)
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "message": str(exc) if os.getenv("ENVIRONMENT") == "development" else "An unexpected error occurred",
+        },
+    )
+
+
+@app.middleware("http")
+async def sentry_middleware(request: Request, call_next):
+    """Middleware to add request context to Sentry"""
+    with sentry_sdk.configure_scope() as scope:
+        scope.set_context("request", {
+            "method": request.method,
+            "url": str(request.url),
+            "headers": dict(request.headers),
+        })
+
+        response = await call_next(request)
+
+        scope.set_tag("http.status_code", response.status_code)
+
+    return response
+
+
 # Include API router (all routes are defined in api/ modules)
 app.include_router(api_router, prefix="/api")
 
@@ -112,6 +200,12 @@ async def root():
 async def ping():
     """Health check endpoint"""
     return {"status": "ok", "message": "pong"}
+
+
+@app.get("/sentry-debug")
+async def sentry_debug():
+    """Debug endpoint to test Sentry integration"""
+    raise Exception("Sentry debug: This is a test exception")
 
 
 if __name__ == "__main__":

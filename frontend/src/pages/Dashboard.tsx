@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { 
   FlaskConical, 
   FileText, 
@@ -16,6 +17,7 @@ import StockPriceCard from '../components/StockPriceCard'
 import type { TaskListItem } from '../types/api'
 
 export default function Dashboard() {
+  const { t } = useTranslation()
   const [tasks, setTasks] = useState<TaskListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -99,9 +101,9 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-primary-50">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-primary-50">{t('dashboard.title')}</h1>
           <p className="text-sm text-primary-400 mt-1">
-            Smart Finance Research Platform
+            {t('dashboard.welcome')}
           </p>
         </div>
         <Link
@@ -109,7 +111,7 @@ export default function Dashboard() {
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
-          New Research
+          {t('research.newTask')}
         </Link>
       </div>
 
@@ -122,7 +124,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider">
-                Total Tasks
+                {t('dashboard.totalTasks')}
               </p>
               <p className="text-2xl font-bold text-primary-50">{tasks.length}</p>
             </div>
@@ -135,7 +137,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-xs font-semibold text-green-400 uppercase tracking-wider">
-                Completed
+                {t('dashboard.completedTasks')}
               </p>
               <p className="text-2xl font-bold text-green-500">
                 {tasks.filter(t => t.status === 'completed').length}
@@ -165,7 +167,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-xs font-semibold text-yellow-400 uppercase tracking-wider">
-                Pending
+                {t('dashboard.pendingTasks')}
               </p>
               <p className="text-2xl font-bold text-yellow-500">
                 {tasks.filter(t => t.status === 'pending').length}
@@ -186,7 +188,7 @@ export default function Dashboard() {
               <FlaskConical className="w-5 h-5 text-blue-500" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-primary-200">New Research</p>
+              <p className="text-sm font-semibold text-primary-200">{t('research.newTask')}</p>
               <p className="text-xs text-primary-400">Start a comprehensive research task</p>
             </div>
           </div>
@@ -214,12 +216,12 @@ export default function Dashboard() {
         {/* Recent Tasks */}
         <div className="card">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-primary-50">Recent Tasks</h2>
+          <h2 className="text-lg font-semibold text-primary-50">{t('dashboard.recentTasks')}</h2>
           <button 
             onClick={fetchTasks}
             className="text-sm text-primary-400 hover:text-primary-200 transition-colors"
           >
-            Refresh
+            {t('common.search')}
           </button>
         </div>
 
@@ -227,7 +229,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
               <Activity className="w-8 h-8 text-primary-500 animate-spin mx-auto mb-4" />
-              <p className="text-primary-400">Loading tasks...</p>
+              <p className="text-primary-400">{t('common.loading')}</p>
             </div>
           </div>
         ) : error ? (
@@ -239,7 +241,7 @@ export default function Dashboard() {
                 onClick={fetchTasks}
                 className="mt-2 text-sm text-primary-400 hover:text-primary-200"
               >
-                Try again
+                {t('error.tryAgain')}
               </button>
             </div>
           </div>
@@ -247,7 +249,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
               <Search className="w-8 h-8 text-primary-400 mx-auto mb-4" />
-              <p className="text-primary-400">No tasks yet</p>
+              <p className="text-primary-400">{t('research.noResults')}</p>
               <p className="text-xs text-primary-500 mt-1">
                 Create a new research task to get started
               </p>
@@ -256,7 +258,7 @@ export default function Dashboard() {
                 className="mt-4 inline-flex items-center gap-2 text-sm text-primary-500 hover:text-primary-300"
               >
                 <Plus className="w-4 h-4" />
-                New Research
+                {t('research.newTask')}
               </Link>
             </div>
           </div>

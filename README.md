@@ -1,5 +1,10 @@
 # Smart Finance Agent
 
+[![CI](https://github.com/YOUR_USERNAME/smart-finance-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/smart-finance-agent/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Node.js 20+](https://img.shields.io/badge/node.js-20+-green.svg)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 一个基于 Multi-Agent 架构的智能金融分析平台，使用 FastAPI 后端 + React 前端。
 
 ## 功能特性
@@ -230,6 +235,138 @@ npm run dev
 # 构建生产版本
 npm run build
 ```
+
+## 测试
+
+### 运行所有测试
+
+```bash
+# Windows (PowerShell)
+.\run_tests.ps1
+
+# Windows (CMD)
+run_tests.bat
+```
+
+### 后端测试 (pytest)
+
+```bash
+cd backend
+
+# 运行所有测试
+pytest tests/
+
+# 运行测试并生成覆盖率报告
+pytest tests/ --cov=app --cov-report=html:coverage/html --cov-report=term-missing
+
+# 运行特定测试文件
+pytest tests/test_chat_api.py
+
+# 运行带标记的测试
+pytest tests/ -m "not slow"
+```
+
+### 前端测试 (Vitest)
+
+```bash
+cd frontend
+
+# 运行所有测试
+npm test
+
+# 运行测试并监听文件变化
+npm run test:watch
+
+# 运行测试并生成覆盖率报告
+npm run test:coverage
+```
+
+### 测试覆盖率报告
+
+运行测试后，覆盖率报告将生成在以下位置：
+
+- **后端**: `coverage/backend/html/index.html`
+- **前端**: `frontend/coverage/index.html`
+
+在浏览器中打开 HTML 文件查看详细的覆盖率报告。
+
+### 测试结构
+
+```
+smart-finance-agent/
+├── backend/
+│   └── tests/                    # 后端测试
+│       ├── conftest.py           # 测试配置和 fixtures
+│       ├── test_chat_api.py      # 聊天 API 测试
+│       ├── test_task_api.py      # 任务 API 测试
+│       ├── test_auth_api.py      # 认证 API 测试
+│       ├── test_system_api.py    # 系统 API 测试
+│       └── test_orchestrator.py  # Agent 流程测试
+│
+├── frontend/
+│   └── src/
+│       └── test/                 # 前端测试
+│           ├── setup.ts          # 测试配置
+│           ├── api.test.ts       # API 服务测试
+│           ├── useApi.test.ts    # useApi Hook 测试
+│           ├── AuthContext.test.tsx  # Auth Context 测试
+│           ├── ErrorBoundary.test.tsx  # ErrorBoundary 测试
+│           ├── ProtectedRoute.test.tsx # ProtectedRoute 测试
+│           ├── Sidebar.test.tsx  # Sidebar 测试
+│           └── StockPriceCard.test.tsx # StockPriceCard 测试
+│
+├── pytest.ini                    # pytest 配置
+└── run_tests.ps1                 # 测试运行脚本
+```
+
+## CI/CD
+
+本项目使用 GitHub Actions 进行持续集成和持续部署。
+
+### 工作流概述
+
+每次 Push 或 Pull Request 到 `main` 或 `develop` 分支时，会自动运行以下检查：
+
+| 阶段 | 前端 | 后端 |
+|------|------|------|
+| Lint | ESLint | Ruff |
+| Test | Vitest | pytest |
+| Build | Vite Build | - |
+| Coverage | ✅ | ✅ |
+
+### 工作流文件
+
+- `.github/workflows/ci.yml` - 主要 CI 工作流
+- `.github/dependabot.yml` - 依赖自动更新
+- `.github/CODEOWNERS` - 代码所有者
+- `.github/pull_request_template.md` - PR 模板
+- `.github/ISSUE_TEMPLATE/` - Issue 模板
+
+### 本地运行 CI 检查
+
+在提交代码前，建议本地运行以下检查：
+
+```bash
+# Frontend
+cd frontend
+npm run lint        # Lint 检查
+npm test            # 运行测试
+npm run build       # 构建检查
+
+# Backend
+cd backend
+ruff check .        # Lint 检查
+ruff format --check .  # 格式检查
+pytest tests/       # 运行测试
+```
+
+### 覆盖率报告
+
+CI 运行后，覆盖率报告会作为 workflow artifacts 保存。在 PR 中会自动评论覆盖率摘要。
+
+### 依赖更新
+
+Dependabot 会每周一自动检查并创建依赖更新 PR。
 
 ## 部署
 

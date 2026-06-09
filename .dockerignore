@@ -1,0 +1,59 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+
+# Build output
+dist
+build
+coverage
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs
+
+# Documentation (keep README only)
+docs
+*.md
+!README.md
+
+# Test files
+tests
+pytest.ini
+.coverage
+.pytest_cache
+
+# Temporary files
+tmp
+temp
+_deprecated
+
+# Data directories
+backend/data
+backend/output
+frontend/dist
+
+# Docker override
+docker-compose.override.yml

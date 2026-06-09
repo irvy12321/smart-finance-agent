@@ -1,0 +1,24 @@
+# Default owners for everything in the repo
+* @your-username
+
+# Frontend code
+/frontend/ @your-username
+/frontend/src/components/ @your-username
+/frontend/src/pages/ @your-username
+/frontend/src/services/ @your-username
+/frontend/src/hooks/ @your-username
+
+# Backend code
+/backend/ @your-username
+/backend/app/api/ @your-username
+/backend/app/core/ @your-username
+/backend/app/tools/ @your-username
+/backend/app/infrastructure/ @your-username
+
+# CI/CD and configuration
+/.github/ @your-username
+/docker-compose*.yml @your-username
+/Dockerfile @your-username
+
+# Documentation
+*.md @your-username

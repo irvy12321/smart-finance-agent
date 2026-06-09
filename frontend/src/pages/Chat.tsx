@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { 
   Send, 
   Bot, 
@@ -16,6 +17,7 @@ import { chatApi } from '../services/api'
 import type { ChatMessage, ConversationListItem } from '../types/api'
 
 export default function Chat() {
+  const { t } = useTranslation()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -121,7 +123,7 @@ export default function Chat() {
       console.error('Failed to send message:', error)
       const errorMessage: ChatMessage = {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: t('chat.failedToSend'),
         timestamp: new Date().toISOString(),
       }
       setMessages(prev => [...prev, errorMessage])
@@ -140,28 +142,28 @@ export default function Chat() {
   const quickActions = [
     {
       icon: TrendingUp,
-      label: 'Stock Price',
+      label: t('stock.price'),
       query: 'What is the current stock price of AAPL?',
       color: 'text-green-500',
       bg: 'bg-green-500/10',
     },
     {
       icon: BarChart3,
-      label: 'Financial Analysis',
+      label: t('stock.getAnalysis'),
       query: 'Provide a financial analysis for Tesla',
       color: 'text-blue-500',
       bg: 'bg-blue-500/10',
     },
     {
       icon: Newspaper,
-      label: 'Latest News',
+      label: t('report.sources'),
       query: 'What are the latest news about Apple?',
       color: 'text-purple-500',
       bg: 'bg-purple-500/10',
     },
     {
       icon: DollarSign,
-      label: 'Market Trends',
+      label: t('report.marketTrends'),
       query: 'Analyze the current market trends for tech stocks',
       color: 'text-yellow-500',
       bg: 'bg-yellow-500/10',
@@ -182,7 +184,7 @@ export default function Chat() {
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
-            New Chat
+            {t('chat.newConversation')}
           </button>
         </div>
 
@@ -190,7 +192,7 @@ export default function Chat() {
           {conversations.length === 0 ? (
             <div className="text-center py-8">
               <MessageSquare className="w-8 h-8 text-primary-400 mx-auto mb-2" />
-              <p className="text-xs text-primary-400">No conversations yet</p>
+              <p className="text-xs text-primary-400">{t('chat.noConversations')}</p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -206,10 +208,10 @@ export default function Chat() {
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">
-                      Chat {conv.conversation_id.slice(0, 6)}
+                      {t('chat.title')} {conv.conversation_id.slice(0, 6)}
                     </p>
                     <p className="text-xs text-primary-400 mt-1">
-                      {conv.message_count} messages
+                      {conv.message_count} {t('chat.typeMessage')}
                     </p>
                   </div>
                   <button
@@ -234,14 +236,14 @@ export default function Chat() {
         <div className="p-4 border-b border-dark-border">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-primary-50">AI Financial Assistant</h1>
+              <h1 className="text-xl font-bold text-primary-50">{t('chat.title')}</h1>
               <p className="text-sm text-primary-400 mt-1">
-                Ask me about stocks, financial reports, news, and market analysis
+                {t('chat.typeMessage')}
               </p>
             </div>
             <div className="flex items-center gap-2">
               <div className="status-dot status-dot-success" />
-              <span className="text-xs text-primary-300">Connected</span>
+              <span className="text-xs text-primary-300">{t('sidebar.apiConnected')}</span>
             </div>
           </div>
         </div>
@@ -256,11 +258,10 @@ export default function Chat() {
                     <Bot className="w-8 h-8 text-primary-500" />
                   </div>
                   <h2 className="text-2xl font-bold text-primary-50 mb-4">
-                    Welcome to Smart Finance Agent
+                    {t('sidebar.title')}
                   </h2>
                   <p className="text-primary-400 mb-8">
-                    I can help you with stock prices, financial analysis, news research, and comprehensive market analysis. 
-                    Try one of the quick actions below or ask me anything!
+                    {t('chat.typeMessage')}
                   </p>
 
                   {/* Quick Actions */}
@@ -329,7 +330,7 @@ export default function Chat() {
                 <div className="bg-dark-card border border-dark-border rounded-2xl px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 text-primary-400 animate-spin" />
-                    <p className="text-sm text-primary-400">Thinking...</p>
+                    <p className="text-sm text-primary-400">{t('chat.thinking')}</p>
                   </div>
                 </div>
               </div>
@@ -348,7 +349,7 @@ export default function Chat() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask me about stocks, financial reports, news..."
+                  placeholder={t('chat.typeMessage')}
                   className="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-primary-200 placeholder-primary-400 focus:outline-none focus:border-primary-500 resize-none"
                   rows={1}
                   disabled={loading}
@@ -367,7 +368,7 @@ export default function Chat() {
               </button>
             </div>
             <p className="text-xs text-primary-400 mt-2 text-center">
-              Press Enter to send, Shift+Enter for new line
+              {t('chat.send')} (Enter) | Shift+Enter
             </p>
           </div>
         </div>

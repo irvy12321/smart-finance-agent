@@ -9,6 +9,7 @@ from app.api.report import router as report_router
 from app.api.system import router as system_router
 from app.api.tools import router as tools_router
 from app.api.chat import router as chat_router
+from app.api.rag import router as rag_router
 
 # Create main API router (NO prefix here - will be added in main.py)
 api_router = APIRouter()
@@ -20,6 +21,7 @@ api_router.include_router(report_router)
 api_router.include_router(system_router)
 api_router.include_router(tools_router)
 api_router.include_router(chat_router)
+api_router.include_router(rag_router)
 
 
 @api_router.get("/")
@@ -35,5 +37,6 @@ async def api_root():
             "system": "/api/system",
             "tools": "/api/tools",
             "chat": "/api/chat",
+            "rag": "/api/rag",
         }
     }

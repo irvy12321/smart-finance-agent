@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -16,6 +17,7 @@ interface StockPriceCardProps {
 }
 
 export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
+  const { t } = useTranslation()
   const [symbol, setSymbol] = useState('')
   const [stockData, setStockData] = useState<StockPriceResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -44,7 +46,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
       }
     } catch (err: any) {
       if (mountedRef.current) {
-        setError(err.message || 'Failed to fetch stock data')
+        setError(err.message || t('stock.failedToFetch'))
         setStockData(null)
       }
     } finally {
@@ -73,7 +75,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
             <DollarSign className="w-5 h-5 text-green-500" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-primary-50">Stock Price</h3>
+            <h3 className="text-lg font-semibold text-primary-50">{t('stock.price')}</h3>
             <p className="text-xs text-primary-400">Real-time market data</p>
           </div>
         </div>
@@ -88,7 +90,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
             value={symbol}
             onChange={(e) => setSymbol(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder="Enter stock symbol (e.g., AAPL)"
+            placeholder={t('stock.searchPlaceholder')}
             className="w-full pl-10 pr-4 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-primary-200 placeholder-primary-400 focus:outline-none focus:border-primary-500"
           />
         </div>
@@ -107,6 +109,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
 
       {/* Popular Stocks */}
       <div className="flex flex-wrap gap-2 mb-4">
+        <span className="text-xs text-primary-400 py-1.5">{t('stock.popularStocks')}:</span>
         {popularStocks.map((s) => (
           <button
             key={s}
@@ -158,7 +161,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
             <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
               <div className="flex items-center gap-2 mb-1">
                 <BarChart3 className="w-4 h-4 text-primary-400" />
-                <p className="text-xs text-primary-400">Volume</p>
+                <p className="text-xs text-primary-400">{t('stock.volume')}</p>
               </div>
               <p className="text-sm font-semibold text-primary-200">
                 {formatVolume(stockData.volume)}
@@ -167,7 +170,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
             <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
               <div className="flex items-center gap-2 mb-1">
                 <DollarSign className="w-4 h-4 text-primary-400" />
-                <p className="text-xs text-primary-400">Market Cap</p>
+                <p className="text-xs text-primary-400">{t('stock.marketCap')}</p>
               </div>
               <p className="text-sm font-semibold text-primary-200">
                 {formatNumber(stockData.market_cap)}
@@ -176,7 +179,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
             <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
               <div className="flex items-center gap-2 mb-1">
                 <Activity className="w-4 h-4 text-primary-400" />
-                <p className="text-xs text-primary-400">P/E Ratio</p>
+                <p className="text-xs text-primary-400">{t('stock.peRatio')}</p>
               </div>
               <p className="text-sm font-semibold text-primary-200">
                 {stockData.pe_ratio.toFixed(2)}
@@ -185,7 +188,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
             <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp className="w-4 h-4 text-primary-400" />
-                <p className="text-xs text-primary-400">52W Range</p>
+                <p className="text-xs text-primary-400">{t('stock.low52w')} - {t('stock.high52w')}</p>
               </div>
               <p className="text-sm font-semibold text-primary-200">
                 ${stockData.low_52w.toFixed(2)} - ${stockData.high_52w.toFixed(2)}
@@ -199,7 +202,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
               onClick={() => onStockSelect(stockData.symbol)}
               className="w-full py-2.5 text-sm font-medium text-primary-500 bg-primary-500/10 rounded-lg hover:bg-primary-500/20 transition-colors"
             >
-              Get Detailed Analysis
+              {t('stock.getAnalysis')}
             </button>
           )}
         </div>
@@ -209,7 +212,7 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
       {!stockData && !loading && !error && (
         <div className="text-center py-8">
           <DollarSign className="w-12 h-12 text-primary-400/30 mx-auto mb-3" />
-          <p className="text-sm text-primary-400">Enter a stock symbol to get started</p>
+          <p className="text-sm text-primary-400">{t('stock.enterSymbol')}</p>
         </div>
       )}
     </div>

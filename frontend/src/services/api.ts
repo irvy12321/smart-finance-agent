@@ -266,6 +266,95 @@ export const chatApi = {
   },
 }
 
+// RAG API
+export interface DocumentInfo {
+  id: string
+  filename: string
+  file_type: string
+  file_size: number
+  chunk_count: number
+  status: 'processing' | 'completed' | 'failed'
+  created_at: string
+  updated_at: string
+  metadata: Record<string, any>
+}
+
+export interface DocumentListResponse {
+  documents: DocumentInfo[]
+  total: number
+}
+
+export interface DocumentUploadResponse {
+  document_id: string
+  filename: string
+  status: string
+  message: string
+}
+
+export interface RAGSearchResult {
+  text: string
+  score: number
+  metadata: Record<string, any>
+}
+
+export interface RAGSearchResponse {
+  query: string
+  results: RAGSearchResult[]
+  total: number
+}
+
+export interface RAGStatsResponse {
+  total_documents: number
+  total_chunks: number
+  vector_store_size: number
+  embedding_mode: string
+}
+
+export const ragApi = {
+  listDocuments: async (): Promise<DocumentListResponse> => {
+    const response = await api.get<DocumentListResponse>('/rag/documents')
+    return response.data
+  },
+
+  uploadDocument: async (file: File, metadata?: Record<string, any>): Promise<DocumentUploadResponse> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (metadata) {
+      formData.append('metadata', JSON.stringify(metadata))
+    }
+    const response = await api.post<DocumentUploadResponse>('/rag/documents/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
+    })
+    return response.data
+  },
+
+  getDocument: async (docId: string): Promise<DocumentInfo> => {
+    const response = await api.get<DocumentInfo>(`/rag/documents/${docId}`)
+    return response.data
+  },
+
+  deleteDocument: async (docId: string): Promise<{ document_id: string; message: string }> => {
+    const response = await api.delete(`/rag/documents/${docId}`)
+    return response.data
+  },
+
+  search: async (query: string, topK: number = 5): Promise<RAGSearchResponse> => {
+    const response = await api.post<RAGSearchResponse>('/rag/search', { query, top_k: topK })
+    return response.data
+  },
+
+  getStats: async (): Promise<RAGStatsResponse> => {
+    const response = await api.get<RAGStatsResponse>('/rag/stats')
+    return response.data
+  },
+
+  reindex: async (): Promise<{ message: string }> => {
+    const response = await api.post('/rag/reindex')
+    return response.data
+  },
+}
+
 // Auth API
 export const authApi = {
   register: async (data: UserCreate): Promise<Token> => {

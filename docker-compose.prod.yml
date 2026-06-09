@@ -1,30 +1,112 @@
 version: "3.8"
 
 services:
+  # ============================================
+  # Backend Service (FastAPI) - Production
+  # ============================================
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
-    env_file: ./backend/.env
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend/data:/app/data
+      target: production
+    container_name: sfa-backend-prod
+    env_file:
+      - ./backend/.env
     environment:
+      - ENVIRONMENT=production
       - PYTHONUNBUFFERED=1
-    restart: unless-stopped
+    expose:
+      - "8000"
+    volumes:
+      - backend_data:/app/data
+      - backend_output:/app/output
+      - backend_logs:/app/logs
+    restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 40s
+    networks:
+      - sfa-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
 
+  # ============================================
+  # Frontend Service (React + Nginx) - Production
+  # ============================================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: production
+      args:
+        - VITE_API_URL=/api
+        - VITE_SENTRY_DSN=${SENTRY_DSN:-}
+    container_name: sfa-frontend-prod
     ports:
-      - "3000:80"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
-      - backend
-    restart: unless-stopped
+      backend:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sfa-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  backend_data:
+    driver: local
+  backend_output:
+    driver: local
+  backend_logs:
+    driver: local
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  sfa-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

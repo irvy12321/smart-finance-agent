@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { 
   LayoutDashboard, 
@@ -6,20 +7,24 @@ import {
   Settings, 
   Zap,
   MessageSquare,
+  Database,
   LogOut,
   User
 } from 'lucide-react'
-
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Research', href: '/research', icon: FlaskConical },
-  { name: 'Chat', href: '/chat', icon: MessageSquare },
-  { name: 'System', href: '/system', icon: Settings },
-]
+import LanguageSwitcher from './LanguageSwitcher'
 
 export default function Sidebar() {
   const location = useLocation()
   const { user, logout } = useAuth()
+  const { t } = useTranslation()
+
+  const navigation = [
+    { name: t('nav.dashboard'), href: '/', icon: LayoutDashboard },
+    { name: t('nav.research'), href: '/research', icon: FlaskConical },
+    { name: t('nav.chat'), href: '/chat', icon: MessageSquare },
+    { name: t('nav.rag'), href: '/rag', icon: Database },
+    { name: t('nav.system'), href: '/system', icon: Settings },
+  ]
 
   return (
     <div className="w-64 bg-dark-sub border-r border-dark-border flex flex-col">
@@ -30,8 +35,8 @@ export default function Sidebar() {
             <Zap className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-primary-50">Smart Finance</h1>
-            <p className="text-xs text-primary-400 font-medium">RESEARCH PLATFORM</p>
+            <h1 className="text-lg font-bold text-primary-50">{t('sidebar.title')}</h1>
+            <p className="text-xs text-primary-400 font-medium">{t('sidebar.subtitle')}</p>
           </div>
         </div>
       </div>
@@ -39,13 +44,13 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2">
         <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider mb-4 px-3">
-          Navigation
+          {t('nav.navigation')}
         </p>
         {navigation.map((item) => {
           const isActive = location.pathname === item.href
           return (
             <Link
-              key={item.name}
+              key={item.href}
               to={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
                 isActive
@@ -63,18 +68,23 @@ export default function Sidebar() {
       {/* System Status */}
       <div className="p-4 border-t border-dark-border">
         <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider mb-3 px-3">
-          System Status
+          {t('sidebar.systemStatus')}
         </p>
         <div className="space-y-2">
           <div className="flex items-center gap-2 px-3">
             <div className="status-dot status-dot-success" />
-            <span className="text-xs text-primary-300">Orchestrator Active</span>
+            <span className="text-xs text-primary-300">{t('sidebar.orchestratorActive')}</span>
           </div>
           <div className="flex items-center gap-2 px-3">
             <div className="status-dot status-dot-success" />
-            <span className="text-xs text-primary-300">API Connected</span>
+            <span className="text-xs text-primary-300">{t('sidebar.apiConnected')}</span>
           </div>
         </div>
+      </div>
+
+      {/* Language Switcher */}
+      <div className="px-4 py-2 border-t border-dark-border">
+        <LanguageSwitcher />
       </div>
 
       {/* User Info */}
@@ -85,7 +95,7 @@ export default function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-primary-200 truncate">
-              {user?.username || 'User'}
+              {user?.username || t('auth.username')}
             </p>
             <p className="text-xs text-primary-400 truncate">
               {user?.email || ''}
@@ -97,7 +107,7 @@ export default function Sidebar() {
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
         >
           <LogOut className="w-4 h-4" />
-          <span>Sign Out</span>
+          <span>{t('auth.logout')}</span>
         </button>
       </div>
     </div>
