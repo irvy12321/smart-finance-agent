@@ -4,7 +4,9 @@ Authentication API routes
 import traceback
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.auth import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, get_password_hash
 from app.auth.dependencies import (
@@ -21,9 +23,12 @@ logger = get_logger("api.auth")
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
+limiter = Limiter(key_func=get_remote_address)
+
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate):
+@limiter.limit("5/minute")
+async def register(request: Request, user_data: UserCreate):
     """Register a new user"""
     try:
         logger.info(f"Register attempt: username={user_data.username}, email={user_data.email}")
@@ -79,7 +84,8 @@ async def register(user_data: UserCreate):
 
 
 @router.post("/login", response_model=Token)
-async def login(user_data: UserLogin):
+@limiter.limit("10/minute")
+async def login(request: Request, user_data: UserLogin):
     """Authenticate user and return token"""
     try:
         logger.info(f"Login attempt: username={user_data.username}")

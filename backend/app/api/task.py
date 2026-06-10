@@ -132,11 +132,15 @@ async def create_task(
 
 
 @router.get("/{task_id}/status", response_model=TaskStatusResponse)
-async def get_task_status(task_id: str):
+async def get_task_status(task_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Get task status"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     return TaskStatusResponse(
         task_id=task_id,
@@ -148,11 +152,15 @@ async def get_task_status(task_id: str):
 
 
 @router.post("/{task_id}/run")
-async def run_task(task_id: str, request: Request):
+async def run_task(task_id: str, request: Request, current_user: UserResponse = Depends(get_current_user)):
     """Execute a research task"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "pending":
         raise HTTPException(status_code=400, detail=f"Task is already {task['status']}")
@@ -174,11 +182,15 @@ async def run_task(task_id: str, request: Request):
 
 
 @router.get("/{task_id}/result", response_model=TaskResultResponse)
-async def get_task_result(task_id: str):
+async def get_task_result(task_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Get task result"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")

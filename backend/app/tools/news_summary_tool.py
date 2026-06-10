@@ -222,6 +222,9 @@ class NewsSummaryTool(BaseTool):
                     },
                     tool_name=self.name,
                 )
+        except Exception as e:
+            logger.error(f"News API request failed: {e}")
+            return await self._get_mock_news(query, max_results)
 
     async def _get_mock_news(self, query: str, max_results: int) -> ToolResult:
         """获取模拟新闻数据"""

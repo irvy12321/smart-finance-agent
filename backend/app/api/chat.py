@@ -9,10 +9,12 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app import storage
+from app.auth.dependencies import get_current_user
+from app.auth.models import UserResponse
 from app.utils.logger import get_logger
 
 logger = get_logger("api.chat")
@@ -110,11 +112,11 @@ def _get_orchestrator(request: Request):
 # ============================================================
 
 @router.post("/conversations", response_model=ConversationCreateResponse)
-async def create_conversation():
+async def create_conversation(current_user: UserResponse = Depends(get_current_user)):
     """Create a new conversation"""
     try:
         conversation_id = str(uuid.uuid4())[:8]
-        storage.create_conversation(conversation_id)
+        storage.create_conversation(conversation_id, user_id=current_user.id)
 
         logger.info(f"Created conversation {conversation_id}")
 
@@ -129,9 +131,14 @@ async def create_conversation():
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=ChatResponse)
-async def send_message(conversation_id: str, request: ChatRequest, req: Request, background_tasks: BackgroundTasks):
+async def send_message(conversation_id: str, request: ChatRequest, req: Request, background_tasks: BackgroundTasks, current_user: UserResponse = Depends(get_current_user)):
     """Send a message in a conversation - 自动路由到 LLM 直答或 Orchestrator 全流水线"""
     try:
+        # Check ownership
+        owner_id = storage.get_conversation_owner(conversation_id)
+        if owner_id is not None and owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
         # Get or create conversation
         conversation = storage.get_conversation(conversation_id)
         if conversation is None:
@@ -190,8 +197,12 @@ async def send_message(conversation_id: str, request: ChatRequest, req: Request,
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationHistoryResponse)
-async def get_conversation_history(conversation_id: str):
+async def get_conversation_history(conversation_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Get conversation history"""
+    owner_id = storage.get_conversation_owner(conversation_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     conversation = storage.get_conversation(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -206,15 +217,19 @@ async def get_conversation_history(conversation_id: str):
 
 
 @router.get("/conversations")
-async def list_conversations():
-    """List all conversations"""
-    conversations = storage.list_conversations()
+async def list_conversations(current_user: UserResponse = Depends(get_current_user)):
+    """List all conversations for current user"""
+    conversations = storage.list_conversations(user_id=current_user.id)
     return {"conversations": conversations, "total": len(conversations)}
 
 
 @router.delete("/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: str):
+async def delete_conversation(conversation_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Delete a conversation"""
+    owner_id = storage.get_conversation_owner(conversation_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     deleted = storage.delete_conversation(conversation_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")

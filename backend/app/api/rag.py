@@ -8,9 +8,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
 from pydantic import BaseModel, Field
 
+from app.auth.dependencies import get_current_user
+from app.auth.models import UserResponse
 from app.rag.chunker import chunk_text
 from app.rag.embed import create_embedder
 from app.rag.vector_store import VectorStore
@@ -146,7 +156,7 @@ class RAGStatsResponse(BaseModel):
 # ============================================================
 
 @router.get("/documents", response_model=DocumentListResponse)
-async def list_documents():
+async def list_documents(current_user: UserResponse = Depends(get_current_user)):
     """获取所有文档列表"""
     documents = _load_documents()
     return DocumentListResponse(
@@ -159,7 +169,8 @@ async def list_documents():
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    metadata: str | None = Form(default=None)
+    metadata: str | None = Form(default=None),
+    current_user: UserResponse = Depends(get_current_user),
 ):
     """上传文档并触发向量化"""
     _ensure_dirs()
@@ -273,7 +284,7 @@ def _update_document_status(doc_id: str, status: str, chunk_count: int):
 
 
 @router.get("/documents/{doc_id}", response_model=DocumentInfo)
-async def get_document(doc_id: str):
+async def get_document(doc_id: str, current_user: UserResponse = Depends(get_current_user)):
     """获取单个文档信息"""
     documents = _load_documents()
     for doc in documents:
@@ -283,7 +294,7 @@ async def get_document(doc_id: str):
 
 
 @router.delete("/documents/{doc_id}", response_model=DocumentDeleteResponse)
-async def delete_document(doc_id: str):
+async def delete_document(doc_id: str, current_user: UserResponse = Depends(get_current_user)):
     """删除文档及其向量数据"""
     documents = _load_documents()
     doc_to_delete = None
@@ -343,7 +354,7 @@ async def delete_document(doc_id: str):
 
 
 @router.post("/search", response_model=RAGSearchResponse)
-async def search_documents(request: RAGSearchRequest):
+async def search_documents(request: RAGSearchRequest, current_user: UserResponse = Depends(get_current_user)):
     """搜索相关文档片段"""
     try:
         embedder = _get_embedder()
@@ -373,7 +384,7 @@ async def search_documents(request: RAGSearchRequest):
 
 
 @router.get("/stats", response_model=RAGStatsResponse)
-async def get_rag_stats():
+async def get_rag_stats(current_user: UserResponse = Depends(get_current_user)):
     """获取 RAG 系统统计信息"""
     documents = _load_documents()
     vector_store = _get_vector_store()
@@ -389,7 +400,7 @@ async def get_rag_stats():
 
 
 @router.post("/reindex")
-async def reindex_documents(background_tasks: BackgroundTasks):
+async def reindex_documents(background_tasks: BackgroundTasks, current_user: UserResponse = Depends(get_current_user)):
     """重新索引所有文档"""
     documents = _load_documents()
     if not documents:

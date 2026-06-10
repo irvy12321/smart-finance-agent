@@ -33,3 +33,6 @@ ruff>=0.1.0
 
 # Monitoring dependencies
 sentry-sdk[fastapi]>=1.40.0
+
+# Rate limiting
+slowapi>=0.1.9

@@ -274,7 +274,7 @@ class FinancialReportTool(BaseTool):
         """降级执行"""
         symbol = kwargs.get("symbol", "UNKNOWN").upper()
         logger.warning(f"Financial report fallback for: {symbol}")
-        return await self._get_financial_data(symbol, "summary")
+        return await self._get_mock_data(symbol, "summary")
 
 
 class FinancialAnalysisTool(BaseTool):

@@ -126,16 +126,16 @@ init_db()
 
 # ── Conversation CRUD ──────────────────────────────────────
 
-def create_conversation(conversation_id: str) -> dict[str, Any]:
+def create_conversation(conversation_id: str, user_id: int | None = None) -> dict[str, Any]:
     now = datetime.now().isoformat()
     conn = _get_connection()
     try:
         conn.execute(
-            "INSERT INTO conversations (conversation_id, created_at, updated_at) VALUES (?, ?, ?)",
-            (conversation_id, now, now),
+            "INSERT INTO conversations (conversation_id, user_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (conversation_id, user_id, now, now),
         )
         conn.commit()
-        return {"conversation_id": conversation_id, "created_at": now, "updated_at": now, "messages": []}
+        return {"conversation_id": conversation_id, "user_id": user_id, "created_at": now, "updated_at": now, "messages": []}
     finally:
         conn.close()
 
@@ -163,12 +163,18 @@ def get_conversation(conversation_id: str) -> dict[str, Any] | None:
         conn.close()
 
 
-def list_conversations() -> list[dict[str, Any]]:
+def list_conversations(user_id: int | None = None) -> list[dict[str, Any]]:
     conn = _get_connection()
     try:
-        rows = conn.execute(
-            "SELECT conversation_id, created_at, updated_at FROM conversations ORDER BY updated_at DESC"
-        ).fetchall()
+        if user_id is not None:
+            rows = conn.execute(
+                "SELECT conversation_id, created_at, updated_at FROM conversations WHERE user_id = ? ORDER BY updated_at DESC",
+                (user_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT conversation_id, created_at, updated_at FROM conversations ORDER BY updated_at DESC"
+            ).fetchall()
         result = []
         for row in rows:
             count = conn.execute(
@@ -182,6 +188,30 @@ def list_conversations() -> list[dict[str, Any]]:
                 "message_count": count["cnt"],
             })
         return result
+    finally:
+        conn.close()
+
+
+def get_task_owner(task_id: str) -> int | None:
+    """Return the user_id that owns a task, or None if not found."""
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT user_id FROM tasks WHERE task_id = ?", (task_id,)
+        ).fetchone()
+        return row["user_id"] if row else None
+    finally:
+        conn.close()
+
+
+def get_conversation_owner(conversation_id: str) -> int | None:
+    """Return the user_id that owns a conversation, or None if not found."""
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT user_id FROM conversations WHERE conversation_id = ?", (conversation_id,)
+        ).fetchone()
+        return row["user_id"] if row else None
     finally:
         conn.close()
 

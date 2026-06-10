@@ -24,11 +24,17 @@ from fastapi.responses import JSONResponse
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.api import api_router
 from app.utils.logger import get_logger
 
 logger = get_logger("fastapi_backend")
+
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
 
 def init_sentry():
@@ -144,13 +150,25 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add rate limiting
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Please try again later."},
+    )
+
 # Add CORS middleware for frontend communication
+_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=[o.strip() for o in _cors_origins],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept-Language"],
 )
 
 
@@ -201,12 +219,6 @@ async def root():
 async def ping():
     """Health check endpoint"""
     return {"status": "ok", "message": "pong"}
-
-
-@app.get("/sentry-debug")
-async def sentry_debug():
-    """Debug endpoint to test Sentry integration"""
-    raise Exception("Sentry debug: This is a test exception")
 
 
 if __name__ == "__main__":

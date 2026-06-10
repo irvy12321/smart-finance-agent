@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -8,6 +9,51 @@ from app.tools.base_tool import BaseTool, ToolResult
 from app.utils.logger import get_logger
 
 logger = get_logger("crawler_tool")
+
+# Blocked IP ranges (SSRF protection)
+_BLOCKED_HOSTS = {
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "169.254.169.254",  # cloud metadata
+    "metadata.google.internal",
+}
+_BLOCKED_CIDRS = [
+    ("10.0.0.0", 8),
+    ("172.16.0.0", 12),
+    ("192.168.0.0", 16),
+    ("169.254.0.0", 16),
+]
+
+
+def _ip_to_int(ip: str) -> int:
+    parts = ip.split(".")
+    return (int(parts[0]) << 24) | (int(parts[1]) << 16) | (int(parts[2]) << 8) | int(parts[3])
+
+
+def _is_private_ip(host: str) -> bool:
+    """Check if a hostname resolves to a private/reserved IP."""
+    import ipaddress
+    try:
+        addr = ipaddress.ip_address(host)
+        return addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
+    except ValueError:
+        return False
+
+
+def _validate_url(url: str) -> str | None:
+    """Validate URL for SSRF safety. Returns error message or None if safe."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return f"Blocked scheme: {parsed.scheme}. Only http/https allowed."
+    hostname = parsed.hostname or ""
+    if not hostname:
+        return "No hostname in URL."
+    if hostname.lower() in _BLOCKED_HOSTS:
+        return f"Blocked host: {hostname}"
+    if _is_private_ip(hostname):
+        return f"Blocked private/reserved IP: {hostname}"
+    return None
 
 
 class CrawlerTool(BaseTool):
@@ -21,6 +67,12 @@ class CrawlerTool(BaseTool):
         url = kwargs.get("url", "")
         if not url:
             return ToolResult(success=False, error="No URL provided", tool_name=self.name)
+
+        # SSRF protection
+        ssrf_error = _validate_url(url)
+        if ssrf_error:
+            logger.warning(f"SSRF blocked for URL {url}: {ssrf_error}")
+            return ToolResult(success=False, error=ssrf_error, tool_name=self.name)
 
         try:
             content = await self._fetch(url)

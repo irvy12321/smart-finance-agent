@@ -3,10 +3,12 @@ Report API routes
 """
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app import storage
+from app.auth.dependencies import get_current_user
+from app.auth.models import UserResponse
 from app.utils.logger import get_logger
 
 logger = get_logger("api.report")
@@ -60,11 +62,15 @@ class ReportSummaryResponse(BaseModel):
 # ============================================================
 
 @router.get("/{task_id}", response_model=ReportResponse)
-async def get_report(task_id: str):
+async def get_report(task_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Get full research report for a task"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
@@ -80,11 +86,15 @@ async def get_report(task_id: str):
 
 
 @router.get("/{task_id}/summary", response_model=ReportSummaryResponse)
-async def get_report_summary(task_id: str):
+async def get_report_summary(task_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Get report summary for a task"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
@@ -106,11 +116,15 @@ async def get_report_summary(task_id: str):
 
 
 @router.get("/{task_id}/markdown")
-async def get_report_markdown(task_id: str):
+async def get_report_markdown(task_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Get report in markdown format"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
@@ -127,11 +141,15 @@ async def get_report_markdown(task_id: str):
 
 
 @router.get("/{task_id}/charts")
-async def get_report_charts(task_id: str):
+async def get_report_charts(task_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Get chart specifications for a task"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
@@ -148,11 +166,15 @@ async def get_report_charts(task_id: str):
 
 
 @router.get("/{task_id}/analysis")
-async def get_report_analysis(task_id: str):
+async def get_report_analysis(task_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Get detailed analysis for a task"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
@@ -173,11 +195,15 @@ async def get_report_analysis(task_id: str):
 
 
 @router.get("/{task_id}/sources")
-async def get_report_sources(task_id: str):
+async def get_report_sources(task_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Get data sources for a task"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
@@ -195,11 +221,15 @@ async def get_report_sources(task_id: str):
 
 
 @router.get("/{task_id}/process")
-async def get_report_process(task_id: str):
+async def get_report_process(task_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Get agent process information for a task"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
         raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
