@@ -451,9 +451,14 @@ export default function Research() {
                   <Zap className="w-4 h-4" /> {t('research.newTask')}
                 </button>
                 {taskId && (
-                  <button onClick={() => navigate(`/report/${taskId}`)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-200 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-400/40 rounded-xl transition-all duration-200 hover:scale-[1.02] shadow-lg shadow-blue-500/10">
-                    <FileText className="w-4 h-4" /> {t('report.title')}
-                  </button>
+                  <>
+                    <button onClick={() => navigate(`/workflow/${taskId}`)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-200 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-400/40 rounded-xl transition-all duration-200 hover:scale-[1.02] shadow-lg shadow-purple-500/10">
+                      <Brain className="w-4 h-4" /> Workflow
+                    </button>
+                    <button onClick={() => navigate(`/report/${taskId}`)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-200 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-400/40 rounded-xl transition-all duration-200 hover:scale-[1.02] shadow-lg shadow-blue-500/10">
+                      <FileText className="w-4 h-4" /> {t('report.title')}
+                    </button>
+                  </>
                 )}
               </div>
             </div>

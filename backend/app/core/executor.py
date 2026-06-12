@@ -13,6 +13,12 @@ from app.core.agent_status import (
 from app.core.fallback_manager import FallbackManager
 from app.core.planner import Plan, SubTask
 from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
+from app.monitoring.collectors import LLMMetricsCollector
+from app.monitoring.prometheus import (
+    tool_call_duration_seconds,
+    tool_calls_total,
+    tool_errors_total,
+)
 from app.tools.base_tool import ToolResult
 from app.tools.registry import ToolRegistry
 from app.utils.circuit_breaker import CircuitBreakerManager
@@ -236,9 +242,14 @@ class ExecutorAgent:
             # === 正常执行 + 降级 ===
             with trace.span(f"tool_{task.tool_name}", task_id=task.task_id):
                 try:
+                    tool_calls_total.labels(tool_name=task.tool_name).inc()
+                    tool_start = time.perf_counter()
                     tool_result = await tool.execute(**params)
+                    tool_duration = time.perf_counter() - tool_start
+                    tool_call_duration_seconds.labels(tool_name=task.tool_name).observe(tool_duration)
                 except Exception as e:
                     logger.error(f"[trace:{trace.trace_id}] Tool {task.tool_name} exception: {e}")
+                    tool_errors_total.labels(tool_name=task.tool_name, error_type=type(e).__name__).inc()
                     tool_result = ToolResult(success=False, error=str(e), tool_name=task.tool_name)
 
             if tool_result.success:

@@ -14,15 +14,25 @@ export interface UserResponse {
   id: number
   username: string
   email: string
+  role: string
   is_active: boolean
   created_at: string
 }
 
 export interface Token {
   access_token: string
+  refresh_token: string
   token_type: string
   expires_in: number
   user: UserResponse
+}
+
+export interface RefreshTokenRequest {
+  refresh_token: string
+}
+
+export interface LogoutRequest {
+  refresh_token: string
 }
 
 // Task API Types

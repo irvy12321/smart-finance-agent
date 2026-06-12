@@ -28,6 +28,11 @@ from app.tools.news_tool import NewsTool
 from app.tools.rag_tool import RAGTool
 from app.tools.registry import ToolRegistry
 from app.tools.stock_price_tool import StockHistoryTool, StockPriceTool
+from app.monitoring.prometheus import (
+    agent_calls_total,
+    agent_errors_total,
+    agent_stage_duration_seconds,
+)
 from app.utils.logger import LogContext, get_logger
 from app.utils.tracing import PipelineTracker, TraceContext
 
@@ -152,10 +157,13 @@ class Orchestrator:
             await self._emit_stage(AgentStage.PLANNING)
             try:
                 plan = await self.planner.plan(query, route_decision=route)
+                agent_calls_total.labels(agent_name="planner").inc()
             except Exception as e:
                 logger.error(f"[trace:{trace.trace_id}] Planning failed, using fallback plan: {e}")
+                agent_errors_total.labels(agent_name="planner", error_type=type(e).__name__).inc()
                 plan = self._create_fallback_plan(query)
         planning_ms = (time.perf_counter() - t0) * 1000
+        agent_stage_duration_seconds.labels(stage="planner").observe(planning_ms / 1000)
         tracker.record_stage("planning", "planner", planning_ms, status="ok")
 
         # 清除 planner 模型 override
@@ -168,12 +176,15 @@ class Orchestrator:
             await self._emit_stage(AgentStage.EXECUTING)
             try:
                 exec_result = await self.executor.execute(plan)
+                agent_calls_total.labels(agent_name="executor").inc()
             except Exception as e:
                 logger.error(f"[trace:{trace.trace_id}] Execution failed: {e}")
+                agent_errors_total.labels(agent_name="executor", error_type=type(e).__name__).inc()
                 exec_result = ExecutionResult(
                     plan=plan, final_answer=f"Execution failed: {e}",
                 )
         execution_ms = (time.perf_counter() - t0) * 1000
+        agent_stage_duration_seconds.labels(stage="executor").observe(execution_ms / 1000)
 
         # 记录任务结果 metrics + 更新工具可靠性
         for tr in exec_result.task_results:
@@ -203,8 +214,10 @@ class Orchestrator:
                         context=exec_result.final_answer,
                         question=query,
                     )
+                    agent_calls_total.labels(agent_name="reasoner").inc()
                 except Exception as e:
                     logger.error(f"[trace:{trace.trace_id}] Reasoning failed, using fallback: {e}")
+                    agent_errors_total.labels(agent_name="reasoner", error_type=type(e).__name__).inc()
                     fallback_data = await self._fallback_mgr.fallback_reasoner(
                         exec_result.final_answer, query,
                     )
@@ -219,8 +232,10 @@ class Orchestrator:
                     reasoning_result=reasoning_result,
                     trace_id=trace.trace_id,
                 )
+                agent_calls_total.labels(agent_name="reporter").inc()
             except Exception as e:
                 logger.error(f"[trace:{trace.trace_id}] Report generation failed, using fallback: {e}")
+                agent_errors_total.labels(agent_name="reporter", error_type=type(e).__name__).inc()
                 from app.core.report_agent import StructuredAnalysis
                 fallback_data = await self._fallback_mgr.fallback_report(
                     query, exec_result.final_answer,

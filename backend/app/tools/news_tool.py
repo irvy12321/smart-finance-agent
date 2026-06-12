@@ -1,9 +1,13 @@
 import aiohttp
 
 from app.tools.base_tool import BaseTool, ToolResult
+from app.tools.cache import get_cache
 from app.utils.logger import get_logger
 
 logger = get_logger("news_tool")
+
+# 缓存 TTL 配置
+NEWS_CACHE_TTL = 300  # 新闻缓存 300 秒
 
 
 class NewsTool(BaseTool):
@@ -14,20 +18,34 @@ class NewsTool(BaseTool):
 
     def __init__(self, api_key: str = ""):
         self.api_key = api_key
+        self._cache = get_cache()
 
     async def execute(self, **kwargs) -> ToolResult:
         query = kwargs.get("query", "")
         if not query:
             return ToolResult(success=False, error="No query provided", tool_name=self.name)
 
-        if not self.api_key:
-            return await self._fallback(query)
+        # 检查缓存
+        cache_key = f"news:{query}"
+        hit, cached_result = self._cache.get(cache_key)
+        if hit:
+            logger.debug(f"News cache hit: {query}")
+            return cached_result
 
-        try:
-            return await self._search_newsapi(query)
-        except Exception as e:
-            logger.warning(f"NewsAPI failed: {e}, using fallback")
-            return await self._fallback(query)
+        if not self.api_key:
+            result = await self._fallback(query)
+        else:
+            try:
+                result = await self._search_newsapi(query)
+            except Exception as e:
+                logger.warning(f"NewsAPI failed: {e}, using fallback")
+                result = await self._fallback(query)
+
+        # 存入缓存
+        if result.success:
+            self._cache.set(cache_key, result, ttl=NEWS_CACHE_TTL)
+
+        return result
 
     async def _search_newsapi(self, query: str) -> ToolResult:
         params = {"q": query, "language": "en", "sortBy": "publishedAt", "pageSize": 5, "apiKey": self.api_key}

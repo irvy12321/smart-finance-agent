@@ -13,8 +13,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app import storage
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_role
 from app.auth.models import UserResponse
+from app.auth.roles import Role
 from app.utils.logger import get_logger
 
 logger = get_logger("api.chat")
@@ -112,8 +113,10 @@ def _get_orchestrator(request: Request):
 # ============================================================
 
 @router.post("/conversations", response_model=ConversationCreateResponse)
-async def create_conversation(current_user: UserResponse = Depends(get_current_user)):
-    """Create a new conversation"""
+async def create_conversation(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
+    """Create a new conversation (Admin/Analyst only)"""
     try:
         conversation_id = str(uuid.uuid4())[:8]
         storage.create_conversation(conversation_id, user_id=current_user.id)
@@ -131,8 +134,14 @@ async def create_conversation(current_user: UserResponse = Depends(get_current_u
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=ChatResponse)
-async def send_message(conversation_id: str, request: ChatRequest, req: Request, background_tasks: BackgroundTasks, current_user: UserResponse = Depends(get_current_user)):
-    """Send a message in a conversation - 自动路由到 LLM 直答或 Orchestrator 全流水线"""
+async def send_message(
+    conversation_id: str,
+    request: ChatRequest,
+    req: Request,
+    background_tasks: BackgroundTasks,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
+    """Send a message in a conversation (Admin/Analyst only)"""
     try:
         # Check ownership
         owner_id = storage.get_conversation_owner(conversation_id)
@@ -197,8 +206,11 @@ async def send_message(conversation_id: str, request: ChatRequest, req: Request,
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationHistoryResponse)
-async def get_conversation_history(conversation_id: str, current_user: UserResponse = Depends(get_current_user)):
-    """Get conversation history"""
+async def get_conversation_history(
+    conversation_id: str,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
+    """Get conversation history (Admin/Analyst only)"""
     owner_id = storage.get_conversation_owner(conversation_id)
     if owner_id is not None and owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -217,15 +229,20 @@ async def get_conversation_history(conversation_id: str, current_user: UserRespo
 
 
 @router.get("/conversations")
-async def list_conversations(current_user: UserResponse = Depends(get_current_user)):
-    """List all conversations for current user"""
+async def list_conversations(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
+    """List all conversations for current user (Admin/Analyst only)"""
     conversations = storage.list_conversations(user_id=current_user.id)
     return {"conversations": conversations, "total": len(conversations)}
 
 
 @router.delete("/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: str, current_user: UserResponse = Depends(get_current_user)):
-    """Delete a conversation"""
+async def delete_conversation(
+    conversation_id: str,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
+    """Delete a conversation (Admin/Analyst only)"""
     owner_id = storage.get_conversation_owner(conversation_id)
     if owner_id is not None and owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -335,7 +352,7 @@ def _clean_json_response(text: str, language: str = "en") -> str:
 
 
 async def generate_chat_response(message: str, conversation_id: str, language: str = "en") -> str:
-    """Generate a chat response using direct LLM call"""
+    """Generate a chat response using direct LLM call with RAG context"""
     from app.infrastructure.llm_client import LLMClient
 
     llm = LLMClient.get_instance()
@@ -347,6 +364,22 @@ async def generate_chat_response(message: str, conversation_id: str, language: s
         if history and history.get("messages"):
             for msg in history["messages"][-10:]:  # Last 10 messages for context
                 messages.append({"role": msg["role"], "content": msg["content"]})
+
+    # Search knowledge base for relevant context
+    rag_context = ""
+    try:
+        from app.rag.retriever import Retriever
+        retriever = Retriever()
+        if retriever.doc_count > 0:
+            results = retriever.retrieve(message, top_k=3)
+            if results:
+                rag_parts = ["[Knowledge Base Context]"]
+                for i, r in enumerate(results, 1):
+                    rag_parts.append(f"{i}. {r['text']}")
+                rag_context = "\n".join(rag_parts)
+                logger.info(f"RAG: Found {len(results)} relevant chunks for chat")
+    except Exception as e:
+        logger.warning(f"RAG retrieval failed for chat: {e}")
 
     # Add system prompt for financial assistant persona
     if language == "zh":
@@ -360,6 +393,10 @@ async def generate_chat_response(message: str, conversation_id: str, language: s
             "IMPORTANT: Always reply in English. "
             "Do NOT say 'I received your question' - instead provide a substantive answer."
         )
+
+    # Append RAG context to system prompt if available
+    if rag_context:
+        system_content += f"\n\n{rag_context}"
 
     system_msg = {"role": "system", "content": system_content}
     llm_messages = [system_msg, *messages, {"role": "user", "content": message}]

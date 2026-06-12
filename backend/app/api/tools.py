@@ -6,8 +6,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_role
 from app.auth.models import UserResponse
+from app.auth.roles import Role
 from app.tools.financial_report_tool import FinancialAnalysisTool, FinancialReportTool
 from app.tools.news_summary_tool import NewsAnalysisTool, NewsSummaryTool
 from app.tools.registry import ToolRegistry
@@ -152,7 +153,7 @@ async def list_tools(current_user: UserResponse = Depends(get_current_user)):
 
 
 @router.post("/stock/price", response_model=StockPriceResponse)
-async def get_stock_price(request: StockPriceRequest, current_user: UserResponse = Depends(get_current_user)):
+async def get_stock_price(request: StockPriceRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
     """Get real-time stock price"""
     try:
         tool = StockPriceTool()
@@ -184,7 +185,7 @@ async def get_stock_price(request: StockPriceRequest, current_user: UserResponse
 
 
 @router.post("/stock/history", response_model=StockHistoryResponse)
-async def get_stock_history(request: StockHistoryRequest, current_user: UserResponse = Depends(get_current_user)):
+async def get_stock_history(request: StockHistoryRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
     """Get historical stock data"""
     try:
         tool = StockHistoryTool()
@@ -208,7 +209,7 @@ async def get_stock_history(request: StockHistoryRequest, current_user: UserResp
 
 
 @router.post("/financial/report", response_model=FinancialReportResponse)
-async def get_financial_report(request: FinancialReportRequest, current_user: UserResponse = Depends(get_current_user)):
+async def get_financial_report(request: FinancialReportRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
     """Get financial report for a company"""
     try:
         tool = FinancialReportTool()
@@ -236,7 +237,7 @@ async def get_financial_report(request: FinancialReportRequest, current_user: Us
 
 
 @router.post("/financial/analysis", response_model=FinancialAnalysisResponse)
-async def get_financial_analysis(request: FinancialAnalysisRequest, current_user: UserResponse = Depends(get_current_user)):
+async def get_financial_analysis(request: FinancialAnalysisRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
     """Get financial analysis for a company"""
     try:
         tool = FinancialAnalysisTool()
@@ -260,7 +261,7 @@ async def get_financial_analysis(request: FinancialAnalysisRequest, current_user
 
 
 @router.post("/news/search", response_model=NewsResponse)
-async def search_news(request: NewsRequest, current_user: UserResponse = Depends(get_current_user)):
+async def search_news(request: NewsRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
     """Search for news articles"""
     try:
         tool = NewsSummaryTool()
@@ -286,7 +287,7 @@ async def search_news(request: NewsRequest, current_user: UserResponse = Depends
 
 
 @router.post("/news/analysis", response_model=NewsAnalysisResponse)
-async def get_news_analysis(request: NewsAnalysisRequest, current_user: UserResponse = Depends(get_current_user)):
+async def get_news_analysis(request: NewsAnalysisRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
     """Get news sentiment analysis"""
     try:
         tool = NewsAnalysisTool()

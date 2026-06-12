@@ -2,16 +2,19 @@
 Task API routes
 """
 import asyncio
+import json
 import uuid
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app import storage
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_role
 from app.auth.models import UserResponse
+from app.auth.roles import Role
 from app.utils.logger import get_logger
 
 logger = get_logger("api.task")
@@ -110,9 +113,9 @@ def _get_orchestrator(request: Request):
 async def create_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
 ):
-    """Create a new research task"""
+    """Create a new research task (Admin/Analyst only)"""
     try:
         task_id = str(uuid.uuid4())[:8]
 
@@ -132,8 +135,11 @@ async def create_task(
 
 
 @router.get("/{task_id}/status", response_model=TaskStatusResponse)
-async def get_task_status(task_id: str, current_user: UserResponse = Depends(get_current_user)):
-    """Get task status"""
+async def get_task_status(
+    task_id: str,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
+    """Get task status (Admin/Analyst only)"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -152,8 +158,12 @@ async def get_task_status(task_id: str, current_user: UserResponse = Depends(get
 
 
 @router.post("/{task_id}/run")
-async def run_task(task_id: str, request: Request, current_user: UserResponse = Depends(get_current_user)):
-    """Execute a research task"""
+async def run_task(
+    task_id: str,
+    request: Request,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
+    """Execute a research task (Admin/Analyst only)"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -182,8 +192,11 @@ async def run_task(task_id: str, request: Request, current_user: UserResponse = 
 
 
 @router.get("/{task_id}/result", response_model=TaskResultResponse)
-async def get_task_result(task_id: str, current_user: UserResponse = Depends(get_current_user)):
-    """Get task result"""
+async def get_task_result(
+    task_id: str,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
+    """Get task result (Admin/Analyst only)"""
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -216,8 +229,10 @@ async def get_task_result(task_id: str, current_user: UserResponse = Depends(get
 
 
 @router.get("/list", response_model=TaskListResponse)
-async def list_tasks(current_user: UserResponse = Depends(get_current_user)):
-    """List tasks for current user"""
+async def list_tasks(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
+    """List tasks for current user (Admin/Analyst only)"""
     task_list = storage.list_tasks(user_id=current_user.id)
     return TaskListResponse(tasks=task_list)
 
@@ -528,3 +543,115 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
         "events": events,
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
+
+
+# ============================================================
+# SSE Endpoint for Real-time Workflow Visualization
+# ============================================================
+
+@router.get("/{task_id}/stream")
+async def stream_task_events(
+    task_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+):
+    """
+    SSE endpoint for real-time task execution updates.
+    
+    Events:
+    - connected: Connection established
+    - plan_ready: Task plan generated with subtasks
+    - task_start: Individual task started
+    - task_complete: Individual task completed
+    - stage_change: Pipeline stage changed
+    - complete: All tasks completed
+    - error: Error occurred
+    """
+    # Verify task ownership
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id is not None and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    task = storage.get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    async def event_generator():
+        """Generate SSE events"""
+        # Send connection confirmation
+        yield f"event: connected\ndata: {json.dumps({'task_id': task_id, 'status': task['status']})}\n\n"
+
+        # If task is already completed, send stored events
+        if task["status"] in ("completed", "failed"):
+            events_json = task.get("events_json", "[]")
+            try:
+                events = json.loads(events_json) if events_json else []
+                for event in events:
+                    stage = event.get("stage", "unknown")
+                    yield f"event: {stage}\ndata: {json.dumps(event)}\n\n"
+            except (json.JSONDecodeError, TypeError):
+                pass
+            
+            yield f"event: complete\ndata: {json.dumps({'stage': 'complete', 'status': task['status']})}\n\n"
+            return
+
+        # For running tasks, poll for updates
+        last_progress = -1
+        last_stage = ""
+        last_events_count = 0
+        
+        while True:
+            try:
+                # Get current task state
+                current_task = storage.get_task(task_id)
+                if not current_task:
+                    yield f"event: error\ndata: {json.dumps({'error': 'Task not found'})}\n\n"
+                    break
+
+                # Send progress update if changed
+                current_progress = current_task.get("progress", 0)
+                current_stage = current_task.get("current_stage", "")
+                
+                if current_progress != last_progress or current_stage != last_stage:
+                    yield f"event: stage_change\ndata: {json.dumps({'stage': current_stage, 'progress': current_progress})}\n\n"
+                    last_progress = current_progress
+                    last_stage = current_stage
+
+                # Send new events
+                events_json = current_task.get("events_json", "[]")
+                try:
+                    events = json.loads(events_json) if events_json else []
+                    new_events = events[last_events_count:]
+                    for event in new_events:
+                        stage = event.get("stage", "unknown")
+                        yield f"event: {stage}\ndata: {json.dumps(event)}\n\n"
+                    last_events_count = len(events)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+                # Check if task is done
+                if current_task["status"] in ("completed", "failed"):
+                    yield f"event: complete\ndata: {json.dumps({'stage': 'complete', 'status': current_task['status']})}\n\n"
+                    break
+
+                # Wait before next poll
+                await asyncio.sleep(1)
+                
+                # Send heartbeat every 30 seconds
+                yield ": heartbeat\n\n"
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"SSE error for task {task_id}: {e}")
+                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                break
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -9,22 +9,39 @@ import {
   MessageSquare,
   Database,
   LogOut,
-  User
+  User,
+  Shield
 } from 'lucide-react'
 import LanguageSwitcher from './LanguageSwitcher'
 
+// Role display config
+const roleConfig: Record<string, { label: string; color: string }> = {
+  admin: { label: 'Admin', color: 'text-red-400 bg-red-500/10' },
+  analyst: { label: 'Analyst', color: 'text-blue-400 bg-blue-500/10' },
+  viewer: { label: 'Viewer', color: 'text-green-400 bg-green-500/10' },
+}
+
 export default function Sidebar() {
   const location = useLocation()
-  const { user, logout } = useAuth()
+  const { user, logout, hasAnyRole } = useAuth()
   const { t } = useTranslation()
 
-  const navigation = [
-    { name: t('nav.dashboard'), href: '/', icon: LayoutDashboard },
-    { name: t('nav.research'), href: '/research', icon: FlaskConical },
-    { name: t('nav.chat'), href: '/chat', icon: MessageSquare },
-    { name: t('nav.rag'), href: '/rag', icon: Database },
-    { name: t('nav.system'), href: '/system', icon: Settings },
+  // Navigation with role-based access
+  const allNavigation = [
+    { name: t('nav.dashboard'), href: '/', icon: LayoutDashboard, roles: ['admin', 'analyst', 'viewer'] },
+    { name: t('nav.research'), href: '/research', icon: FlaskConical, roles: ['admin', 'analyst'] },
+    { name: t('nav.chat'), href: '/chat', icon: MessageSquare, roles: ['admin', 'analyst'] },
+    { name: t('nav.rag'), href: '/rag', icon: Database, roles: ['admin', 'analyst'] },
+    { name: t('nav.system'), href: '/system', icon: Settings, roles: ['admin', 'analyst', 'viewer'] },
   ]
+
+  // Filter navigation based on user role
+  const navigation = allNavigation.filter(item => 
+    hasAnyRole(item.roles)
+  )
+
+  // Get role display config
+  const roleInfo = roleConfig[user?.role || 'viewer'] || roleConfig.viewer
 
   return (
     <div className="w-64 bg-dark-sub border-r border-dark-border flex flex-col">
@@ -102,6 +119,15 @@ export default function Sidebar() {
             </p>
           </div>
         </div>
+        
+        {/* Role Badge */}
+        <div className="flex items-center gap-2 px-3 mb-3">
+          <Shield className="w-4 h-4 text-primary-400" />
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${roleInfo.color}`}>
+            {roleInfo.label}
+          </span>
+        </div>
+
         <button
           onClick={logout}
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"

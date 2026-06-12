@@ -55,7 +55,6 @@ export default function Chat() {
   const [conversationId, setConversationId] = useState<string | null>(saved?.conversationId || null)
   const [conversations, setConversations] = useState<ConversationListItem[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Persist state when it changes
   useEffect(() => {
@@ -65,13 +64,7 @@ export default function Chat() {
   }, [conversationId, messages])
 
   useEffect(() => {
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-    fetchConversations(controller.signal)
-    return () => {
-      controller.abort()
-      abortControllerRef.current = null
-    }
+    fetchConversations()
   }, [])
 
   useEffect(() => {
@@ -82,9 +75,9 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const fetchConversations = async (signal?: AbortSignal) => {
+  const fetchConversations = async () => {
     try {
-      const data = await chatApi.listConversations({ signal })
+      const data = await chatApi.listConversations()
       setConversations(data.conversations || [])
     } catch (error: unknown) {
       if (error instanceof Error && (error.name === 'AbortError' || (error as { code?: string }).code === 'ERR_CANCELED')) return

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft, RefreshCw, Download, Trash2, AlertCircle, Loader2, TrendingUp, AlertTriangle, Target, CheckCircle, Clock, BarChart3, Brain } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
-import { reportApi, taskApi } from '../services/api'
+import { reportApi } from '../services/api'
 import LazyChart from '../components/LazyChart'
 import type { ReportResponse } from '../types/api'
 
@@ -51,12 +51,12 @@ export default function Report() {
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const fetchReport = useCallback(async (id: string, signal?: AbortSignal) => {
+  const fetchReport = useCallback(async (id: string) => {
     try {
       setLoading(true)
       setError(null)
       setReport(null)
-      const data = await reportApi.get(id, { signal })
+      const data = await reportApi.get(id)
       setReport(data)
     } catch (err: unknown) {
       if (err instanceof Error && (err.name === 'AbortError' || (err as { code?: string }).code === 'ERR_CANCELED')) return
@@ -67,9 +67,7 @@ export default function Report() {
   }, [t])
 
   useEffect(() => {
-    const controller = new AbortController()
-    if (taskId) fetchReport(taskId, controller.signal)
-    return () => controller.abort()
+    if (taskId) fetchReport(taskId)
   }, [taskId, fetchReport])
 
   const handleRefresh = () => { if (taskId) fetchReport(taskId) }

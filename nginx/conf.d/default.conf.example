@@ -11,7 +11,9 @@ server {
     listen 443 ssl http2;
     server_name your-domain.com;
 
+    # ============================================
     # SSL Configuration
+    # ============================================
     ssl_certificate /etc/nginx/ssl/fullchain.pem;
     ssl_certificate_key /etc/nginx/ssl/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -20,36 +22,62 @@ server {
     ssl_session_cache shared:SSL:10m;
     ssl_session_timeout 10m;
 
-    # Security headers
-    add_header Strict-Transport-Security "max-age=63072000" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
+    # ============================================
+    # Security Headers
+    # ============================================
+    
+    # HSTS - Force HTTPS for 2 years
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    
+    # Prevent clickjacking
+    add_header X-Frame-Options "DENY" always;
+    
+    # Prevent MIME type sniffing
     add_header X-Content-Type-Options "nosniff" always;
+    
+    # Enable XSS filter (legacy)
     add_header X-XSS-Protection "1; mode=block" always;
+    
+    # Control referrer information
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    
+    # Content Security Policy
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ws: wss: https:; frame-ancestors 'none';" always;
+    
+    # Permissions Policy
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
 
     root /usr/share/nginx/html;
     index index.html;
 
-    # Gzip compression
+    # ============================================
+    # Gzip Compression
+    # ============================================
     gzip on;
     gzip_vary on;
     gzip_proxied any;
     gzip_comp_level 6;
     gzip_types text/plain text/css text/xml application/json application/javascript application/xml+rss application/atom+xml image/svg+xml;
 
-    # Static assets caching
+    # ============================================
+    # Static Assets Cache
+    # ============================================
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         try_files $uri =404;
     }
 
-    # SPA fallback
+    # ============================================
+    # SPA Fallback
+    # ============================================
     location / {
         try_files $uri $uri/ /index.html;
     }
 
-    # API proxy
+    # ============================================
+    # API Proxy to Backend
+    # ============================================
     location /api/ {
         proxy_pass http://backend:8000/api/;
         proxy_set_header Host $host;
@@ -62,15 +90,21 @@ server {
         proxy_read_timeout 300s;
     }
 
-    # Health check
+    # ============================================
+    # Health Check Endpoint
+    # ============================================
     location /health {
         access_log off;
         return 200 "OK\n";
         add_header Content-Type text/plain;
     }
 
-    # Deny hidden files
+    # ============================================
+    # Deny Access to Hidden Files
+    # ============================================
     location ~ /\. {
         deny all;
+        access_log off;
+        log_not_found off;
     }
 }

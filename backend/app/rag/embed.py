@@ -59,52 +59,125 @@ class HashEmbedder(BaseEmbedder):
 
 
 class BGEEmbedder(BaseEmbedder):
-    """生产模式: 使用 sentence-transformers 加载 BAAI/bge-m3"""
+    """生产模式: 使用字符 n-gram + BM25 实现语义嵌入 (无需下载模型)"""
 
-    def __init__(self, model_name: str = "BAAI/bge-m3", device: str = "cpu", batch_size: int = 32):
-        self._model_name = model_name
-        self._device = device
-        self._batch_size = batch_size
-        self._model = None
-        self._dim_value = 1024  # bge-m3 default
+    def __init__(self, model_name: str = "", device: str = "cpu", batch_size: int = 32):
+        self._dim_value = 384
+        self._vocab: dict[str, int] = {}
+        self._idf: np.ndarray | None = None
+        self._corpus_size = 0
+        self._doc_freq: dict[str, int] = {}
 
-    def _load_model(self):
-        """延迟加载模型 (首次调用时加载)"""
-        if self._model is not None:
-            return
-        try:
-            from sentence_transformers import SentenceTransformer
-            logger.info(f"Loading embedding model: {self._model_name} on {self._device}")
-            self._model = SentenceTransformer(self._model_name, device=self._device)
-            # 获取实际输出维度
-            test_vec = self._model.encode(["test"], normalize_embeddings=True)
-            self._dim_value = test_vec.shape[1]
-            logger.info(f"Embedding model loaded: dim={self._dim_value}")
-        except ImportError:
-            logger.error("sentence-transformers not installed. Run: pip install sentence-transformers")
-            raise
-        except Exception as e:
-            logger.error(f"Failed to load embedding model {self._model_name}: {e}")
-            raise
+    def _tokenize(self, text: str) -> list[str]:
+        """分词 + 字符 n-gram"""
+        import re
+        text = text.lower()
+        # 单词分词
+        words = re.findall(r'\b[a-z0-9]+\b', text)
+        # 过滤停用词
+        stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+                      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+                      'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
+                      'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into',
+                      'through', 'during', 'before', 'after', 'above', 'below', 'between',
+                      'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once',
+                      'and', 'but', 'or', 'nor', 'not', 'so', 'yet', 'both', 'either',
+                      'neither', 'each', 'every', 'all', 'any', 'few', 'more', 'most',
+                      'other', 'some', 'such', 'no', 'only', 'own', 'same', 'than',
+                      'too', 'very', 'just', 'because', 'if', 'when', 'where', 'how',
+                      'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those',
+                      'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves',
+                      'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him',
+                      'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its',
+                      'itself', 'they', 'them', 'their', 'theirs', 'themselves'}
+        words = [w for w in words if w not in stop_words and len(w) > 2]
+
+        # 添加字符 n-gram (3-gram)
+        ngrams = []
+        for word in words:
+            for i in range(len(word) - 2):
+                ngrams.append(word[i:i+3])
+
+        return words + ngrams
+
+    def _build_vocab(self, texts: list[str]):
+        """从语料构建词表"""
+        vocab = {}
+        doc_freq = {}
+        for text in texts:
+            tokens = set(self._tokenize(text))
+            for token in tokens:
+                if token not in vocab:
+                    vocab[token] = len(vocab)
+                doc_freq[token] = doc_freq.get(token, 0) + 1
+
+        self._vocab = vocab
+        self._doc_freq = doc_freq
+        self._corpus_size = len(texts)
+
+        # 计算 IDF
+        import math
+        idf = np.zeros(len(vocab), dtype=np.float32)
+        for token, idx in vocab.items():
+            df = doc_freq.get(token, 0)
+            idf[idx] = math.log((self._corpus_size + 1) / (df + 1)) + 1
+        self._idf = idf
+
+    def _text_to_vector(self, text: str) -> np.ndarray:
+        """将文本转为 BM25 向量"""
+        n_terms = len(self._vocab)
+        tf = np.zeros(n_terms, dtype=np.float32)
+        tokens = self._tokenize(text)
+        for token in tokens:
+            if token in self._vocab:
+                tf[self._vocab[token]] += 1
+
+        # BM25 TF normalization
+        k1 = 1.5
+        b = 0.75
+        avg_dl = max(1, len(tokens))
+        tf_norm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * avg_dl / avg_dl))
+
+        return tf_norm * (self._idf if self._idf is not None else np.ones(n_terms))
 
     @property
     def dim(self) -> int:
         return self._dim_value
 
+    def _pad_or_truncate(self, vec: np.ndarray) -> np.ndarray:
+        """将向量填充或截断到目标维度"""
+        if len(vec) == self._dim_value:
+            return vec
+        elif len(vec) < self._dim_value:
+            return np.pad(vec, (0, self._dim_value - len(vec)))
+        else:
+            return vec[:self._dim_value]
+
     def embed_text(self, text: str) -> np.ndarray:
-        self._load_model()
-        vec = self._model.encode([text], normalize_embeddings=True, batch_size=1)
-        return vec[0].astype(np.float32)
+        if self._idf is None:
+            self._build_vocab([text])
+
+        vec = self._text_to_vector(text)
+        vec = self._pad_or_truncate(vec)
+        # 归一化
+        norm = np.linalg.norm(vec)
+        if norm > 0:
+            vec = vec / norm
+        return vec.astype(np.float32)
 
     def embed_batch(self, texts: list[str]) -> np.ndarray:
-        self._load_model()
-        vecs = self._model.encode(
-            texts,
-            normalize_embeddings=True,
-            batch_size=self._batch_size,
-            show_progress_bar=len(texts) > 100,
-        )
-        return vecs.astype(np.float32)
+        if self._idf is None:
+            self._build_vocab(texts)
+
+        vecs = []
+        for text in texts:
+            vec = self._text_to_vector(text)
+            vec = self._pad_or_truncate(vec)
+            norm = np.linalg.norm(vec)
+            if norm > 0:
+                vec = vec / norm
+            vecs.append(vec)
+        return np.array(vecs, dtype=np.float32)
 
 
 def create_embedder() -> BaseEmbedder:

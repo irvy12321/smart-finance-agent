@@ -1,9 +1,11 @@
-import axios from 'axios'
+import axios, { AxiosError, AxiosRequestConfig } from 'axios'
 import i18n from '../i18n'
 import type {
   UserCreate,
   UserLogin,
   Token,
+  RefreshTokenRequest,
+  LogoutRequest,
   UserResponse,
   TaskCreateResponse,
   TaskStatusResponse,
@@ -43,6 +45,24 @@ const api = axios.create({
   },
 })
 
+// Token refresh state
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (token: string) => void
+  reject: (error: any) => void
+}> = []
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token!)
+    }
+  })
+  failedQueue = []
+}
+
 // Request interceptor - add auth token and language
 api.interceptors.request.use(
   (config) => {
@@ -57,52 +77,124 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Response interceptor for error handling
+// Response interceptor for error handling with automatic token refresh
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    // 忽略被取消的请求（AbortController）
+  async (error: AxiosError) => {
+    // Ignore cancelled requests (AbortController)
     if (error.code === 'ERR_CANCELED' || error.name === 'CanceledError') {
       return Promise.reject(error)
     }
 
-    const message = error.response?.data?.detail 
-      || error.response?.data?.message 
-      || error.message 
-      || 'An unexpected error occurred'
-    
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean }
+
+    // Handle 401 - attempt token refresh
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      const currentPath = window.location.pathname
+      const isAuthPage = currentPath.includes('/login') || currentPath.includes('/register')
+
+      // Don't attempt refresh on auth pages or if already retrying
+      if (isAuthPage) {
+        return Promise.reject(error)
+      }
+
+      // If already refreshing, queue this request
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        }).then((token) => {
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${token}`
+          }
+          return api(originalRequest)
+        })
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      const refreshToken = localStorage.getItem('auth_refresh_token')
+
+      if (!refreshToken) {
+        // No refresh token available, redirect to login
+        isRefreshing = false
+        processQueue(error, null)
+        localStorage.removeItem('auth_token')
+        localStorage.removeItem('auth_refresh_token')
+        localStorage.removeItem('auth_user')
+        window.location.href = '/login'
+        return Promise.reject(error)
+      }
+
+      try {
+        // Call refresh endpoint directly (not through interceptor)
+        const response = await axios.post<Token>(
+          '/api/auth/refresh',
+          { refresh_token: refreshToken } as RefreshTokenRequest,
+          {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000,
+          }
+        )
+
+        const { access_token, refresh_token: newRefreshToken } = response.data
+
+        // Update stored tokens
+        localStorage.setItem('auth_token', access_token)
+        localStorage.setItem('auth_refresh_token', newRefreshToken)
+
+        // Update default headers
+        api.defaults.headers.common.Authorization = `Bearer ${access_token}`
+
+        // Process queued requests
+        processQueue(null, access_token)
+
+        // Retry original request
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${access_token}`
+        }
+        return api(originalRequest)
+      } catch (refreshError) {
+        // Refresh failed, clear auth and redirect
+        processQueue(refreshError, null)
+        localStorage.removeItem('auth_token')
+        localStorage.removeItem('auth_refresh_token')
+        localStorage.removeItem('auth_user')
+        window.location.href = '/login'
+        return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
+      }
+    }
+
+    // Handle other errors
+    const message =
+      (error.response?.data as any)?.detail ||
+      (error.response?.data as any)?.message ||
+      error.message ||
+      'An unexpected error occurred'
+
     console.error('API Error:', {
       status: error.response?.status,
       url: error.config?.url,
       message,
     })
 
-    // Handle 401 - redirect to login
-    if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('auth_user')
-      // Only redirect if not already on login/register page
-      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
-        window.location.href = '/login'
-      }
-      error.userMessage = 'Session expired. Please login again.'
-    } else if (error.response?.status === 404) {
-      error.userMessage = 'Resource not found.'
+    if (error.response?.status === 404) {
+      ;(error as any).userMessage = 'Resource not found.'
     } else if (error.response?.status === 500) {
-      error.userMessage = `Server error: ${message}`
+      ;(error as any).userMessage = `Server error: ${message}`
     } else if (error.code === 'ECONNABORTED') {
-      error.userMessage = 'Request timed out. Please try again.'
+      ;(error as any).userMessage = 'Request timed out. Please try again.'
     } else if (!error.response) {
-      error.userMessage = 'Cannot connect to server. Please check if backend is running.'
+      ;(error as any).userMessage = 'Cannot connect to server. Please check if backend is running.'
     } else {
-      error.userMessage = message
+      ;(error as any).userMessage = message
     }
 
     return Promise.reject(error)
   }
 )
-
-type SignalConfig = { signal?: AbortSignal }
 
 // Task API
 export const taskApi = {
@@ -111,13 +203,13 @@ export const taskApi = {
     return response.data
   },
 
-  getStatus: async (taskId: string, config?: SignalConfig): Promise<TaskStatusResponse> => {
-    const response = await api.get<TaskStatusResponse>(`/task/${taskId}/status`, { ...config, timeout: 10000 })
+  getStatus: async (taskId: string): Promise<TaskStatusResponse> => {
+    const response = await api.get<TaskStatusResponse>(`/task/${taskId}/status`)
     return response.data
   },
 
-  run: async (taskId: string): Promise<{ message: string; task_id: string }> => {
-    const response = await api.post(`/task/${taskId}/run`)
+  run: async (taskId: string): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>(`/task/${taskId}/run`)
     return response.data
   },
 
@@ -126,16 +218,16 @@ export const taskApi = {
     return response.data
   },
 
-  list: async (config?: SignalConfig): Promise<TaskListResponse> => {
-    const response = await api.get<TaskListResponse>('/task/list', config)
+  list: async (): Promise<TaskListResponse> => {
+    const response = await api.get<TaskListResponse>('/task/list')
     return response.data
   },
 }
 
 // Report API
 export const reportApi = {
-  get: async (taskId: string, config?: SignalConfig): Promise<ReportResponse> => {
-    const response = await api.get<ReportResponse>(`/report/${taskId}`, config)
+  get: async (taskId: string): Promise<ReportResponse> => {
+    const response = await api.get<ReportResponse>(`/report/${taskId}`)
     return response.data
   },
 
@@ -172,18 +264,18 @@ export const reportApi = {
 
 // System API
 export const systemApi = {
-  getStatus: async (config?: SignalConfig): Promise<SystemStatusResponse> => {
-    const response = await api.get<SystemStatusResponse>('/system/status', config)
+  getStatus: async (): Promise<SystemStatusResponse> => {
+    const response = await api.get<SystemStatusResponse>('/system/status')
     return response.data
   },
 
-  getMetrics: async (config?: SignalConfig): Promise<SystemMetricsResponse> => {
-    const response = await api.get<SystemMetricsResponse>('/system/metrics', config)
+  getMetrics: async (): Promise<SystemMetricsResponse> => {
+    const response = await api.get<SystemMetricsResponse>('/system/metrics')
     return response.data
   },
 
-  getAgentStatus: async (config?: SignalConfig): Promise<AgentStatusResponse> => {
-    const response = await api.get<AgentStatusResponse>('/system/agents', config)
+  getAgentStatus: async (): Promise<AgentStatusResponse> => {
+    const response = await api.get<AgentStatusResponse>('/system/agents')
     return response.data
   },
 
@@ -215,28 +307,28 @@ export const toolsApi = {
     return response.data
   },
 
-  getStockHistory: async (symbol: string, period: string = '1m'): Promise<StockHistoryResponse> => {
+  getStockHistory: async (symbol: string, period?: string): Promise<StockHistoryResponse> => {
     const response = await api.post<StockHistoryResponse>('/tools/stock/history', { symbol, period })
     return response.data
   },
 
-  getFinancialReport: async (symbol: string, reportType: string = 'summary'): Promise<FinancialReportResponse> => {
-    const response = await api.post<FinancialReportResponse>('/tools/financial/report', { symbol, report_type: reportType })
+  getFinancialReport: async (symbol: string): Promise<FinancialReportResponse> => {
+    const response = await api.post<FinancialReportResponse>('/tools/financial/report', { symbol })
     return response.data
   },
 
-  getFinancialAnalysis: async (symbol: string, analysisType: string = 'comprehensive'): Promise<FinancialAnalysisResponse> => {
-    const response = await api.post<FinancialAnalysisResponse>('/tools/financial/analysis', { symbol, analysis_type: analysisType })
+  getFinancialAnalysis: async (symbol: string): Promise<FinancialAnalysisResponse> => {
+    const response = await api.post<FinancialAnalysisResponse>('/tools/financial/analysis', { symbol })
     return response.data
   },
 
-  searchNews: async (query: string, maxResults: number = 5): Promise<NewsResponse> => {
+  searchNews: async (query: string, maxResults?: number): Promise<NewsResponse> => {
     const response = await api.post<NewsResponse>('/tools/news/search', { query, max_results: maxResults })
     return response.data
   },
 
-  getNewsAnalysis: async (query: string, period: string = '7d'): Promise<NewsAnalysisResponse> => {
-    const response = await api.post<NewsAnalysisResponse>('/tools/news/analysis', { query, period })
+  getNewsAnalysis: async (query: string): Promise<NewsAnalysisResponse> => {
+    const response = await api.post<NewsAnalysisResponse>('/tools/news/analysis', { query })
     return response.data
   },
 }
@@ -249,7 +341,9 @@ export const chatApi = {
   },
 
   sendMessage: async (conversationId: string, message: string): Promise<ChatResponse> => {
-    const response = await api.post<ChatResponse>(`/chat/conversations/${conversationId}/messages`, { message })
+    const response = await api.post<ChatResponse>(`/chat/conversations/${conversationId}/messages`, {
+      message,
+    })
     return response.data
   },
 
@@ -258,97 +352,50 @@ export const chatApi = {
     return response.data
   },
 
-  listConversations: async (config?: SignalConfig): Promise<ConversationListResponse> => {
-    const response = await api.get<ConversationListResponse>('/chat/conversations', config)
+  listConversations: async (): Promise<ConversationListResponse> => {
+    const response = await api.get<ConversationListResponse>('/chat/conversations')
     return response.data
   },
 
   deleteConversation: async (conversationId: string): Promise<{ message: string }> => {
-    const response = await api.delete(`/chat/conversations/${conversationId}`)
+    const response = await api.delete<{ message: string }>(`/chat/conversations/${conversationId}`)
     return response.data
   },
 }
 
 // RAG API
-export interface DocumentInfo {
-  id: string
-  filename: string
-  file_type: string
-  file_size: number
-  chunk_count: number
-  status: 'processing' | 'completed' | 'failed'
-  created_at: string
-  updated_at: string
-  metadata: Record<string, unknown>
-}
-
-export interface DocumentListResponse {
-  documents: DocumentInfo[]
-  total: number
-}
-
-export interface DocumentUploadResponse {
-  document_id: string
-  filename: string
-  status: string
-  message: string
-}
-
-export interface RAGSearchResult {
-  text: string
-  score: number
-  metadata: Record<string, unknown>
-}
-
-export interface RAGSearchResponse {
-  query: string
-  results: RAGSearchResult[]
-  total: number
-}
-
-export interface RAGStatsResponse {
-  total_documents: number
-  total_chunks: number
-  vector_store_size: number
-  embedding_mode: string
-}
-
 export const ragApi = {
-  listDocuments: async (): Promise<DocumentListResponse> => {
-    const response = await api.get<DocumentListResponse>('/rag/documents')
+  listDocuments: async (): Promise<{ documents: any[] }> => {
+    const response = await api.get<{ documents: any[] }>('/rag/documents')
     return response.data
   },
 
-  uploadDocument: async (file: File, metadata?: Record<string, unknown>): Promise<DocumentUploadResponse> => {
+  uploadDocument: async (file: File): Promise<{ message: string; document_id: string }> => {
     const formData = new FormData()
     formData.append('file', file)
-    if (metadata) {
-      formData.append('metadata', JSON.stringify(metadata))
-    }
-    const response = await api.post<DocumentUploadResponse>('/rag/documents/upload', formData, {
+    const response = await api.post<{ message: string; document_id: string }>('/rag/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000,
     })
     return response.data
   },
 
-  getDocument: async (docId: string): Promise<DocumentInfo> => {
-    const response = await api.get<DocumentInfo>(`/rag/documents/${docId}`)
+  getDocument: async (docId: string): Promise<any> => {
+    const response = await api.get(`/rag/documents/${docId}`)
     return response.data
   },
 
-  deleteDocument: async (docId: string): Promise<{ document_id: string; message: string }> => {
-    const response = await api.delete(`/rag/documents/${docId}`)
+  deleteDocument: async (docId: string): Promise<{ message: string }> => {
+    const response = await api.delete<{ message: string }>(`/rag/documents/${docId}`)
     return response.data
   },
 
-  search: async (query: string, topK: number = 5): Promise<RAGSearchResponse> => {
-    const response = await api.post<RAGSearchResponse>('/rag/search', { query, top_k: topK })
+  search: async (query: string, topK?: number): Promise<{ results: any[] }> => {
+    const response = await api.post<{ results: any[] }>('/rag/search', { query, top_k: topK })
     return response.data
   },
 
-  getStats: async (): Promise<RAGStatsResponse> => {
-    const response = await api.get<RAGStatsResponse>('/rag/stats')
+  getStats: async (): Promise<{ total_documents: number; total_chunks: number }> => {
+    const response = await api.get<{ total_documents: number; total_chunks: number }>('/rag/stats')
     return response.data
   },
 
@@ -375,8 +422,20 @@ export const authApi = {
     return response.data
   },
 
-  refreshToken: async (): Promise<Token> => {
-    const response = await api.post<Token>('/auth/refresh')
+  refreshToken: async (data: RefreshTokenRequest): Promise<Token> => {
+    const response = await axios.post<Token>(
+      '/api/auth/refresh',
+      data,
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    )
+    return response.data
+  },
+
+  logout: async (data: LogoutRequest): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/logout', data)
     return response.data
   },
 }

@@ -14,6 +14,7 @@ import {
   Wifi
 } from 'lucide-react'
 import { systemApi, taskApi } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import SimpleChart from '../components/SimpleChart'
 import type { 
   SystemStatusResponse, 
@@ -24,6 +25,7 @@ import type {
 
 export default function SystemOverview() {
   const { t } = useTranslation()
+  const { hasAnyRole } = useAuth()
   const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null)
   const [metrics, setMetrics] = useState<SystemMetricsResponse | null>(null)
   const [agentStatus, setAgentStatus] = useState<AgentStatusResponse | null>(null)
@@ -33,55 +35,53 @@ export default function SystemOverview() {
   const [autoRefresh, setAutoRefresh] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  const fetchSystemData = useCallback(async (signal?: AbortSignal) => {
+  const fetchSystemData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
       
-      const [statusRes, metricsRes, agentsRes, tasksRes] = await Promise.all([
-        systemApi.getStatus({ signal }),
-        systemApi.getMetrics({ signal }),
-        systemApi.getAgentStatus({ signal }),
-        taskApi.list({ signal }),
+      // Fetch system data
+      const [statusRes, metricsRes, agentsRes] = await Promise.all([
+        systemApi.getStatus(),
+        systemApi.getMetrics(),
+        systemApi.getAgentStatus(),
       ])
       
       setSystemStatus(statusRes)
       setMetrics(metricsRes)
       setAgentStatus(agentsRes)
-      setTasks(tasksRes.tasks || [])
+      
+      // Only fetch tasks if user has permission
+      if (hasAnyRole(['admin', 'analyst'])) {
+        try {
+          const tasksRes = await taskApi.list()
+          setTasks(tasksRes.tasks || [])
+        } catch (taskErr) {
+          // Ignore task list errors (e.g., 403 Forbidden)
+          console.warn('Failed to fetch tasks:', taskErr)
+        }
+      }
     } catch (err: unknown) {
       if (err instanceof Error && (err.name === 'AbortError' || (err as { code?: string }).code === 'ERR_CANCELED')) return
       setError(err instanceof Error ? err.message : t('error.serverError'))
     } finally {
       setLoading(false)
     }
-  }, [t])
+  }, [t, hasAnyRole])
 
   const handleRefresh = useCallback(() => {
-    const controller = new AbortController()
-    abortControllerRef.current?.abort()
-    abortControllerRef.current = controller
-    fetchSystemData(controller.signal)
+    fetchSystemData()
   }, [fetchSystemData])
 
   useEffect(() => {
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-    fetchSystemData(controller.signal)
-    return () => {
-      controller.abort()
-      abortControllerRef.current = null
-    }
+    fetchSystemData()
   }, [fetchSystemData])
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
     if (autoRefresh) {
       interval = setInterval(() => {
-        const controller = new AbortController()
-        abortControllerRef.current?.abort()
-        abortControllerRef.current = controller
-        fetchSystemData(controller.signal)
+        fetchSystemData()
       }, 5000)
     }
     return () => {

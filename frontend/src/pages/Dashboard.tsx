@@ -1,301 +1,50 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { 
-  FlaskConical, 
-  FileText, 
-  Activity, 
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  Plus,
-  MessageSquare,
-  Search
-} from 'lucide-react'
-import { taskApi } from '../services/api'
-import StockPriceCard from '../components/StockPriceCard'
-import type { TaskListItem } from '../types/api'
+import { PageHeader } from '../components/layout'
+import { MarketOverview, HotStocksList, AIMarketInsight, RiskMetrics, RecentTasks } from '../components/dashboard'
+import { RefreshCw } from 'lucide-react'
 
 export default function Dashboard() {
   const { t } = useTranslation()
-  const [tasks, setTasks] = useState<TaskListItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchTasks = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await taskApi.list()
-      setTasks(response.tasks || [])
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch tasks')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    
-    const loadData = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const response = await taskApi.list()
-        if (!cancelled) setTasks(response.tasks || [])
-      } catch (err: unknown) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to fetch tasks')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    loadData()
-    const interval = setInterval(loadData, 10000)
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [])
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <CheckCircle className="w-5 h-5 text-green-500" />
-      case 'running':
-        return <Activity className="w-5 h-5 text-blue-500 animate-pulse" />
-      case 'error':
-      case 'failed':
-        return <AlertCircle className="w-5 h-5 text-red-500" />
-      default:
-        return <Clock className="w-5 h-5 text-yellow-500" />
-    }
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <span className="badge badge-success">{t('research.completed')}</span>
-      case 'running':
-        return <span className="badge badge-running">{t('dashboard.runningTasks')}</span>
-      case 'error':
-      case 'failed':
-        return <span className="badge badge-error">{t('dashboard.failedTasks')}</span>
-      default:
-        return <span className="badge badge-pending">{t('dashboard.pendingTasks')}</span>
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString)
-      return date.toLocaleString()
-    } catch {
-      return dateString
-    }
-  }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      {/* Header */}
-      <div className="flex items-end justify-between">
-        <div className="pb-1">
-          <h1 className="text-2xl font-bold text-primary-50">{t('dashboard.title')}</h1>
-          <p className="text-sm text-primary-400 mt-1.5">
-            {t('dashboard.welcome')}
-          </p>
-        </div>
-        <Link
-          to="/research"
-          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white rounded-full shadow-lg shadow-primary-500/20 transition-all duration-200 hover:shadow-primary-500/30 hover:scale-[1.02]"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="font-medium">{t('research.newTask')}</span>
-        </Link>
-      </div>
+    <div className="p-4 lg:p-6 space-y-4">
+      <PageHeader
+        title={t('dashboard.title')}
+        subtitle={t('dashboard.systemOverview')}
+      >
+        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-primary-400 hover:text-primary-200 bg-dark-card border border-dark-border rounded transition-colors">
+          <RefreshCw className="w-3.5 h-3.5" />
+          {t('common.refresh')}
+        </button>
+      </PageHeader>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
-              <FileText className="w-5 h-5 text-blue-500" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider">
-                {t('dashboard.totalTasks')}
-              </p>
-              <p className="text-2xl font-bold text-primary-50">{tasks.length}</p>
-            </div>
-          </div>
+      {/* Market Overview */}
+      <MarketOverview />
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Left: Hot Stocks (2/3) */}
+        <div className="lg:col-span-2">
+          <HotStocksList />
         </div>
-        <div className="card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-green-400 uppercase tracking-wider">
-                {t('dashboard.completedTasks')}
-              </p>
-              <p className="text-2xl font-bold text-green-500">
-                {tasks.filter(t => t.status === 'completed').length}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
-              <Activity className="w-5 h-5 text-blue-500" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
-                {t('dashboard.runningTasks')}
-              </p>
-              <p className="text-2xl font-bold text-blue-500">
-                {tasks.filter(t => t.status === 'running').length}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-yellow-500/10 rounded-lg flex items-center justify-center">
-              <Clock className="w-5 h-5 text-yellow-500" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-yellow-400 uppercase tracking-wider">
-                {t('dashboard.pendingTasks')}
-              </p>
-              <p className="text-2xl font-bold text-yellow-500">
-                {tasks.filter(t => t.status === 'pending').length}
-              </p>
-            </div>
-          </div>
+
+        {/* Right: AI Insights (1/3) */}
+        <div>
+          <AIMarketInsight />
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-4">
-        <Link
-          to="/research"
-          className="card hover:border-primary-500/30 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
-              <FlaskConical className="w-5 h-5 text-blue-500" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-primary-200">{t('research.newTask')}</p>
-              <p className="text-xs text-primary-400">{t('dashboard.startResearchDesc')}</p>
-            </div>
-          </div>
-        </Link>
-        <Link
-          to="/chat"
-          className="card hover:border-primary-500/30 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
-              <MessageSquare className="w-5 h-5 text-purple-500" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-primary-200">{t('dashboard.aiChat')}</p>
-              <p className="text-xs text-primary-400">{t('dashboard.aiChatDesc')}</p>
-            </div>
-          </div>
-        </Link>
-      </div>
-
-      {/* Stock Price Widget */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <StockPriceCard />
-        
-        {/* Recent Tasks */}
-        <div className="card">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-primary-50">{t('dashboard.recentTasks')}</h2>
-          <button 
-            onClick={fetchTasks}
-            className="text-sm text-primary-400 hover:text-primary-200 transition-colors"
-          >
-            {t('common.search')}
-          </button>
+      {/* Bottom Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Left: Risk Metrics (2/3) */}
+        <div className="lg:col-span-2">
+          <RiskMetrics />
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <Activity className="w-8 h-8 text-primary-500 animate-spin mx-auto mb-4" />
-              <p className="text-primary-400">{t('common.loading')}</p>
-            </div>
-          </div>
-        ) : error ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-4" />
-              <p className="text-red-500">{error}</p>
-              <button 
-                onClick={fetchTasks}
-                className="mt-2 text-sm text-primary-400 hover:text-primary-200"
-              >
-                {t('error.tryAgain')}
-              </button>
-            </div>
-          </div>
-        ) : tasks.length === 0 ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <Search className="w-8 h-8 text-primary-400 mx-auto mb-4" />
-              <p className="text-primary-400">{t('research.noResults')}</p>
-              <p className="text-xs text-primary-500 mt-1">
-                {t('dashboard.createTaskToStart')}
-              </p>
-              <Link
-                to="/research"
-                className="mt-4 inline-flex items-center gap-2 text-sm text-primary-500 hover:text-primary-300"
-              >
-                <Plus className="w-4 h-4" />
-                {t('research.newTask')}
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {tasks.slice(0, 10).map((task) => (
-              <div
-                key={task.task_id}
-                className="flex items-center justify-between p-4 bg-dark-bg rounded-lg border border-dark-border hover:border-primary-500/30 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  {getStatusIcon(task.status)}
-                  <div>
-                    <p className="text-sm font-medium text-primary-200 line-clamp-1">
-                      {task.query}
-                    </p>
-                    <p className="text-xs text-primary-400 mt-1">
-                      ID: {task.task_id} • Created: {formatDate(task.created_at)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  {getStatusBadge(task.status)}
-                  {task.status === 'completed' && (
-                    <Link
-                      to={`/report/${task.task_id}`}
-                      className="text-sm text-primary-500 hover:text-primary-300 transition-colors"
-                    >
-                      {t('report.viewFullReport')}
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        {/* Right: Recent Tasks (1/3) */}
+        <div>
+          <RecentTasks />
+        </div>
       </div>
     </div>
   )

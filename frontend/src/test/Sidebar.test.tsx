@@ -8,19 +8,27 @@ vi.mock('../contexts/AuthContext', () => ({
   useAuth: vi.fn(),
 }))
 
+const mockAuthReturn = {
+  isAuthenticated: true,
+  isLoading: false,
+  user: { id: 1, username: 'testuser', email: 'test@example.com', role: 'viewer' as const, is_active: true, created_at: '' },
+  token: 'test-token',
+  refreshToken: 'refresh-token',
+  login: vi.fn(),
+  register: vi.fn(),
+  logout: vi.fn(),
+  refreshAccessToken: vi.fn(),
+  hasRole: vi.fn(),
+  hasAnyRole: vi.fn(),
+  isAdmin: vi.fn(),
+  isAnalyst: vi.fn(),
+  isViewer: vi.fn(),
+}
+
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(useAuth).mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-      user: { id: 1, username: 'testuser', email: 'test@example.com', is_active: true, created_at: '' },
-      token: 'test-token',
-      login: vi.fn(),
-      register: vi.fn(),
-      logout: vi.fn(),
-      refreshToken: vi.fn(),
-    })
+    vi.mocked(useAuth).mockReturnValue(mockAuthReturn)
   })
 
   it('renders the logo and title', () => {
@@ -83,14 +91,8 @@ describe('Sidebar', () => {
   it('calls logout when sign out clicked', () => {
     const mockLogout = vi.fn()
     vi.mocked(useAuth).mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-      user: { id: 1, username: 'testuser', email: 'test@example.com', is_active: true, created_at: '' },
-      token: 'test-token',
-      login: vi.fn(),
-      register: vi.fn(),
+      ...mockAuthReturn,
       logout: mockLogout,
-      refreshToken: vi.fn(),
     })
 
     render(
@@ -116,14 +118,11 @@ describe('Sidebar', () => {
 
   it('shows default user when no user logged in', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...mockAuthReturn,
       isAuthenticated: false,
-      isLoading: false,
       user: null,
       token: null,
-      login: vi.fn(),
-      register: vi.fn(),
-      logout: vi.fn(),
-      refreshToken: vi.fn(),
+      refreshToken: null,
     })
 
     render(

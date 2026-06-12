@@ -29,6 +29,9 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.api import api_router
+from app.core.startup_check import check_jwt_secret
+from app.monitoring.middleware import PrometheusMiddleware
+from app.monitoring.routes import metrics_endpoint
 from app.utils.logger import get_logger
 
 logger = get_logger("fastapi_backend")
@@ -131,6 +134,29 @@ async def lifespan(app: FastAPI):
         logger.error(f"API key validation failed: {e}")
         sentry_sdk.capture_exception(e)
 
+    # Activate profiling integration
+    try:
+        from app.core.profiling.integration import activate_profiling
+        activate_profiling()
+        logger.info("Profiling integration activated")
+    except Exception as e:
+        logger.warning(f"Failed to activate profiling: {e}")
+
+    # Activate dashboard integration
+    try:
+        from app.core.dashboard_integration import activate_dashboard
+        activate_dashboard()
+        logger.info("Dashboard integration activated")
+    except Exception as e:
+        logger.warning(f"Failed to activate dashboard: {e}")
+
+    # Set application info for Prometheus
+    from app.monitoring.prometheus import app_info
+    app_info.info({
+        "version": "1.0.0",
+        "environment": os.getenv("ENVIRONMENT", "development"),
+    })
+
     from app.core.orchestrator import Orchestrator
     orchestrator = Orchestrator(use_router=True)
 
@@ -149,6 +175,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Run startup checks"""
+    check_jwt_secret()
 
 # Add rate limiting
 app.state.limiter = limiter
@@ -170,6 +201,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept-Language"],
 )
+
+# Add Prometheus metrics middleware
+app.add_middleware(PrometheusMiddleware)
 
 
 @app.exception_handler(Exception)
@@ -219,6 +253,10 @@ async def root():
 async def ping():
     """Health check endpoint"""
     return {"status": "ok", "message": "pong"}
+
+
+# Prometheus metrics endpoint
+app.add_route("/metrics", metrics_endpoint)
 
 
 if __name__ == "__main__":

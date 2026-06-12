@@ -24,7 +24,10 @@
     "actions": "Actions",
     "status": "Status",
     "date": "Date",
-    "id": "ID"
+    "id": "ID",
+    "comingSoon": "Coming Soon",
+    "justNow": "just now",
+    "ago": "ago"
   },
   "auth": {
     "login": "Sign In",
@@ -64,7 +67,10 @@
     "dashboard": "Dashboard",
     "research": "Research",
     "chat": "Chat",
-    "rag": "Knowledge Base",
+    "knowledge": "Knowledge Base",
+    "rag": "RAG Management",
+    "portfolio": "Portfolio",
+    "workflow": "Workflow",
     "system": "System",
     "navigation": "Navigation"
   },
@@ -92,7 +98,27 @@
     "aiChatDesc": "Chat with the financial assistant",
     "viewReport": "View Report",
     "noTasksYet": "No tasks yet",
-    "createTaskToStart": "Create a new research task to get started"
+    "createTaskToStart": "Create a new research task to get started",
+    "aiInsights": "AI Insights",
+    "aiInsight": "Market Sentiment",
+    "aiInsightContent": "Market sentiment is cautiously optimistic with tech sector showing strong momentum. The Fed meeting tomorrow could introduce volatility.",
+    "keyEvents": "Key Events",
+    "event1": "Fed FOMC Meeting - Tomorrow 2:00 PM",
+    "event2": "NVDA Earnings - Next Thursday",
+    "event3": "CPI Data Release - Friday 8:30 AM",
+    "riskAlerts": "Risk Alerts",
+    "alert1": "VIX elevated above 18 - increased volatility expected",
+    "alert2": "Tech sector RSI near 70 - approaching overbought",
+    "updatedAgo": "Updated 5m ago",
+    "riskMetrics": "Risk Metrics",
+    "portfolioBeta": "Portfolio Beta",
+    "betaDesc": "Higher than market volatility",
+    "sharpeRatio": "Sharpe Ratio",
+    "sharpeDesc": "Good risk-adjusted returns",
+    "maxDrawdown": "Max Drawdown",
+    "drawdownDesc": "Within acceptable range",
+    "var95": "VaR (95%)",
+    "varDesc": "Daily value at risk"
   },
   "research": {
     "title": "Research",
@@ -233,13 +259,14 @@
   "rag": {
     "title": "Knowledge Base",
     "subtitle": "Manage documents for RAG-powered research",
+    "description": "This feature is under development. You will be able to upload, manage, and search through your financial documents and research materials.",
     "totalDocuments": "Documents",
     "totalChunks": "Chunks",
     "vectorStore": "Vector Store",
     "embeddingMode": "Embedding Mode",
     "uploadDocument": "Upload Document",
     "dragDrop": "Drag and drop files here",
-    "supportedTypes": "Supported: .txt, .md, .json, .csv",
+    "supportedTypes": "Supported: .txt, .md, .json, .csv, .pdf, .docx",
     "browseFiles": "Browse Files",
     "uploading": "Uploading and processing...",
     "uploadSuccess": "Document uploaded",
@@ -260,5 +287,10 @@
     "deleteSuccess": "Document deleted",
     "reindex": "Reindex All",
     "reindexStarted": "Reindexing started in background"
+  },
+  "portfolio": {
+    "subtitle": "Track and manage your investment portfolio",
+    "comingSoon": "Portfolio - Coming Soon",
+    "description": "This feature is under development. You will be able to track your holdings, analyze performance, and manage your investment portfolio."
   }
 }

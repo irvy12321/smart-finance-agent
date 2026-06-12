@@ -3,17 +3,20 @@ import { AuthProvider } from './contexts/AuthContext'
 import { ToastProvider } from './components/ui/ToastContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
-import Sidebar from './components/Sidebar'
+import { MainLayout } from './components/layout'
 
 // Pages
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
-import Research from './pages/Research'
-import Report from './pages/Report'
-import SystemOverview from './pages/SystemOverview'
+import ResearchCenter from './pages/ResearchCenter'
 import Chat from './pages/Chat'
+import KnowledgeBase from './pages/KnowledgeBase'
 import RAGManagement from './pages/RAGManagement'
+import Portfolio from './pages/Portfolio'
+import SystemOverview from './pages/SystemOverview'
+import Report from './pages/Report'
+import WorkflowVisualization from './pages/Workflow'
 
 function App() {
   return (
@@ -26,26 +29,38 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
 
-              {/* Protected routes */}
+              {/* Protected routes with MainLayout */}
               <Route
                 path="/*"
                 element={
                   <ProtectedRoute>
-                    <div className="flex h-screen bg-dark-bg">
-                      <Sidebar />
-                      <main className="flex-1 overflow-auto">
-                        <ErrorBoundary>
+                    <MainLayout>
+                      <ErrorBoundary>
                         <Routes>
+                          {/* All roles can access */}
                           <Route path="/" element={<Dashboard />} />
-                          <Route path="/research" element={<Research />} />
-                          <Route path="/chat" element={<Chat />} />
-                          <Route path="/rag" element={<RAGManagement />} />
                           <Route path="/report/:taskId" element={<Report />} />
                           <Route path="/system" element={<SystemOverview />} />
+                          <Route path="/portfolio" element={<Portfolio />} />
+                          
+                          {/* Admin and Analyst only */}
+                          <Route path="/research" element={<ResearchCenter />} />
+                          <Route path="/chat" element={<Chat />} />
+                          <Route path="/knowledge" element={<KnowledgeBase />} />
+                          <Route path="/rag" element={<RAGManagement />} />
                         </Routes>
-                        </ErrorBoundary>
-                      </main>
-                    </div>
+                      </ErrorBoundary>
+                    </MainLayout>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Full-screen workflow visualization */}
+              <Route
+                path="/workflow/:taskId"
+                element={
+                  <ProtectedRoute>
+                    <WorkflowVisualization />
                   </ProtectedRoute>
                 }
               />

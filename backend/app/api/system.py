@@ -1,6 +1,7 @@
 """
 System API routes
 """
+import hashlib
 import time
 from datetime import datetime
 from typing import Any
@@ -236,3 +237,32 @@ def record_request_failure():
     """Record failed request"""
     global failed_requests
     failed_requests += 1
+
+
+@router.get("/cache")
+async def get_cache_stats():
+    """Get cache statistics"""
+    from app.tools.cache import get_cache_stats
+    return get_cache_stats()
+
+
+@router.post("/cache/clear")
+async def clear_cache():
+    """Clear all cache entries"""
+    from app.tools.cache import get_cache
+    cache = get_cache()
+    cleared = cache.clear()
+    return {"message": f"Cleared {cleared} cache entries"}
+
+
+@router.get("/auth-health")
+async def auth_health():
+    """JWT secret health check - returns hash for multi-instance comparison"""
+    import os
+    secret = os.getenv("JWT_SECRET_KEY", "")
+    secret_hash = hashlib.sha256(secret.encode()).hexdigest() if secret else "NOT_SET"
+    return {
+        "status": "ok" if secret else "error",
+        "jwt_secret_hash": secret_hash,
+        "jwt_secret_length": len(secret),
+    }

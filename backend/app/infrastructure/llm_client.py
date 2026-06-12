@@ -11,6 +11,14 @@ from app.infrastructure.config import (
     get_agent_model_config,
     get_llm_config,
 )
+from app.monitoring.collectors import LLMMetricsCollector
+from app.monitoring.prometheus import (
+    llm_errors_total,
+    llm_in_progress,
+    llm_request_duration_seconds,
+    llm_requests_total,
+    llm_tokens_total,
+)
 from app.utils.exceptions import LLMClientError
 from app.utils.logger import get_logger
 from app.utils.retry import async_retry
@@ -252,9 +260,17 @@ class LiteLLMRouter:
             f"temp={kwargs['temperature']} max_tokens={kwargs['max_tokens']} messages={len(messages)}"
         )
 
+        # Track LLM request metrics
+        model = kwargs["model"]
+        llm_requests_total.labels(model=model).inc()
+        llm_in_progress.labels(model=model).inc()
+
         try:
             response = await self._call_litellm(messages, **kwargs)
             latency_ms = (time.perf_counter() - start) * 1000
+
+            # Record LLM duration
+            llm_request_duration_seconds.labels(model=model).observe(latency_ms / 1000)
 
             msg = response.choices[0].message
             content = msg.content or ""
@@ -289,6 +305,12 @@ class LiteLLMRouter:
             # 记录 token 预算消耗
             self.token_budget.record_usage(agent_name, usage["total_tokens"])
 
+            # Record Prometheus token metrics
+            llm_tokens_total.labels(model=model, type="prompt").inc(usage["prompt_tokens"])
+            llm_tokens_total.labels(model=model, type="completion").inc(usage["completion_tokens"])
+            llm_tokens_total.labels(model=model, type="total").inc(usage["total_tokens"])
+            llm_in_progress.labels(model=model).dec()
+
             # 记录 metrics
             from app.core.observability.metrics import record_agent_call
             record_agent_call(
@@ -313,6 +335,11 @@ class LiteLLMRouter:
         except Exception as e:
             latency_ms = (time.perf_counter() - start) * 1000
             error_msg = str(e)
+
+            # Record LLM error metrics
+            llm_in_progress.labels(model=model).dec()
+            error_type = type(e).__name__
+            llm_errors_total.labels(model=model, error_type=error_type).inc()
 
             # Provide user-friendly error messages
             if "401" in error_msg or "Unauthorized" in error_msg or "invalid api key" in error_msg.lower():

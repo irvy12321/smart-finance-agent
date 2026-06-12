@@ -16,6 +16,25 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
+const mockAuthReturn = {
+  isAuthenticated: false,
+  isLoading: false,
+  user: null,
+  token: null,
+  refreshToken: null,
+  login: vi.fn(),
+  register: vi.fn(),
+  logout: vi.fn(),
+  refreshAccessToken: vi.fn(),
+  hasRole: vi.fn(),
+  hasAnyRole: vi.fn(),
+  isAdmin: vi.fn(),
+  isAnalyst: vi.fn(),
+  isViewer: vi.fn(),
+}
+
+const mockUser = { id: 1, username: 'test', email: 'test@test.com', role: 'viewer' as const, is_active: true, created_at: '' }
+
 describe('ProtectedRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -23,14 +42,8 @@ describe('ProtectedRoute', () => {
 
   it('shows loading state when isLoading is true', () => {
     vi.mocked(useAuth).mockReturnValue({
-      isAuthenticated: false,
+      ...mockAuthReturn,
       isLoading: true,
-      user: null,
-      token: null,
-      login: vi.fn(),
-      register: vi.fn(),
-      logout: vi.fn(),
-      refreshToken: vi.fn(),
     })
 
     render(
@@ -47,14 +60,8 @@ describe('ProtectedRoute', () => {
 
   it('redirects to login when not authenticated', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...mockAuthReturn,
       isAuthenticated: false,
-      isLoading: false,
-      user: null,
-      token: null,
-      login: vi.fn(),
-      register: vi.fn(),
-      logout: vi.fn(),
-      refreshToken: vi.fn(),
     })
 
     render(
@@ -72,14 +79,10 @@ describe('ProtectedRoute', () => {
 
   it('renders children when authenticated', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...mockAuthReturn,
       isAuthenticated: true,
-      isLoading: false,
-      user: { id: 1, username: 'test', email: 'test@test.com', is_active: true, created_at: '' },
+      user: mockUser,
       token: 'test-token',
-      login: vi.fn(),
-      register: vi.fn(),
-      logout: vi.fn(),
-      refreshToken: vi.fn(),
     })
 
     render(

@@ -37,7 +37,7 @@ describe('AuthContext', () => {
   })
 
   it('restores auth from localStorage on mount', async () => {
-    const mockUser = { id: 1, username: 'test', email: 'test@test.com', is_active: true, created_at: '' }
+    const mockUser = { id: 1, username: 'test', email: 'test@test.com', role: 'viewer', is_active: true, created_at: '' }
     localStorage.setItem('auth_token', 'stored-token')
     localStorage.setItem('auth_user', JSON.stringify(mockUser))
     vi.mocked(authApi.getMe).mockResolvedValueOnce(mockUser)
@@ -53,9 +53,10 @@ describe('AuthContext', () => {
   it('logs in successfully', async () => {
     const mockResponse = {
       access_token: 'new-token',
+      refresh_token: 'refresh-token',
       token_type: 'bearer',
       expires_in: 86400,
-      user: { id: 1, username: 'test', email: 'test@test.com', is_active: true, created_at: '' },
+      user: { id: 1, username: 'test', email: 'test@test.com', role: 'viewer', is_active: true, created_at: '' },
     }
     vi.mocked(authApi.login).mockResolvedValueOnce(mockResponse)
 
@@ -73,9 +74,10 @@ describe('AuthContext', () => {
   it('registers successfully', async () => {
     const mockResponse = {
       access_token: 'reg-token',
+      refresh_token: 'refresh-token',
       token_type: 'bearer',
       expires_in: 86400,
-      user: { id: 2, username: 'newuser', email: 'new@test.com', is_active: true, created_at: '' },
+      user: { id: 2, username: 'newuser', email: 'new@test.com', role: 'viewer', is_active: true, created_at: '' },
     }
     vi.mocked(authApi.register).mockResolvedValueOnce(mockResponse)
 

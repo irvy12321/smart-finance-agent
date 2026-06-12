@@ -19,10 +19,12 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_role
 from app.auth.models import UserResponse
+from app.auth.roles import Role
 from app.rag.chunker import chunk_text
 from app.rag.embed import create_embedder
+from app.rag.file_parser import FileParserError, get_supported_extensions, parse_file
 from app.rag.vector_store import VectorStore
 from app.utils.logger import get_logger
 
@@ -156,7 +158,7 @@ class RAGStatsResponse(BaseModel):
 # ============================================================
 
 @router.get("/documents", response_model=DocumentListResponse)
-async def list_documents(current_user: UserResponse = Depends(get_current_user)):
+async def list_documents(current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
     """获取所有文档列表"""
     documents = _load_documents()
     return DocumentListResponse(
@@ -170,13 +172,13 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     metadata: str | None = Form(default=None),
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
 ):
     """上传文档并触发向量化"""
     _ensure_dirs()
 
     # 验证文件类型
-    allowed_types = {".txt", ".md", ".json", ".csv", ".pdf"}
+    allowed_types = get_supported_extensions()
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in allowed_types:
         raise HTTPException(
@@ -185,11 +187,15 @@ async def upload_document(
         )
 
     # 读取文件内容
+    content = await file.read()
+    
+    # 解析文件内容
     try:
-        content = await file.read()
-        text_content = content.decode("utf-8")
-    except UnicodeDecodeError as e:
-        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text") from e
+        text_content = parse_file(content, file.filename)
+        logger.info(f"File parsed successfully: {file.filename} ({len(text_content)} chars)")
+    except FileParserError as e:
+        logger.error(f"File parsing failed: {file.filename} - {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     # 生成文档 ID
     doc_id = str(uuid.uuid4())[:8]
@@ -198,8 +204,15 @@ async def upload_document(
     upload_dir = RAG_DATA_DIR / "uploads"
     upload_dir.mkdir(exist_ok=True)
     file_path = upload_dir / f"{doc_id}{file_ext}"
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(text_content)
+    
+    # 根据文件类型选择写入模式
+    if file_ext in {".txt", ".md", ".csv", ".json"}:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(text_content)
+    else:
+        # 二进制文件 (PDF, DOCX) 保存原始内容
+        with open(file_path, "wb") as f:
+            f.write(content)
 
     # 解析元数据
     doc_metadata = {}
@@ -284,7 +297,7 @@ def _update_document_status(doc_id: str, status: str, chunk_count: int):
 
 
 @router.get("/documents/{doc_id}", response_model=DocumentInfo)
-async def get_document(doc_id: str, current_user: UserResponse = Depends(get_current_user)):
+async def get_document(doc_id: str, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
     """获取单个文档信息"""
     documents = _load_documents()
     for doc in documents:
@@ -294,7 +307,7 @@ async def get_document(doc_id: str, current_user: UserResponse = Depends(get_cur
 
 
 @router.delete("/documents/{doc_id}", response_model=DocumentDeleteResponse)
-async def delete_document(doc_id: str, current_user: UserResponse = Depends(get_current_user)):
+async def delete_document(doc_id: str, current_user: UserResponse = Depends(require_role(Role.ADMIN))):
     """删除文档及其向量数据"""
     documents = _load_documents()
     doc_to_delete = None
@@ -354,7 +367,7 @@ async def delete_document(doc_id: str, current_user: UserResponse = Depends(get_
 
 
 @router.post("/search", response_model=RAGSearchResponse)
-async def search_documents(request: RAGSearchRequest, current_user: UserResponse = Depends(get_current_user)):
+async def search_documents(request: RAGSearchRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
     """搜索相关文档片段"""
     try:
         embedder = _get_embedder()
@@ -384,7 +397,7 @@ async def search_documents(request: RAGSearchRequest, current_user: UserResponse
 
 
 @router.get("/stats", response_model=RAGStatsResponse)
-async def get_rag_stats(current_user: UserResponse = Depends(get_current_user)):
+async def get_rag_stats(current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
     """获取 RAG 系统统计信息"""
     documents = _load_documents()
     vector_store = _get_vector_store()
@@ -400,7 +413,7 @@ async def get_rag_stats(current_user: UserResponse = Depends(get_current_user)):
 
 
 @router.post("/reindex")
-async def reindex_documents(background_tasks: BackgroundTasks, current_user: UserResponse = Depends(get_current_user)):
+async def reindex_documents(background_tasks: BackgroundTasks, current_user: UserResponse = Depends(require_role(Role.ADMIN))):
     """重新索引所有文档"""
     documents = _load_documents()
     if not documents:

@@ -6,9 +6,14 @@ from datetime import datetime, timedelta
 import aiohttp
 
 from app.tools.base_tool import BaseTool, ToolResult
+from app.tools.cache import get_cache, make_cache_key
 from app.utils.logger import get_logger
 
 logger = get_logger("stock_price_tool")
+
+# 缓存 TTL 配置
+STOCK_PRICE_CACHE_TTL = 60  # 股票价格缓存 60 秒
+STOCK_HISTORY_CACHE_TTL = 300  # 历史数据缓存 300 秒
 
 # 模拟股票数据（生产环境应接入真实API）
 MOCK_STOCK_DATA = {
@@ -98,18 +103,32 @@ class StockPriceTool(BaseTool):
 
     def __init__(self, api_key: str = ""):
         self.api_key = api_key
+        self._cache = get_cache()
 
     async def execute(self, **kwargs) -> ToolResult:
         symbol = kwargs.get("symbol", "").upper()
         if not symbol:
             return ToolResult(success=False, error="No stock symbol provided", tool_name=self.name)
 
+        # 检查缓存
+        cache_key = f"stock_price:{symbol}"
+        hit, cached_result = self._cache.get(cache_key)
+        if hit:
+            logger.debug(f"Stock price cache hit: {symbol}")
+            return cached_result
+
         try:
             # 尝试使用真实API（如果配置了API key）
             if self.api_key:
-                return await self._fetch_real_price(symbol)
+                result = await self._fetch_real_price(symbol)
             else:
-                return await self._get_mock_price(symbol)
+                result = await self._get_mock_price(symbol)
+            
+            # 存入缓存
+            if result.success:
+                self._cache.set(cache_key, result, ttl=STOCK_PRICE_CACHE_TTL)
+            
+            return result
         except Exception as e:
             logger.error(f"Stock price query failed for {symbol}: {e}")
             return await self._get_mock_price(symbol)

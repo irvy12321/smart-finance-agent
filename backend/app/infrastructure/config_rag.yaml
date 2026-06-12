@@ -5,10 +5,10 @@ embedding_dim: 384
 top_k: 5
 
 # Embedding 配置
-# mode: "dev" = hash mock (快速, 无语义), "prod" = bge-m3 (真实语义)
+# mode: "prod" = hash mock (快速, 无语义), "prod" = bge-m3 (真实语义)
 embedding:
-  mode: "dev"
-  model_name: "BAAI/bge-m3"
+  mode: "prod"
+  model_name: "all-MiniLM-L6-v2"
   dim: 1024
   batch_size: 32
   device: "cpu"

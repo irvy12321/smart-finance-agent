@@ -24,7 +24,10 @@
     "actions": "操作",
     "status": "状态",
     "date": "日期",
-    "id": "ID"
+    "id": "ID",
+    "comingSoon": "即将上线",
+    "justNow": "刚刚",
+    "ago": "前"
   },
   "auth": {
     "login": "登录",
@@ -64,7 +67,10 @@
     "dashboard": "仪表盘",
     "research": "研究",
     "chat": "聊天",
-    "rag": "知识库",
+    "knowledge": "知识库",
+    "rag": "RAG 管理",
+    "portfolio": "投资组合",
+    "workflow": "工作流",
     "system": "系统",
     "navigation": "导航"
   },
@@ -92,7 +98,27 @@
     "aiChatDesc": "与金融助手对话",
     "viewReport": "查看报告",
     "noTasksYet": "暂无任务",
-    "createTaskToStart": "创建一个新的研究任务开始使用"
+    "createTaskToStart": "创建一个新的研究任务开始使用",
+    "aiInsights": "AI 洞察",
+    "aiInsight": "市场情绪",
+    "aiInsightContent": "市场情绪谨慎乐观，科技板块表现强劲。明天的美联储会议可能带来波动。",
+    "keyEvents": "关键事件",
+    "event1": "美联储FOMC会议 - 明天下午2:00",
+    "event2": "英伟达财报 - 下周四",
+    "event3": "CPI数据发布 - 周五上午8:30",
+    "riskAlerts": "风险提示",
+    "alert1": "VIX指数高于18 - 预期波动性增加",
+    "alert2": "科技板块RSI接近70 - 接近超买",
+    "updatedAgo": "5分钟前更新",
+    "riskMetrics": "风险指标",
+    "portfolioBeta": "投资组合Beta",
+    "betaDesc": "高于市场波动性",
+    "sharpeRatio": "夏普比率",
+    "sharpeDesc": "良好的风险调整收益",
+    "maxDrawdown": "最大回撤",
+    "drawdownDesc": "在可接受范围内",
+    "var95": "VaR (95%)",
+    "varDesc": "每日风险价值"
   },
   "research": {
     "title": "研究",
@@ -233,13 +259,14 @@
   "rag": {
     "title": "知识库",
     "subtitle": "管理 RAG 研究的文档",
+    "description": "此功能正在开发中。您将能够上传、管理和搜索金融文档和研究资料。",
     "totalDocuments": "文档数",
     "totalChunks": "文本块",
     "vectorStore": "向量存储",
     "embeddingMode": "嵌入模式",
     "uploadDocument": "上传文档",
     "dragDrop": "拖放文件到此处",
-    "supportedTypes": "支持格式：.txt、.md、.json、.csv",
+    "supportedTypes": "支持格式：.txt、.md、.json、.csv、.pdf、.docx",
     "browseFiles": "浏览文件",
     "uploading": "上传处理中...",
     "uploadSuccess": "文档上传成功",
@@ -260,5 +287,10 @@
     "deleteSuccess": "文档已删除",
     "reindex": "重新索引",
     "reindexStarted": "后台重新索引已开始"
+  },
+  "portfolio": {
+    "subtitle": "跟踪和管理您的投资组合",
+    "comingSoon": "投资组合 - 即将上线",
+    "description": "此功能正在开发中。您将能够跟踪持仓、分析表现和管理投资组合。"
   }
 }

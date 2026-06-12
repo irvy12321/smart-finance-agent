@@ -6,9 +6,13 @@ from bs4 import BeautifulSoup
 
 from app.infrastructure.config import get_crawler_config
 from app.tools.base_tool import BaseTool, ToolResult
+from app.tools.cache import get_cache
 from app.utils.logger import get_logger
 
 logger = get_logger("crawler_tool")
+
+# 缓存 TTL 配置
+CRAWLER_CACHE_TTL = 300  # 爬虫缓存 300 秒
 
 # Blocked IP ranges (SSRF protection)
 _BLOCKED_HOSTS = {
@@ -62,6 +66,7 @@ class CrawlerTool(BaseTool):
 
     def __init__(self):
         self.config = get_crawler_config()
+        self._cache = get_cache()
 
     async def execute(self, **kwargs) -> ToolResult:
         url = kwargs.get("url", "")
@@ -74,6 +79,13 @@ class CrawlerTool(BaseTool):
             logger.warning(f"SSRF blocked for URL {url}: {ssrf_error}")
             return ToolResult(success=False, error=ssrf_error, tool_name=self.name)
 
+        # 检查缓存
+        cache_key = f"crawler:{url}"
+        hit, cached_result = self._cache.get(cache_key)
+        if hit:
+            logger.debug(f"Crawler cache hit: {url}")
+            return cached_result
+
         try:
             content = await self._fetch(url)
             cleaned = self._clean_text(content)
@@ -81,11 +93,16 @@ class CrawlerTool(BaseTool):
                 cleaned = cleaned[: self.config.max_content_length] + "..."
 
             logger.info(f"Fetched {len(cleaned)} chars from {url}")
-            return ToolResult(
+            result = ToolResult(
                 success=True,
                 data={"url": url, "content": cleaned, "length": len(cleaned)},
                 tool_name=self.name,
             )
+            
+            # 存入缓存
+            self._cache.set(cache_key, result, ttl=CRAWLER_CACHE_TTL)
+            
+            return result
         except aiohttp.ClientResponseError as e:
             if e.status == 404:
                 logger.warning(f"URL not found (404): {url} - returning fallback message")

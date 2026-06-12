@@ -86,7 +86,7 @@ describe('useTask', () => {
       status: 'pending',
       message: 'Created',
     })
-    vi.mocked(taskApi.run).mockResolvedValueOnce({ message: 'Started', task_id: 'test-123' })
+    vi.mocked(taskApi.run).mockResolvedValueOnce({ message: 'Started' })
     vi.mocked(taskApi.getStatus).mockResolvedValue({
       task_id: 'test-123',
       status: 'running',

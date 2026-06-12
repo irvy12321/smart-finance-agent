@@ -57,6 +57,75 @@ npm run dev
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
+## 用户管理
+
+### 默认账户
+
+系统首次启动时会自动创建默认管理员账户：
+
+| 用户名 | 密码 | 角色 |
+|--------|------|------|
+| admin | admin123 | admin |
+
+### 角色权限
+
+| 角色 | 说明 | 权限 |
+|------|------|------|
+| **admin** | 管理员 | 全部功能（用户管理、系统配置、删除文档） |
+| **analyst** | 分析师 | 研究、聊天、工具、知识库（不含用户管理） |
+| **viewer** | 查看者 | 仅查看报告和系统状态 |
+
+### 创建用户
+
+#### 方式一：通过 API（推荐）
+
+```bash
+# 1. 管理员登录获取 token
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}'
+
+# 2. 创建指定角色用户
+curl -X POST http://localhost:8000/api/auth/admin/create-user \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "analyst1", "email": "analyst1@test.com", "password": "Analyst@123", "role": "analyst"}'
+
+# 3. 查看所有用户
+curl http://localhost:8000/api/auth/admin/users \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+#### 方式二：通过数据库
+
+```bash
+cd backend
+python -c "
+import sqlite3, bcrypt
+from datetime import datetime
+conn = sqlite3.connect('data/chat.db')
+now = datetime.now().isoformat()
+hashed = bcrypt.hashpw('password123'.encode(), bcrypt.gensalt()).decode()
+conn.execute('INSERT INTO users (username, email, hashed_password, is_active, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ('analyst1', 'analyst1@test.com', hashed, True, 'analyst', now, now))
+conn.commit()
+conn.close()
+print('Created!')
+"
+```
+
+### ECS 部署后创建用户
+
+部署到 ECS 后，通过 API 创建用户：
+
+```bash
+# 替换为你的域名
+curl -X POST https://your-domain.com/api/auth/admin/create-user \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "analyst1", "email": "analyst1@test.com", "password": "Analyst@123", "role": "analyst"}'
+```
+
 ## 项目结构
 
 ```

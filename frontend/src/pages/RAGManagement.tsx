@@ -14,7 +14,24 @@ import {
   HardDrive,
   Brain,
 } from 'lucide-react'
-import { ragApi, DocumentInfo, RAGStatsResponse } from '../services/api'
+import { ragApi } from '../services/api'
+
+interface DocumentInfo {
+  id: string
+  filename: string
+  status: string
+  chunks: number
+  chunk_count?: number
+  file_size?: number
+  created_at: string
+}
+
+interface RAGStatsResponse {
+  total_documents: number
+  total_chunks: number
+  vector_store_size?: number
+  embedding_mode?: string
+}
 import { useToast } from '../components/ui/ToastContext'
 
 export default function RAGManagement() {
@@ -53,7 +70,7 @@ export default function RAGManagement() {
     if (!files || files.length === 0) return
 
     const file = files[0]
-    const allowedTypes = ['.txt', '.md', '.json', '.csv']
+    const allowedTypes = ['.txt', '.md', '.json', '.csv', '.pdf', '.docx']
     const fileExt = '.' + file.name.split('.').pop()?.toLowerCase()
 
     if (!allowedTypes.includes(fileExt)) {
@@ -349,9 +366,9 @@ export default function RAGManagement() {
                   <div>
                     <p className="text-sm font-medium text-primary-200">{doc.filename}</p>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-primary-400">{formatFileSize(doc.file_size)}</span>
+                      <span className="text-xs text-primary-400">{formatFileSize(doc.file_size || 0)}</span>
                       <span className="text-xs text-primary-400">•</span>
-                      <span className="text-xs text-primary-400">{doc.chunk_count} {t('rag.chunks')}</span>
+                      <span className="text-xs text-primary-400">{doc.chunk_count || doc.chunks} {t('rag.chunks')}</span>
                       <span className="text-xs text-primary-400">•</span>
                       <span className="text-xs text-primary-400">
                         {new Date(doc.created_at).toLocaleDateString()}

@@ -5,11 +5,12 @@ import { Loader2 } from 'lucide-react'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
+  roles?: string[]
 }
 
-export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, roles }: ProtectedRouteProps) {
   const { t } = useTranslation()
-  const { isAuthenticated, isLoading } = useAuth()
+  const { isAuthenticated, isLoading, user } = useAuth()
   const location = useLocation()
 
   if (isLoading) {
@@ -25,6 +26,13 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  // Role-based access control
+  if (roles && roles.length > 0 && user) {
+    if (!roles.includes(user.role)) {
+      return <Navigate to="/" replace />
+    }
   }
 
   return <>{children}</>

@@ -3,6 +3,7 @@ SQLite-based persistent storage for chat conversations and tasks.
 Replaces the in-memory dict with a real database.
 """
 import json
+import os
 import sqlite3
 import tempfile
 from datetime import datetime
@@ -98,11 +99,42 @@ def init_db() -> None:
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             );
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+
+            CREATE TABLE IF NOT EXISTS refresh_tokens (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER NOT NULL,
+                token_hash      TEXT NOT NULL UNIQUE,
+                expires_at      TEXT NOT NULL,
+                revoked         BOOLEAN DEFAULT 0,
+                created_at      TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+            CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
+            CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
+
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                username        TEXT NOT NULL,
+                failed_count    INTEGER DEFAULT 0,
+                last_failed_at  TEXT DEFAULT NULL,
+                locked_until    TEXT DEFAULT NULL,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL,
+                UNIQUE(username)
+            );
+            CREATE INDEX IF NOT EXISTS idx_login_attempts_username ON login_attempts(username);
         """)
 
         # Migrate existing tables: add user_id column if missing
         _migrate_add_column(conn, "conversations", "user_id", "INTEGER DEFAULT NULL")
         _migrate_add_column(conn, "tasks", "user_id", "INTEGER DEFAULT NULL")
+        
+        # Migrate users table: add role column if missing
+        _migrate_add_column(conn, "users", "role", "TEXT NOT NULL DEFAULT 'viewer'")
+
+        # Create default admin user if not exists
+        _create_default_admin(conn)
 
         conn.commit()
     finally:
@@ -118,6 +150,28 @@ def _migrate_add_column(conn: sqlite3.Connection, table: str, column: str, col_t
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
     except Exception:
         pass
+
+
+def _create_default_admin(conn: sqlite3.Connection) -> None:
+    """Create default admin user if not exists"""
+    import bcrypt
+    
+    # Check if admin user exists
+    cursor = conn.execute("SELECT id FROM users WHERE username = 'admin'")
+    if cursor.fetchone():
+        return
+    
+    # Create default admin user
+    now = datetime.now().isoformat()
+    default_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
+    hashed_password = bcrypt.hashpw(default_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    conn.execute(
+        """INSERT INTO users (username, email, hashed_password, is_active, role, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        ("admin", "admin@sfa.local", hashed_password, True, "admin", now, now)
+    )
+    print(f"[INFO] Default admin user created (username: admin, password: {default_password})")
 
 
 # Initialize on import
