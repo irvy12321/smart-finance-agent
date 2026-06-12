@@ -30,9 +30,15 @@ from slowapi.util import get_remote_address
 
 from app.api import api_router
 from app.core.startup_check import check_jwt_secret
-from app.monitoring.middleware import PrometheusMiddleware
-from app.monitoring.routes import metrics_endpoint
 from app.utils.logger import get_logger
+
+# Monitoring (optional - requires prometheus_client)
+try:
+    from app.monitoring.middleware import PrometheusMiddleware
+    from app.monitoring.routes import metrics_endpoint
+    MONITORING_ENABLED = True
+except ImportError:
+    MONITORING_ENABLED = False
 
 logger = get_logger("fastapi_backend")
 
@@ -151,11 +157,15 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Failed to activate dashboard: {e}")
 
     # Set application info for Prometheus
-    from app.monitoring.prometheus import app_info
-    app_info.info({
-        "version": "1.0.0",
-        "environment": os.getenv("ENVIRONMENT", "development"),
-    })
+    if MONITORING_ENABLED:
+        try:
+            from app.monitoring.prometheus import app_info
+            app_info.info({
+                "version": "1.0.0",
+                "environment": os.getenv("ENVIRONMENT", "development"),
+            })
+        except Exception as e:
+            logger.warning(f"Failed to init Prometheus metrics: {e}")
 
     from app.core.orchestrator import Orchestrator
     orchestrator = Orchestrator(use_router=True)
@@ -203,7 +213,11 @@ app.add_middleware(
 )
 
 # Add Prometheus metrics middleware
-app.add_middleware(PrometheusMiddleware)
+if MONITORING_ENABLED:
+    try:
+        app.add_middleware(PrometheusMiddleware)
+    except Exception as e:
+        logger.warning(f"Failed to add Prometheus middleware: {e}")
 
 
 @app.exception_handler(Exception)
@@ -256,7 +270,11 @@ async def ping():
 
 
 # Prometheus metrics endpoint
-app.add_route("/metrics", metrics_endpoint)
+if MONITORING_ENABLED:
+    try:
+        app.add_route("/metrics", metrics_endpoint)
+    except Exception as e:
+        logger.warning(f"Failed to add metrics endpoint: {e}")
 
 
 if __name__ == "__main__":

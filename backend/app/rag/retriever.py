@@ -1,7 +1,4 @@
-import time
-
 from app.infrastructure.config import get_rag_config
-from app.monitoring.collectors import RAGMetricsCollector
 from app.rag.chunker import chunk_text
 from app.rag.embed import BaseEmbedder, create_embedder
 from app.rag.vector_store import VectorStore
@@ -125,9 +122,6 @@ class Retriever:
     def retrieve(self, query: str, top_k: int | None = None) -> list[dict]:
         k = top_k or self.top_k
 
-        # Track retrieval metrics
-        start = time.perf_counter()
-
         # 先尝试向量搜索
         vector_results = []
         if self.store.size > 0:
@@ -159,14 +153,6 @@ class Retriever:
         # 按分数排序
         results.sort(key=lambda x: x.get("score", 0), reverse=True)
         results = results[:k]
-
-        # Record RAG metrics
-        duration = time.perf_counter() - start
-        from app.monitoring.prometheus import rag_retrieve_duration_seconds, rag_hits_total, rag_documents_total
-        rag_retrieve_duration_seconds.observe(duration)
-        if results:
-            rag_hits_total.inc(len(results))
-        rag_documents_total.set(self.store.size)
 
         logger.info(f"Retrieved {len(results)} results for query: {query[:50]}...")
         return results
