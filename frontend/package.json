@@ -43,7 +43,7 @@
     "@vitest/coverage-v8": "^4.1.8",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.53.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.4.4",
     "express": "^5.2.1",
     "http-proxy-middleware": "^4.0.0",
