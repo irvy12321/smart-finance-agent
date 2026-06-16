@@ -3,12 +3,36 @@ import pytest
 from app.tools.base_tool import MOCK_WARNING
 from app.tools.financial_report_tool import FinancialReportTool
 from app.tools.news_summary_tool import NewsSummaryTool
-from app.tools.stock_price_tool import StockHistoryTool, StockPriceTool
+from app.tools.stock_price_tool import (
+    RateLimitError,
+    StockHistoryTool,
+    StockPriceTool,
+    _parse_percent,
+    _raise_if_rate_limited,
+)
+
+
+def test_parse_percent_handles_alpha_vantage_string():
+    # Alpha Vantage returns change percent as e.g. "-0.4116%" (a string).
+    assert _parse_percent("-0.4116%") == pytest.approx(-0.4116)
+    assert _parse_percent("1.25%") == pytest.approx(1.25)
+    assert _parse_percent(0.69) == pytest.approx(0.69)
+    assert _parse_percent(None) == 0.0
+    assert _parse_percent("n/a") == 0.0
+
+
+def test_raise_if_rate_limited_detects_note():
+    with pytest.raises(RateLimitError):
+        _raise_if_rate_limited({"Note": "Thank you... 25 requests per day"})
+    with pytest.raises(RateLimitError):
+        _raise_if_rate_limited({"Information": "rate limit reached"})
+    # A normal payload must not raise.
+    _raise_if_rate_limited({"Global Quote": {"05. price": "1"}})
 
 
 @pytest.mark.asyncio
 async def test_stock_price_no_key_no_mock_fails(monkeypatch):
-    monkeypatch.delenv("ALLOW_MOCK_DATA", raising=False)
+    monkeypatch.setenv("ALLOW_MOCK_DATA", "false")
     res = await StockPriceTool(api_key="").execute(symbol="AAPL")
     assert res.success is False
     assert res.is_mock is False
@@ -28,7 +52,7 @@ async def test_stock_price_no_key_with_mock_is_labelled(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stock_history_no_key_no_mock_fails(monkeypatch):
-    monkeypatch.delenv("ALLOW_MOCK_DATA", raising=False)
+    monkeypatch.setenv("ALLOW_MOCK_DATA", "false")
     res = await StockHistoryTool(api_key="").execute(symbol="AAPL", period="1m")
     assert res.success is False
     assert res.is_mock is False
@@ -36,7 +60,7 @@ async def test_stock_history_no_key_no_mock_fails(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_financial_no_key_no_mock_fails(monkeypatch):
-    monkeypatch.delenv("ALLOW_MOCK_DATA", raising=False)
+    monkeypatch.setenv("ALLOW_MOCK_DATA", "false")
     res = await FinancialReportTool(api_key="").execute(symbol="AAPL")
     assert res.success is False
     assert "ALLOW_MOCK_DATA" in res.error
@@ -57,7 +81,7 @@ async def test_financial_mock_revenue_not_duplicated(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_news_no_key_no_mock_fails(monkeypatch):
-    monkeypatch.delenv("ALLOW_MOCK_DATA", raising=False)
+    monkeypatch.setenv("ALLOW_MOCK_DATA", "false")
     res = await NewsSummaryTool(api_key="").execute(query="Apple")
     assert res.success is False
     assert "ALLOW_MOCK_DATA" in res.error

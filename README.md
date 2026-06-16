@@ -190,7 +190,11 @@ POST /api/research/{symbol}        # 例: POST /api/research/AAPL (需 Admin/Ana
 }
 ```
 
-设计要点：数据层显式标注 `source/is_mock`（无 key 或 API 失败时**不静默回退**，除非显式设 `ALLOW_MOCK_DATA=true`）；数值只由计算层产生，LLM 仅做解释、禁止编造数字；报告附数据可信度与统一免责声明。
+设计要点：数据层显式标注 `source/is_mock`；数值只由计算层产生，LLM 仅做解释、禁止编造数字；报告附数据可信度与统一免责声明。
+
+数据兜底策略（`ALLOW_MOCK_DATA`，默认 `true`）：
+- **默认（`true`）**：无 key / API 失败 / 免费额度用尽时，自动回退到**带显式标记的模拟数据**（`is_mock=true`、`source="mock"`、`SIMULATED DATA` 警告），并相应降低 `data_confidence`。这样开箱即用、演示永远有数据，且绝不伪装成真实数据。
+- **严格模式（`ALLOW_MOCK_DATA=false`）**：取不到真实数据时直接显式报错，不回退模拟数据。
 
 ### 任务管理
 

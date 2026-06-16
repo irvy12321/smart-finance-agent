@@ -17,6 +17,28 @@ logger = get_logger("stock_price_tool")
 STOCK_PRICE_CACHE_TTL = 60  # 股票价格缓存 60 秒
 STOCK_HISTORY_CACHE_TTL = 300  # 历史数据缓存 300 秒
 
+
+class RateLimitError(RuntimeError):
+    """Raised when the upstream data provider reports a rate/quota limit."""
+
+
+def _parse_percent(value: object) -> float:
+    """Parse Alpha Vantage percent strings like '-0.4116%' into a float."""
+    if value is None:
+        return 0.0
+    try:
+        return float(str(value).strip().rstrip("%") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _raise_if_rate_limited(data: dict) -> None:
+    """Alpha Vantage signals throttling via 'Note'/'Information' instead of data."""
+    message = data.get("Note") or data.get("Information")
+    if message:
+        raise RateLimitError(message)
+
+
 # 模拟股票数据（生产环境应接入真实API）
 MOCK_STOCK_DATA = {
     "AAPL": {
@@ -167,6 +189,9 @@ class StockPriceTool(BaseTool):
                 session.get(url, params=params, proxy=proxy) as resp,
             ):
                 data = await resp.json()
+
+                _raise_if_rate_limited(data)
+
                 quote = data.get("Global Quote", {})
 
                 if not quote:
@@ -176,7 +201,7 @@ class StockPriceTool(BaseTool):
                     "symbol": symbol,
                     "price": float(quote.get("05. price", 0)),
                     "change": float(quote.get("09. change", 0)),
-                    "change_percent": quote.get("10. change percent", "0%"),
+                    "change_percent": _parse_percent(quote.get("10. change percent")),
                     "volume": int(quote.get("06. volume", 0)),
                     "latest_trading_day": quote.get("07. latest trading day", ""),
                     "previous_close": float(quote.get("08. previous close", 0)),
@@ -290,6 +315,9 @@ class StockHistoryTool(BaseTool):
             session.get(url, params=params) as resp,
         ):
             data = await resp.json()
+
+            _raise_if_rate_limited(data)
+
             time_series = data.get("Time Series (Daily)", {})
 
             if not time_series:
