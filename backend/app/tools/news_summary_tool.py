@@ -5,7 +5,7 @@ from datetime import datetime
 
 import aiohttp
 
-from app.tools.base_tool import BaseTool, ToolResult
+from app.tools.base_tool import MOCK_WARNING, BaseTool, ToolResult, mock_enabled
 from app.utils.logger import get_logger
 
 logger = get_logger("news_summary_tool")
@@ -160,15 +160,25 @@ class NewsSummaryTool(BaseTool):
         if not query:
             return ToolResult(success=False, error="No query provided", tool_name=self.name)
 
+        if not self.api_key:
+            return self._unavailable(query, max_results, "NEWS_API_KEY not configured")
+
         try:
-            # 尝试使用真实API
-            if self.api_key:
-                return await self._search_real_news(query, max_results)
-            else:
-                return await self._get_mock_news(query, max_results)
+            return await self._search_real_news(query, max_results)
         except Exception as e:
             logger.error(f"News search failed for {query}: {e}")
-            return await self._get_mock_news(query, max_results)
+            return self._unavailable(query, max_results, f"real data unavailable: {e}")
+
+    def _unavailable(self, query: str, max_results: int, reason: str) -> ToolResult:
+        if not mock_enabled():
+            return ToolResult(
+                success=False,
+                error=f"Real news unavailable for '{query}' ({reason}). "
+                f"Set ALLOW_MOCK_DATA=true to allow simulated data.",
+                tool_name=self.name,
+                source="newsapi",
+            )
+        return self._mock_news_sync(query, max_results)
 
     async def _search_real_news(self, query: str, max_results: int) -> ToolResult:
         """从真实API搜索新闻（使用NewsAPI）"""
@@ -193,9 +203,8 @@ class NewsSummaryTool(BaseTool):
                     
                     if data.get("status") != "ok":
                         error_msg = data.get("message", "Unknown error")
-                        logger.warning(f"NewsAPI error: {error_msg}")
-                        return await self._get_mock_news(query, max_results)
-                    
+                        raise RuntimeError(f"NewsAPI error: {error_msg}")
+
                     articles = data.get("articles", [])
 
                 results = []
@@ -221,13 +230,14 @@ class NewsSummaryTool(BaseTool):
                         "timestamp": datetime.now().isoformat(),
                     },
                     tool_name=self.name,
+                    source="newsapi", is_mock=False,
                 )
         except Exception as e:
             logger.error(f"News API request failed: {e}")
-            return await self._get_mock_news(query, max_results)
+            raise
 
-    async def _get_mock_news(self, query: str, max_results: int) -> ToolResult:
-        """获取模拟新闻数据"""
+    def _mock_news_sync(self, query: str, max_results: int) -> ToolResult:
+        """Clearly-labelled simulated news (only when ALLOW_MOCK_DATA=true)."""
         # 查找匹配的关键词
         results = []
         for keyword, articles in MOCK_NEWS_DATA.items():
@@ -261,10 +271,12 @@ class NewsSummaryTool(BaseTool):
                 "summary": summary,
                 "total_results": len(results),
                 "timestamp": datetime.now().isoformat(),
-                "source": "mock_data",
-                "note": "Simulated data. Configure NEWS_API_KEY for real results.",
+                "source": "mock",
+                "is_mock": True,
+                "warning": MOCK_WARNING,
             },
             tool_name=self.name,
+            source="mock", is_mock=True, warning=MOCK_WARNING,
         )
 
     def _analyze_sentiment(self, text: str) -> str:
@@ -321,7 +333,7 @@ class NewsSummaryTool(BaseTool):
         """降级执行"""
         query = kwargs.get("query", "unknown")
         logger.warning(f"News summary fallback for: {query}")
-        return await self._get_mock_news(query, 3)
+        return self._unavailable(query, 3, "primary execution failed")
 
 
 class NewsAnalysisTool(BaseTool):
@@ -355,6 +367,9 @@ class NewsAnalysisTool(BaseTool):
                     "timestamp": datetime.now().isoformat(),
                 },
                 tool_name=self.name,
+                source=news_result.source,
+                is_mock=news_result.is_mock,
+                warning=news_result.warning,
             )
         except Exception as e:
             logger.error(f"News analysis failed for {query}: {e}")

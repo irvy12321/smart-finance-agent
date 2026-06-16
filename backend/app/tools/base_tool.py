@@ -1,6 +1,18 @@
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
+
+MOCK_WARNING = "SIMULATED DATA - NOT FOR INVESTMENT"
+
+
+def mock_enabled() -> bool:
+    """Whether tools may serve simulated data as a fallback.
+
+    Defaults to False: real data sources that are unavailable must surface an
+    explicit error rather than silently returning fabricated numbers.
+    """
+    return os.getenv("ALLOW_MOCK_DATA", "false").lower() in ("1", "true", "yes")
 
 
 @dataclass
@@ -9,10 +21,14 @@ class ToolResult:
     data: Any = None
     error: str = ""
     tool_name: str = ""
+    source: str = "unknown"
+    is_mock: bool = False
+    warning: str = ""
 
     def __str__(self):
         if self.success:
-            return f"[{self.tool_name}] OK: {str(self.data)[:200]}"
+            tag = " [MOCK]" if self.is_mock else ""
+            return f"[{self.tool_name}]{tag} OK: {str(self.data)[:200]}"
         return f"[{self.tool_name}] ERROR: {self.error}"
 
 
