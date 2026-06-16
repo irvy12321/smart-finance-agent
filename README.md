@@ -493,9 +493,11 @@ Dependabot 会每周一自动检查并创建依赖更新 PR。
 
 4. **首次创建管理员后**：用上面「ECS 部署后创建用户」的接口添加其它账号，并尽快修改 admin 口令。
 
-### 自动部署到 ECS（CI/CD：push → SSH → ECS）
+### 自动部署到 ECS（CI/CD：push → SSH 送源码 → ECS 构建）
 
-仓库已内置自动部署流水线（`.github/workflows/ci.yml` 的 `deploy` 任务）：**push 到 `master` 且测试全绿后**，自动「SSH 到 ECS → 拉取最新代码 → `docker compose -f docker-compose.prod.yml up -d --build` 重建并重启」。
+仓库已内置自动部署流水线（`.github/workflows/ci.yml` 的 `deploy` 任务）：**push 到 `master` 且测试全绿后**，自动「在 runner 上打包源码 → SSH 把源码传到 ECS → 在 ECS 上 `docker compose -f docker-compose.prod.yml build` 并重启」。
+
+> 为什么不在 ECS 上 `git pull`？国内阿里云 ECS 通常无法稳定连接 github.com（443 超时），所以这里改为由 GitHub runner 把源码经 SSH 直接送到 ECS（ECS 访问 PyPI/npm/DockerHub 正常，构建不受影响）。构建在 ECS 上以 `nohup` 后台运行，流水线轮询其结果，对构建期间 sshd 短暂卡顿有容错。
 
 该任务默认**休眠**，只有在仓库变量 `DEPLOY_ENABLED=true` 时才运行（没配好凭据前不会让 CI 变红）。启用步骤：
 
@@ -511,9 +513,9 @@ Dependabot 会每周一自动检查并创建依赖更新 PR。
 
 2. **配置开关变量**：同页 → Variables 标签 → New repository variable → `DEPLOY_ENABLED` = `true`。
 
-3. **ECS 前置条件**（一次性）：已装 Docker + Docker Compose v2 + git；已 `git clone` 本仓库到 `ECS_PROJECT_DIR`；该目录下存在 `backend/.env`（生产密钥，含 `CORS_ORIGINS` 等）。
+3. **ECS 前置条件**（一次性）：已装 Docker + Docker Compose v2；`ECS_PROJECT_DIR` 目录存在且其中有 `docker-compose.prod.yml`（首次可手动 `git clone` 一次，之后流水线会把最新源码覆盖进来，无需 ECS 联网 GitHub）；该目录下存在 `backend/.env`（生产密钥，含 `CORS_ORIGINS` 等，部署不会覆盖它）。
 
-配好后，下一次 push 到 `master`（测试通过）即自动部署。部署用 `git reset --hard origin/master` 保证 ECS 与仓库一致，再就地构建镜像并重启。
+配好后，下一次 push 到 `master`（测试通过）即自动部署：runner 把源码 `tar` 后经 SSH 解包到 `ECS_PROJECT_DIR`（保留 `backend/.env`），再就地 `docker compose build` 并重启。
 
 ### Docker 部署（本地）
 
