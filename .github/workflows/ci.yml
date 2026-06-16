@@ -303,8 +303,11 @@ jobs:
 
   # ============================================================
   # Auto-deploy to ECS
-  # SSH to the ECS host, pull the latest code, and rebuild + restart
-  # the production stack with docker-compose.prod.yml.
+  # The ECS host cannot reach github.com (common in mainland-China
+  # Aliyun networks), so instead of pulling on the host we SHIP the
+  # source from the runner over SSH, then build + restart on the host.
+  # The build runs detached (nohup) and a polling step waits for it,
+  # which is resilient to the host's sshd briefly stalling under load.
   #
   # Dormant by default: only runs on push to master AND when the repo
   # variable DEPLOY_ENABLED == 'true'. This keeps CI green until all
@@ -317,23 +320,62 @@ jobs:
     runs-on: ubuntu-latest
     needs: [frontend-lint, frontend-test, frontend-build, backend-lint, backend-test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.DEPLOY_ENABLED == 'true'
+    env:
+      ECS_HOST: ${{ secrets.ECS_HOST }}
+      ECS_SSH_USER: ${{ secrets.ECS_SSH_USER }}
+      ECS_SSH_PASSWORD: ${{ secrets.ECS_SSH_PASSWORD }}
+      ECS_SSH_PORT: ${{ secrets.ECS_SSH_PORT }}
+      ECS_PROJECT_DIR: ${{ secrets.ECS_PROJECT_DIR }}
+      SSH_OPTS: "-o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=60 -o ServerAliveInterval=15"
     steps:
-      - name: Deploy on ECS over SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.ECS_HOST }}
-          username: ${{ secrets.ECS_SSH_USER }}
-          password: ${{ secrets.ECS_SSH_PASSWORD }}
-          port: ${{ secrets.ECS_SSH_PORT || '22' }}
-          envs: ECS_PROJECT_DIR
-          command_timeout: 30m
-          script_stop: true
-          script: |
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Ship source to ECS and start build
+        run: |
+          set -euo pipefail
+          PORT="${ECS_SSH_PORT:-22}"
+          git archive --format=tar.gz -o /tmp/src.tar.gz HEAD
+          export SSHPASS="$ECS_SSH_PASSWORD"
+          sshpass -e scp $SSH_OPTS -P "$PORT" /tmp/src.tar.gz "$ECS_SSH_USER@$ECS_HOST:/tmp/src.tar.gz"
+          sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" "
             set -e
-            cd "$ECS_PROJECT_DIR"
-            git fetch --all
-            git reset --hard origin/master
-            docker compose -f docker-compose.prod.yml up -d --build
-            docker image prune -f
-        env:
-          ECS_PROJECT_DIR: ${{ secrets.ECS_PROJECT_DIR }}
+            cd '$ECS_PROJECT_DIR'
+            tar xzf /tmp/src.tar.gz
+            rm -f /tmp/sfa_deploy.ok /tmp/sfa_deploy.fail /tmp/sfa_deploy.log
+            nohup sh -c 'docker compose -f docker-compose.prod.yml build backend \
+              && docker compose -f docker-compose.prod.yml build frontend \
+              && docker compose -f docker-compose.prod.yml up -d --remove-orphans \
+              && docker image prune -f \
+              && touch /tmp/sfa_deploy.ok || touch /tmp/sfa_deploy.fail' \
+              > /tmp/sfa_deploy.log 2>&1 &
+            echo 'Build started on ECS'
+          "
+
+      - name: Wait for ECS build + restart
+        run: |
+          set -uo pipefail
+          PORT="${ECS_SSH_PORT:-22}"
+          export SSHPASS="$ECS_SSH_PASSWORD"
+          for i in $(seq 1 90); do
+            sleep 20
+            OUT=$(sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" \
+              'if [ -f /tmp/sfa_deploy.ok ]; then echo OK; elif [ -f /tmp/sfa_deploy.fail ]; then echo FAIL; else echo RUNNING; fi; tail -n 1 /tmp/sfa_deploy.log 2>/dev/null' 2>/dev/null) || OUT="RUNNING (ssh retry)"
+            STATE=$(printf '%s\n' "$OUT" | head -n 1)
+            echo "[$i] $OUT"
+            if [ "$STATE" = "OK" ]; then
+              echo "Deploy succeeded."
+              sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" 'docker ps --format "{{.Names}} {{.Status}}" | grep sfa' 2>/dev/null || true
+              exit 0
+            fi
+            if [ "$STATE" = "FAIL" ]; then
+              echo "::error::ECS build failed. Last 40 log lines:"
+              sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" 'tail -n 40 /tmp/sfa_deploy.log' 2>/dev/null || true
+              exit 1
+            fi
+          done
+          echo "::error::Timed out waiting for ECS deploy."
+          exit 1
