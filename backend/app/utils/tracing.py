@@ -1,6 +1,7 @@
 """
 增强追踪模块 - 并发安全 + Metrics 集成 + 生命周期追踪
 """
+
 import threading
 import time
 import uuid
@@ -15,6 +16,7 @@ logger = get_logger("tracing")
 @dataclass
 class Span:
     """追踪跨度"""
+
     name: str
     trace_id: str
     parent_id: str | None = None
@@ -89,11 +91,13 @@ class TraceContext:
     def add_event(self, name: str, **data):
         """添加事件标记"""
         with self._lock:
-            self.spans.append(Span(
-                name=f"event:{name}",
-                trace_id=self.trace_id,
-                metadata=data,
-            ))
+            self.spans.append(
+                Span(
+                    name=f"event:{name}",
+                    trace_id=self.trace_id,
+                    metadata=data,
+                )
+            )
 
     def summary(self) -> dict:
         """获取追踪摘要"""
@@ -118,18 +122,27 @@ class PipelineTracker:
         self._stages: list[dict] = []
         self._lock = threading.Lock()
 
-    def record_stage(self, stage: str, agent: str, duration_ms: float,
-                     tokens: int = 0, status: str = "ok", **extra):
+    def record_stage(
+        self,
+        stage: str,
+        agent: str,
+        duration_ms: float,
+        tokens: int = 0,
+        status: str = "ok",
+        **extra,
+    ):
         """记录阶段执行"""
         with self._lock:
-            self._stages.append({
-                "stage": stage,
-                "agent": agent,
-                "duration_ms": round(duration_ms, 2),
-                "tokens": tokens,
-                "status": status,
-                **extra,
-            })
+            self._stages.append(
+                {
+                    "stage": stage,
+                    "agent": agent,
+                    "duration_ms": round(duration_ms, 2),
+                    "tokens": tokens,
+                    "status": status,
+                    **extra,
+                }
+            )
 
     def get_summary(self) -> dict:
         """获取流水线摘要"""
@@ -149,15 +162,19 @@ class PipelineTracker:
     def print_summary(self):
         """打印流水线摘要"""
         summary = self.get_summary()
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  Pipeline Summary [{summary['trace_id']}]")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"Query: {summary['query']}")
-        print(f"Total: {summary['total_ms']/1000:.1f}s | Tokens: {summary['total_tokens']}")
+        print(
+            f"Total: {summary['total_ms'] / 1000:.1f}s | Tokens: {summary['total_tokens']}"
+        )
         print(f"Stages: {len(summary['stages'])} | Errors: {summary['error_count']}")
-        print(f"{'-'*60}")
+        print(f"{'-' * 60}")
         for s in summary["stages"]:
             icon = "OK" if s["status"] == "ok" else "ERR"
-            print(f"  [{icon}] {s['stage']:15s} {s['agent']:12s} "
-                  f"{s['duration_ms']/1000:6.1f}s {s['tokens']:5d}tok")
-        print(f"{'='*60}\n")
+            print(
+                f"  [{icon}] {s['stage']:15s} {s['agent']:12s} "
+                f"{s['duration_ms'] / 1000:6.1f}s {s['tokens']:5d}tok"
+            )
+        print(f"{'=' * 60}\n")

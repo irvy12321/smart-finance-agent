@@ -4,6 +4,7 @@ Metrics collectors for RAG and LLM operations
 These collectors provide context managers and helper functions
 for tracking RAG retrieval and LLM call metrics.
 """
+
 import time
 from contextlib import contextmanager
 
@@ -86,7 +87,9 @@ class LLMMetricsCollector:
         llm_errors_total.labels(model=model, error_type=error_type).inc()
 
     @staticmethod
-    def record_tokens(model: str, prompt_tokens: int, completion_tokens: int, total_tokens: int) -> None:
+    def record_tokens(
+        model: str, prompt_tokens: int, completion_tokens: int, total_tokens: int
+    ) -> None:
         """Record token consumption"""
         llm_tokens_total.labels(model=model, type="prompt").inc(prompt_tokens)
         llm_tokens_total.labels(model=model, type="completion").inc(completion_tokens)

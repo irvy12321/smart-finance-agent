@@ -2,6 +2,7 @@
 Agent 状态管理 - EventBus + 状态机
 支持任务状态跟踪和实时事件回调
 """
+
 import asyncio
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
@@ -47,6 +48,7 @@ class EventBus:
     """
     异步事件总线 - 支持 Agent 间通信和 UI 状态更新
     """
+
     _instance: "EventBus | None" = None
 
     def __init__(self):
@@ -78,7 +80,7 @@ class EventBus:
         """发布事件 (异步通知所有订阅者)"""
         self._event_history.append(event)
         if len(self._event_history) > self._max_history:
-            self._event_history = self._event_history[-self._max_history:]
+            self._event_history = self._event_history[-self._max_history :]
 
         callbacks = self._subscribers.get(event.event_type, [])
         # 通配符订阅
@@ -94,7 +96,9 @@ class EventBus:
         except Exception as e:
             logger.error(f"Event callback error for {event.event_type}: {e}")
 
-    def get_history(self, event_type: str | None = None, limit: int = 50) -> list[AgentEvent]:
+    def get_history(
+        self, event_type: str | None = None, limit: int = 50
+    ) -> list[AgentEvent]:
         """获取事件历史"""
         events = self._event_history
         if event_type:
@@ -109,6 +113,7 @@ class TaskStateTracker:
     """
     任务状态跟踪器 - 记录每个子任务的执行状态
     """
+
     _instance: "TaskStateTracker | None" = None
 
     def __init__(self):

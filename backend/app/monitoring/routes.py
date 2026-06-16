@@ -3,6 +3,7 @@ Prometheus metrics endpoint
 
 Exposes /metrics for Prometheus scraping.
 """
+
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.requests import Request
 from starlette.responses import Response

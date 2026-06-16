@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from app.tools.base_tool import BaseTool
 from app.utils.logger import get_logger
 
@@ -6,7 +8,7 @@ logger = get_logger("tool_registry")
 
 class ToolRegistry:
     _instance: "ToolRegistry | None" = None
-    _tools: dict[str, BaseTool] = {}
+    _tools: ClassVar[dict[str, BaseTool]] = {}
 
     def __new__(cls):
         if cls._instance is None:

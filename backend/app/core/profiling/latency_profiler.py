@@ -2,6 +2,7 @@
 Latency Profiler - Pipeline 全链路延迟分析
 通过 EventBus 订阅零侵入采集，不修改执行逻辑
 """
+
 import threading
 import time
 from contextlib import contextmanager
@@ -16,6 +17,7 @@ logger = get_logger("latency_profiler")
 @dataclass
 class StageRecord:
     """单阶段记录"""
+
     name: str
     start_time: float
     end_time: float = 0.0
@@ -30,6 +32,7 @@ class StageRecord:
 @dataclass
 class ToolCallRecord:
     """单次 tool 调用记录"""
+
     tool_name: str
     task_id: str
     start_time: float
@@ -46,6 +49,7 @@ class ToolCallRecord:
 @dataclass
 class ProfilingReport:
     """Profiling 报告"""
+
     trace_id: str
     query: str
     total_latency_ms: float = 0.0
@@ -85,28 +89,30 @@ class ProfilingReport:
 
     def print_report(self):
         """打印可读报告"""
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  LATENCY PROFILING REPORT [{self.trace_id}]")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"Query: {self.query[:80]}")
         print(f"Total: {self.total_latency_ms:.0f}ms")
-        print(f"{'-'*60}")
+        print(f"{'-' * 60}")
         print(f"  Routing:   {self.routing_latency_ms:>8.0f}ms")
         print(f"  Planner:   {self.planner_latency_ms:>8.0f}ms")
         print(f"  Executor:  {self.executor_latency_ms:>8.0f}ms")
         print(f"  Reasoner:  {self.reasoner_latency_ms:>8.0f}ms")
         print(f"  Report:    {self.report_latency_ms:>8.0f}ms")
         if self.tool_latency:
-            print(f"{'-'*60}")
+            print(f"{'-' * 60}")
             print("  Tool Latencies:")
             for tool, ms in sorted(self.tool_latency.items(), key=lambda x: -x[1]):
                 print(f"    {tool:20s} {ms:>8.0f}ms")
-        print(f"{'-'*60}")
+        print(f"{'-' * 60}")
         print(f"  Bottleneck: {self.bottleneck_stage}")
         if self.bottleneck_tool:
             print(f"  Slowest Tool: {self.bottleneck_tool}")
-        print(f"  Tasks: {self.subtask_count} total, {self.success_count} ok, {self.failed_count} failed")
-        print(f"{'='*60}\n")
+        print(
+            f"  Tasks: {self.subtask_count} total, {self.success_count} ok, {self.failed_count} failed"
+        )
+        print(f"{'=' * 60}\n")
 
 
 class LatencyProfiler:
@@ -114,6 +120,7 @@ class LatencyProfiler:
     延迟 Profiler - 通过 EventBus 事件零侵入采集
     线程安全，不影响主流程
     """
+
     _instance: "LatencyProfiler | None" = None
     _lock = threading.Lock()
 
@@ -171,7 +178,8 @@ class LatencyProfiler:
         self._active = True
 
         self._stages["pipeline"] = StageRecord(
-            name="pipeline", start_time=self._pipeline_start,
+            name="pipeline",
+            start_time=self._pipeline_start,
         )
         logger.debug(f"Profiling started for: {query[:60]}")
 
@@ -182,15 +190,19 @@ class LatencyProfiler:
 
         pipeline_end = time.perf_counter()
         self._stages["pipeline"].end_time = pipeline_end
-        self._stages["pipeline"].duration_ms = (pipeline_end - self._pipeline_start) * 1000
+        self._stages["pipeline"].duration_ms = (
+            pipeline_end - self._pipeline_start
+        ) * 1000
 
         report = self._build_report()
         self._reports.append(report)
         if len(self._reports) > self._max_reports:
-            self._reports = self._reports[-self._max_reports:]
+            self._reports = self._reports[-self._max_reports :]
 
         self._active = False
-        logger.debug(f"Profiling finished: {report.total_latency_ms:.0f}ms, bottleneck={report.bottleneck_stage}")
+        logger.debug(
+            f"Profiling finished: {report.total_latency_ms:.0f}ms, bottleneck={report.bottleneck_stage}"
+        )
         return report
 
     def mark_stage_start(self, stage_name: str):
@@ -198,7 +210,8 @@ class LatencyProfiler:
         if not self._active:
             return
         self._stages[stage_name] = StageRecord(
-            name=stage_name, start_time=time.perf_counter(),
+            name=stage_name,
+            start_time=time.perf_counter(),
         )
 
     def mark_stage_end(self, stage_name: str, status: str = "ok"):
@@ -246,15 +259,25 @@ class LatencyProfiler:
                     self.mark_stage_end("planner")
                 self.mark_stage_start("executor")
             elif stage == "reasoning":
-                if "executor" in self._stages and self._stages["executor"].end_time == 0:
+                if (
+                    "executor" in self._stages
+                    and self._stages["executor"].end_time == 0
+                ):
                     self.mark_stage_end("executor")
                 self.mark_stage_start("reasoner")
             elif stage == "reporting":
-                if "reasoner" in self._stages and self._stages["reasoner"].end_time == 0:
+                if (
+                    "reasoner" in self._stages
+                    and self._stages["reasoner"].end_time == 0
+                ):
                     self.mark_stage_end("reasoner")
                 self.mark_stage_start("report")
-            elif stage == "complete" and "report" in self._stages and self._stages["report"].end_time == 0:
-                    self.mark_stage_end("report")
+            elif (
+                stage == "complete"
+                and "report" in self._stages
+                and self._stages["report"].end_time == 0
+            ):
+                self.mark_stage_end("report")
 
         elif event_type == "task_start":
             task_id = data.get("task_id", "")
@@ -273,22 +296,34 @@ class LatencyProfiler:
         pipeline = self._stages.get("pipeline")
         total_ms = pipeline.duration_ms if pipeline else 0
 
-        planner_ms = self._stages["planner"].duration_ms if "planner" in self._stages else 0
-        executor_ms = self._stages["executor"].duration_ms if "executor" in self._stages else 0
-        reasoner_ms = self._stages["reasoner"].duration_ms if "reasoner" in self._stages else 0
-        report_ms = self._stages["report"].duration_ms if "report" in self._stages else 0
+        planner_ms = (
+            self._stages["planner"].duration_ms if "planner" in self._stages else 0
+        )
+        executor_ms = (
+            self._stages["executor"].duration_ms if "executor" in self._stages else 0
+        )
+        reasoner_ms = (
+            self._stages["reasoner"].duration_ms if "reasoner" in self._stages else 0
+        )
+        report_ms = (
+            self._stages["report"].duration_ms if "report" in self._stages else 0
+        )
 
         # Tool latency aggregation
         tool_latency: dict[str, float] = {}
         tool_call_details: list[dict] = []
         for tc in self._completed_tools:
-            tool_latency[tc.tool_name] = tool_latency.get(tc.tool_name, 0) + tc.duration_ms
-            tool_call_details.append({
-                "task_id": tc.task_id,
-                "tool": tc.tool_name,
-                "duration_ms": round(tc.duration_ms, 2),
-                "success": tc.success,
-            })
+            tool_latency[tc.tool_name] = (
+                tool_latency.get(tc.tool_name, 0) + tc.duration_ms
+            )
+            tool_call_details.append(
+                {
+                    "task_id": tc.task_id,
+                    "tool": tc.tool_name,
+                    "duration_ms": round(tc.duration_ms, 2),
+                    "success": tc.success,
+                }
+            )
 
         # Stage breakdown
         stage_breakdown = []
@@ -297,12 +332,14 @@ class LatencyProfiler:
                 continue
             if stage.duration_ms > 0:
                 pct = (stage.duration_ms / total_ms * 100) if total_ms > 0 else 0
-                stage_breakdown.append({
-                    "name": name,
-                    "duration_ms": round(stage.duration_ms, 2),
-                    "percent": round(pct, 1),
-                    "status": stage.status,
-                })
+                stage_breakdown.append(
+                    {
+                        "name": name,
+                        "duration_ms": round(stage.duration_ms, 2),
+                        "percent": round(pct, 1),
+                        "status": stage.status,
+                    }
+                )
         stage_breakdown.sort(key=lambda x: -x["duration_ms"])
 
         # Bottleneck
@@ -312,7 +349,9 @@ class LatencyProfiler:
             "reasoner": reasoner_ms,
             "report": report_ms,
         }
-        bottleneck_stage = max(stage_latencies, key=stage_latencies.get) if stage_latencies else ""
+        bottleneck_stage = (
+            max(stage_latencies, key=stage_latencies.get) if stage_latencies else ""
+        )
 
         bottleneck_tool = ""
         if tool_latency:

@@ -15,18 +15,23 @@ def _get_persist_dir() -> str:
     global _RAG_DATA_DIR
     if _RAG_DATA_DIR is None:
         from pathlib import Path
-        _RAG_DATA_DIR = Path(__file__).parent.parent.parent / "data" / "rag" / "vector_store"
+
+        _RAG_DATA_DIR = (
+            Path(__file__).parent.parent.parent / "data" / "rag" / "vector_store"
+        )
     return str(_RAG_DATA_DIR)
 
 
-def _keyword_search(query: str, texts: list[str], metadata: list[dict], top_k: int = 5) -> list[dict]:
+def _keyword_search(
+    query: str, texts: list[str], metadata: list[dict], top_k: int = 5
+) -> list[dict]:
     """关键词搜索（BM25 风格）"""
-    import re
     import math
+    import re
 
     # 分词（更宽松）
     def tokenize(text):
-        tokens = set(re.findall(r'\b[a-z0-9]+\b', text.lower()))
+        tokens = set(re.findall(r"\b[a-z0-9]+\b", text.lower()))
         # 添加子串匹配
         words = text.lower().split()
         for word in words:
@@ -50,7 +55,7 @@ def _keyword_search(query: str, texts: list[str], metadata: list[dict], top_k: i
 
     # 计算每个文档的相关性分数
     scores = []
-    for i, (text, doc_tokens) in enumerate(zip(texts, doc_tokens_list)):
+    for i, (text, doc_tokens) in enumerate(zip(texts, doc_tokens_list, strict=False)):
         # 词重叠（包含子串匹配）
         overlap = set()
         for qt in query_tokens:
@@ -86,12 +91,14 @@ def _keyword_search(query: str, texts: list[str], metadata: list[dict], top_k: i
     results = []
     for score, idx in scores[:top_k]:
         if score > 0:
-            results.append({
-                "text": texts[idx],
-                "score": min(score / 10, 1.0),
-                "metadata": metadata[idx] if idx < len(metadata) else {},
-                "index": idx,
-            })
+            results.append(
+                {
+                    "text": texts[idx],
+                    "score": min(score / 10, 1.0),
+                    "metadata": metadata[idx] if idx < len(metadata) else {},
+                    "index": idx,
+                }
+            )
     return results
 
 
@@ -104,7 +111,9 @@ class Retriever:
         self.store = VectorStore(dim=self.embedder.dim, persist_dir=persist_dir)
         self.store.load()
         self.top_k = config.top_k
-        logger.info(f"Retriever initialized: dim={self.embedder.dim}, top_k={self.top_k}, persist_dir={persist_dir}, loaded={self.store.size} vectors")
+        logger.info(
+            f"Retriever initialized: dim={self.embedder.dim}, top_k={self.top_k}, persist_dir={persist_dir}, loaded={self.store.size} vectors"
+        )
 
     def add_document(self, text: str, metadata: dict | None = None):
         chunks = chunk_text(text)
@@ -135,10 +144,7 @@ class Retriever:
         keyword_results = []
         if best_score < 0.1 and self.store.size > 0:
             keyword_results = _keyword_search(
-                query,
-                self.store.texts,
-                self.store.metadata,
-                top_k=k
+                query, self.store.texts, self.store.metadata, top_k=k
             )
 
         # 如果关键词搜索有结果，优先使用

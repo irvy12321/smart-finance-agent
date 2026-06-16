@@ -1,6 +1,7 @@
 """
 FAISS 向量存储 - 支持增量添加 + 磁盘持久化
 """
+
 import json
 import os
 
@@ -21,7 +22,12 @@ class VectorStore:
         self.persist_dir = persist_dir
         self._loaded = False
 
-    def add(self, embeddings: np.ndarray, texts: list[str], metadata: list[dict] | None = None):
+    def add(
+        self,
+        embeddings: np.ndarray,
+        texts: list[str],
+        metadata: list[dict] | None = None,
+    ):
         if embeddings.ndim == 1:
             embeddings = embeddings.reshape(1, -1)
         faiss.normalize_L2(embeddings)
@@ -45,12 +51,14 @@ class VectorStore:
         for score, idx in zip(scores[0], indices[0], strict=False):
             if idx < 0:
                 continue
-            results.append({
-                "text": self.texts[idx],
-                "score": float(score),
-                "metadata": self.metadata[idx],
-                "index": int(idx),
-            })
+            results.append(
+                {
+                    "text": self.texts[idx],
+                    "score": float(score),
+                    "metadata": self.metadata[idx],
+                    "index": int(idx),
+                }
+            )
         return results
 
     def save(self, path: str | None = None):
@@ -85,7 +93,9 @@ class VectorStore:
         meta_path = os.path.join(load_dir, "metadata.json")
         config_path = os.path.join(load_dir, "config.json")
 
-        if not all(os.path.exists(p) for p in [index_path, texts_path, meta_path, config_path]):
+        if not all(
+            os.path.exists(p) for p in [index_path, texts_path, meta_path, config_path]
+        ):
             logger.info(f"No existing data at {load_dir}, starting fresh")
             return False
 
@@ -93,7 +103,9 @@ class VectorStore:
             with open(config_path) as f:
                 config = json.load(f)
             if config.get("dim") != self.dim:
-                logger.warning(f"Dimension mismatch: stored={config.get('dim')}, current={self.dim}")
+                logger.warning(
+                    f"Dimension mismatch: stored={config.get('dim')}, current={self.dim}"
+                )
                 return False
 
             self.index = faiss.read_index(index_path)
@@ -103,7 +115,9 @@ class VectorStore:
                 self.metadata = json.load(f)
 
             self._loaded = True
-            logger.info(f"VectorStore loaded from {load_dir}: {self.index.ntotal} vectors")
+            logger.info(
+                f"VectorStore loaded from {load_dir}: {self.index.ntotal} vectors"
+            )
             return True
         except Exception as e:
             logger.error(f"Failed to load VectorStore: {e}")

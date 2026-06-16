@@ -1,7 +1,9 @@
 """
 Token 预算管理器 - 控制各 Agent 的 token 消耗上限
 """
+
 from dataclasses import dataclass
+from typing import ClassVar
 
 from app.utils.logger import get_logger
 
@@ -29,7 +31,7 @@ class TokenBudgetManager:
     规则: 各 Agent max_tokens ≤ 4000
     """
 
-    DEFAULT_BUDGETS = {
+    DEFAULT_BUDGETS: ClassVar[dict[str, int]] = {
         "planner": 4000,
         "executor": 4000,
         "reasoner": 4000,
@@ -48,7 +50,9 @@ class TokenBudgetManager:
             for name, max_tok in budgets.items()
         }
         self._total_budget = sum(budgets.values())
-        logger.info(f"TokenBudgetManager initialized: total_budget={self._total_budget}")
+        logger.info(
+            f"TokenBudgetManager initialized: total_budget={self._total_budget}"
+        )
 
     def get_max_tokens(self, agent_name: str) -> int:
         """获取指定 Agent 的 max_tokens 限制"""

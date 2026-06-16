@@ -8,6 +8,7 @@ Metrics categories:
 - RAG: retrieval duration, hits, documents
 - LLM: request count, duration, tokens, errors
 """
+
 from prometheus_client import Counter, Gauge, Histogram, Info
 
 # =============================================================================

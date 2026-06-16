@@ -6,6 +6,7 @@ Supports:
 - Refresh Token (long-lived, 7 days, stored in DB)
 - Token rotation on refresh
 """
+
 import hashlib
 import os
 import secrets
@@ -20,28 +21,28 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError(
         "JWT_SECRET_KEY environment variable is not set. "
-        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+        'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))"'
     )
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))  # 15 minutes
+ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")
+)  # 15 minutes
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))  # 7 days
-REFRESH_TOKEN_LENGTH = int(os.getenv("REFRESH_TOKEN_LENGTH", "64"))  # 64 bytes = 128 hex chars
+REFRESH_TOKEN_LENGTH = int(
+    os.getenv("REFRESH_TOKEN_LENGTH", "64")
+)  # 64 bytes = 128 hex chars
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
     return bcrypt.checkpw(
-        plain_password.encode('utf-8'),
-        hashed_password.encode('utf-8')
+        plain_password.encode("utf-8"), hashed_password.encode("utf-8")
     )
 
 
 def get_password_hash(password: str) -> str:
     """Hash a password"""
-    return bcrypt.hashpw(
-        password.encode('utf-8'),
-        bcrypt.gensalt()
-    ).decode('utf-8')
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
@@ -50,7 +51,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+        )
     to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -113,12 +116,12 @@ def is_refresh_token_expired(expires_at: str) -> bool:
 def create_token_pair(user_id: int, username: str, role: str = "viewer") -> dict:
     """
     Create both access and refresh tokens
-    
+
     Args:
         user_id: User ID
         username: Username
         role: User role (admin, analyst, viewer)
-    
+
     Returns:
         dict with access_token, refresh_token, expires_in
     """
@@ -126,10 +129,10 @@ def create_token_pair(user_id: int, username: str, role: str = "viewer") -> dict
     access_token = create_access_token(
         data={"user_id": user_id, "username": username, "role": role}
     )
-    
+
     # Create refresh token
     refresh_token = generate_refresh_token()
-    
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,

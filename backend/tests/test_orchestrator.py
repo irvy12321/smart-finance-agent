@@ -58,7 +58,9 @@ def _make_plan():
             priority=1,
         ),
     ]
-    return Plan(original_query="Test query", subtasks=subtasks, reasoning="Test reasoning")
+    return Plan(
+        original_query="Test query", subtasks=subtasks, reasoning="Test reasoning"
+    )
 
 
 def _make_exec_result(plan):
@@ -66,8 +68,12 @@ def _make_exec_result(plan):
     from app.core.executor import ExecutionResult, TaskResult
 
     task_results = [
-        TaskResult(task_id="t1", tool_name="stock_price", success=True, duration_ms=100),
-        TaskResult(task_id="t2", tool_name="llm_synthesize", success=True, duration_ms=200),
+        TaskResult(
+            task_id="t1", tool_name="stock_price", success=True, duration_ms=100
+        ),
+        TaskResult(
+            task_id="t2", tool_name="llm_synthesize", success=True, duration_ms=200
+        ),
     ]
     return ExecutionResult(
         plan=plan,
@@ -101,26 +107,28 @@ def _make_report():
 
 @pytest.mark.asyncio
 async def test_orchestrator_initialization():
-    with patch("app.core.orchestrator.LLMClient") as mock_llm, \
-         patch("app.core.orchestrator.ToolRegistry"), \
-         patch("app.core.orchestrator.PlannerAgent"), \
-         patch("app.core.orchestrator.ExecutorAgent"), \
-         patch("app.core.orchestrator.Reasoner"), \
-         patch("app.core.orchestrator.ReportAgent"), \
-         patch("app.core.orchestrator.ChartRenderer"), \
-         patch("app.core.orchestrator.FallbackManager"), \
-         patch("app.core.orchestrator.ConversationMemory"), \
-         patch("app.core.orchestrator.EventBus") as mock_event_bus, \
-         patch("app.core.orchestrator.TaskStateTracker") as mock_tracker, \
-         patch("app.core.orchestrator.LiteLLMRouter") as mock_router, \
-         patch("app.core.orchestrator.SmartRouter"):
-
+    with (
+        patch("app.core.orchestrator.LLMClient") as mock_llm,
+        patch("app.core.orchestrator.ToolRegistry"),
+        patch("app.core.orchestrator.PlannerAgent"),
+        patch("app.core.orchestrator.ExecutorAgent"),
+        patch("app.core.orchestrator.Reasoner"),
+        patch("app.core.orchestrator.ReportAgent"),
+        patch("app.core.orchestrator.ChartRenderer"),
+        patch("app.core.orchestrator.FallbackManager"),
+        patch("app.core.orchestrator.ConversationMemory"),
+        patch("app.core.orchestrator.EventBus") as mock_event_bus,
+        patch("app.core.orchestrator.TaskStateTracker") as mock_tracker,
+        patch("app.core.orchestrator.LiteLLMRouter") as mock_router,
+        patch("app.core.orchestrator.SmartRouter"),
+    ):
         mock_llm.get_instance.return_value = MagicMock()
         mock_router.get_instance.return_value = MagicMock()
         mock_event_bus.get_instance.return_value = _make_event_bus()
         mock_tracker.get_instance.return_value = _make_state_tracker()
 
         from app.core.orchestrator import Orchestrator
+
         orch = Orchestrator(use_router=True)
 
         assert orch is not None
@@ -158,26 +166,28 @@ async def test_orchestrator_run_pipeline():
     mock_chart_renderer = MagicMock()
     mock_chart_renderer.render_all.return_value = []
 
-    with patch("app.core.orchestrator.LLMClient") as mock_llm_cls, \
-         patch("app.core.orchestrator.ToolRegistry"), \
-         patch("app.core.orchestrator.PlannerAgent", return_value=mock_planner), \
-         patch("app.core.orchestrator.ExecutorAgent", return_value=mock_executor), \
-         patch("app.core.orchestrator.Reasoner", return_value=mock_reasoner), \
-         patch("app.core.orchestrator.ReportAgent", return_value=mock_report_agent), \
-         patch("app.core.orchestrator.ChartRenderer", return_value=mock_chart_renderer), \
-         patch("app.core.orchestrator.FallbackManager"), \
-         patch("app.core.orchestrator.ConversationMemory"), \
-         patch("app.core.orchestrator.EventBus") as mock_eb_cls, \
-         patch("app.core.orchestrator.TaskStateTracker") as mock_st_cls, \
-         patch("app.core.orchestrator.LiteLLMRouter") as mock_router_cls, \
-         patch("app.core.orchestrator.SmartRouter", return_value=mock_smart_router):
-
+    with (
+        patch("app.core.orchestrator.LLMClient") as mock_llm_cls,
+        patch("app.core.orchestrator.ToolRegistry"),
+        patch("app.core.orchestrator.PlannerAgent", return_value=mock_planner),
+        patch("app.core.orchestrator.ExecutorAgent", return_value=mock_executor),
+        patch("app.core.orchestrator.Reasoner", return_value=mock_reasoner),
+        patch("app.core.orchestrator.ReportAgent", return_value=mock_report_agent),
+        patch("app.core.orchestrator.ChartRenderer", return_value=mock_chart_renderer),
+        patch("app.core.orchestrator.FallbackManager"),
+        patch("app.core.orchestrator.ConversationMemory"),
+        patch("app.core.orchestrator.EventBus") as mock_eb_cls,
+        patch("app.core.orchestrator.TaskStateTracker") as mock_st_cls,
+        patch("app.core.orchestrator.LiteLLMRouter") as mock_router_cls,
+        patch("app.core.orchestrator.SmartRouter", return_value=mock_smart_router),
+    ):
         mock_llm_cls.get_instance.return_value = MagicMock()
         mock_router_cls.get_instance.return_value = MagicMock()
         mock_eb_cls.get_instance.return_value = event_bus
         mock_st_cls.get_instance.return_value = state_tracker
 
         from app.core.orchestrator import Orchestrator
+
         orch = Orchestrator(use_router=False)
 
         result = await orch.run("Analyze AAPL stock price")
@@ -204,6 +214,7 @@ async def test_planner_agent():
         mock_llm_class.get_instance.return_value = mock_llm
 
         from app.core.planner import PlannerAgent
+
         planner = PlannerAgent(mock_llm, None)
 
         plan = await planner.plan("What is AAPL stock price?")
@@ -219,15 +230,18 @@ async def test_executor_agent():
     event_bus = _make_event_bus()
     state_tracker = _make_state_tracker()
 
-    with patch("app.core.executor.ToolRegistry") as mock_registry_cls, \
-         patch("app.core.executor.EventBus") as mock_eb_cls, \
-         patch("app.core.executor.TaskStateTracker") as mock_st_cls, \
-         patch("app.core.executor.FallbackManager"), \
-         patch("app.core.executor.CircuitBreakerManager"):
-
+    with (
+        patch("app.core.executor.ToolRegistry") as mock_registry_cls,
+        patch("app.core.executor.EventBus") as mock_eb_cls,
+        patch("app.core.executor.TaskStateTracker") as mock_st_cls,
+        patch("app.core.executor.FallbackManager"),
+        patch("app.core.executor.CircuitBreakerManager"),
+    ):
         mock_registry = MagicMock()
         mock_tool = MagicMock()
-        mock_tool.execute = AsyncMock(return_value=MagicMock(success=True, data={"result": "success"}, error=""))
+        mock_tool.execute = AsyncMock(
+            return_value=MagicMock(success=True, data={"result": "success"}, error="")
+        )
         mock_registry.get.return_value = mock_tool
         mock_registry_cls.return_value = mock_registry
 
@@ -269,7 +283,10 @@ def test_tool_registry():
     # Test basic functionality
     mock_tool = MagicMock()
     mock_tool.name = "test_tool"
-    mock_tool.to_schema.return_value = {"name": "test_tool", "description": "A test tool"}
+    mock_tool.to_schema.return_value = {
+        "name": "test_tool",
+        "description": "A test tool",
+    }
     registry.register(mock_tool)
 
     assert "test_tool" in registry

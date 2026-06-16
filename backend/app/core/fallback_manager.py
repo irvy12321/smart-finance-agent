@@ -3,6 +3,7 @@ Fallback Manager - 降级链管理器
 定义每个 tool/agent 的降级策略
 所有失败必须记录 trace_id + log
 """
+
 from typing import Any
 
 from app.tools.base_tool import ToolResult
@@ -82,11 +83,17 @@ class FallbackManager:
 
     def _direct_execute(self, tool_name: str):
         """直接执行工具"""
+
         async def _exec(params):
             tool = self.registry.get(tool_name) if self.registry else None
             if tool:
                 return await tool.execute(**params)
-            return ToolResult(success=False, error=f"Tool '{tool_name}' not found", tool_name=tool_name)
+            return ToolResult(
+                success=False,
+                error=f"Tool '{tool_name}' not found",
+                tool_name=tool_name,
+            )
+
         return _exec
 
     @property
@@ -132,7 +139,11 @@ class FallbackManager:
         """crawler 失败 → 用 news_search 搜索相同主题"""
         tool = self.registry.get("news_search") if self.registry else None
         if not tool:
-            return ToolResult(success=False, error="news_search not available", tool_name="news_search")
+            return ToolResult(
+                success=False,
+                error="news_search not available",
+                tool_name="news_search",
+            )
         query = params.get("query", params.get("url", ""))
         return await tool.execute(query=query)
 
@@ -140,7 +151,11 @@ class FallbackManager:
         """通用 RAG 降级"""
         tool = self.registry.get("rag_retrieve") if self.registry else None
         if not tool:
-            return ToolResult(success=False, error="rag_retrieve not available", tool_name="rag_retrieve")
+            return ToolResult(
+                success=False,
+                error="rag_retrieve not available",
+                tool_name="rag_retrieve",
+            )
         query = params.get("query", "")
         return await tool.execute(query=query)
 
@@ -148,16 +163,22 @@ class FallbackManager:
         """RAG 失败 → 用 LLM 生成摘要"""
         query = params.get("query", "")
         if not self.router and not self.llm:
-            return ToolResult(success=False, error="No LLM available", tool_name="llm_summary")
+            return ToolResult(
+                success=False, error="No LLM available", tool_name="llm_summary"
+            )
         try:
             prompt = (
                 f"Based on your knowledge, provide a brief summary about: {query}\n"
                 "If you don't have specific information, say so."
             )
             if self.router:
-                answer = await self.router.complete("executor", prompt=prompt, max_tokens=512)
+                answer = await self.router.complete(
+                    "executor", prompt=prompt, max_tokens=512
+                )
             else:
-                answer = await self.llm.complete(prompt=prompt, temperature=0.3, max_tokens=512)
+                answer = await self.llm.complete(
+                    prompt=prompt, temperature=0.3, max_tokens=512
+                )
             return ToolResult(success=True, data=answer, tool_name="llm_summary")
         except Exception as e:
             return ToolResult(success=False, error=str(e), tool_name="llm_summary")
@@ -166,15 +187,21 @@ class FallbackManager:
         """LLM 失败 → 低开销模型重试"""
         prompt = params.get("prompt", "")
         if not self.router and not self.llm:
-            return ToolResult(success=False, error="No LLM available", tool_name="llm_low_cost")
+            return ToolResult(
+                success=False, error="No LLM available", tool_name="llm_low_cost"
+            )
         try:
             if self.router:
                 answer = await self.router.complete(
-                    "executor", prompt=prompt, max_tokens=1024,
+                    "executor",
+                    prompt=prompt,
+                    max_tokens=1024,
                 )
             else:
                 answer = await self.llm.complete(
-                    prompt=prompt, temperature=0.2, max_tokens=1024,
+                    prompt=prompt,
+                    temperature=0.2,
+                    max_tokens=1024,
                 )
             return ToolResult(success=True, data=answer, tool_name="llm_low_cost")
         except Exception as e:
@@ -185,7 +212,11 @@ class FallbackManager:
         url = params.get("url", "unknown")
         return ToolResult(
             success=True,
-            data={"url": url, "content": f"[Fallback] Unable to fetch content from {url}", "length": 0},
+            data={
+                "url": url,
+                "content": f"[Fallback] Unable to fetch content from {url}",
+                "length": 0,
+            },
             tool_name="static",
         )
 
@@ -194,7 +225,13 @@ class FallbackManager:
         query = params.get("query", "unknown")
         return ToolResult(
             success=True,
-            data=[{"title": f"[Fallback] No news available for: {query}", "description": "News service unavailable", "url": ""}],
+            data=[
+                {
+                    "title": f"[Fallback] No news available for: {query}",
+                    "description": "News service unavailable",
+                    "url": "",
+                }
+            ],
             tool_name="static",
         )
 
@@ -203,7 +240,10 @@ class FallbackManager:
         query = params.get("query", "unknown")
         return ToolResult(
             success=True,
-            data={"results": [], "message": f"[Fallback] No local knowledge for: {query}"},
+            data={
+                "results": [],
+                "message": f"[Fallback] No local knowledge for: {query}",
+            },
             tool_name="static",
         )
 

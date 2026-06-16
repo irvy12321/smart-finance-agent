@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, master, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [main, master, develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -167,6 +167,9 @@ jobs:
             --junitxml=coverage/junit.xml
         env:
           PYTHONPATH: ${{ github.workspace }}/backend
+          JWT_SECRET_KEY: test-jwt-secret-key-at-least-32-chars-long-aaaa
+          DEFAULT_ADMIN_PASSWORD: test-admin-password-123
+          ALLOW_MOCK_DATA: "false"
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

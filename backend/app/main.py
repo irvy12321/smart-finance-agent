@@ -2,6 +2,7 @@
 Smart Finance Agent - FastAPI Backend
 Main application entry point
 """
+
 import logging
 import os
 import sys
@@ -9,7 +10,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 # Add the backend directory to Python path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 from dotenv import load_dotenv
 
@@ -36,6 +39,7 @@ from app.utils.logger import get_logger
 try:
     from app.monitoring.middleware import PrometheusMiddleware
     from app.monitoring.routes import metrics_endpoint
+
     MONITORING_ENABLED = True
 except ImportError:
     MONITORING_ENABLED = False
@@ -103,13 +107,13 @@ def _validate_api_key() -> None:
 
     if not api_key or api_key.startswith("your-"):
         error_msg = (
-            f"\n{'='*60}\n"
+            f"\n{'=' * 60}\n"
             f"ERROR: {api_key_env} is not configured!\n\n"
             f"Please set your API key in backend/.env:\n"
             f"  {api_key_env}=your-actual-api-key\n\n"
             f"Active provider: {provider}\n"
             f"Required env var: {api_key_env}\n"
-            f"{'='*60}"
+            f"{'=' * 60}"
         )
         logger.error(error_msg)
         raise ValueError(error_msg)
@@ -119,6 +123,7 @@ def _validate_api_key() -> None:
     # Validate LLM connectivity
     try:
         from app.infrastructure.llm_client import LLMClient
+
         llm = LLMClient.get_instance()
         logger.info(f"LLM client initialized: model={llm.config.model}")
     except Exception as e:
@@ -143,6 +148,7 @@ async def lifespan(app: FastAPI):
     # Activate profiling integration
     try:
         from app.core.profiling.integration import activate_profiling
+
         activate_profiling()
         logger.info("Profiling integration activated")
     except Exception as e:
@@ -151,6 +157,7 @@ async def lifespan(app: FastAPI):
     # Activate dashboard integration
     try:
         from app.core.dashboard_integration import activate_dashboard
+
         activate_dashboard()
         logger.info("Dashboard integration activated")
     except Exception as e:
@@ -160,14 +167,18 @@ async def lifespan(app: FastAPI):
     if MONITORING_ENABLED:
         try:
             from app.monitoring.prometheus import app_info
-            app_info.info({
-                "version": "1.0.0",
-                "environment": os.getenv("ENVIRONMENT", "development"),
-            })
+
+            app_info.info(
+                {
+                    "version": "1.0.0",
+                    "environment": os.getenv("ENVIRONMENT", "development"),
+                }
+            )
         except Exception as e:
             logger.warning(f"Failed to init Prometheus metrics: {e}")
 
     from app.core.orchestrator import Orchestrator
+
     orchestrator = Orchestrator(use_router=True)
 
     # Store orchestrator in app.state for dependency injection
@@ -186,10 +197,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 @app.on_event("startup")
 async def startup_event():
     """Run startup checks"""
     check_jwt_secret()
+
 
 # Add rate limiting
 app.state.limiter = limiter
@@ -202,8 +215,11 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
         content={"detail": "Rate limit exceeded. Please try again later."},
     )
 
+
 # Add CORS middleware for frontend communication
-_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+_cors_origins = os.getenv(
+    "CORS_ORIGINS", "http://localhost:3000,http://localhost:5173"
+).split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in _cors_origins],
@@ -231,7 +247,9 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={
             "detail": "Internal server error",
-            "message": str(exc) if os.getenv("ENVIRONMENT") == "development" else "An unexpected error occurred",
+            "message": str(exc)
+            if os.getenv("ENVIRONMENT") == "development"
+            else "An unexpected error occurred",
         },
     )
 
@@ -240,11 +258,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def sentry_middleware(request: Request, call_next):
     """Middleware to add request context to Sentry"""
     with sentry_sdk.configure_scope() as scope:
-        scope.set_context("request", {
-            "method": request.method,
-            "url": str(request.url),
-            "headers": dict(request.headers),
-        })
+        scope.set_context(
+            "request",
+            {
+                "method": request.method,
+                "url": str(request.url),
+                "headers": dict(request.headers),
+            },
+        )
 
         response = await call_next(request)
 

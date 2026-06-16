@@ -32,15 +32,26 @@ _BLOCKED_CIDRS = [
 
 def _ip_to_int(ip: str) -> int:
     parts = ip.split(".")
-    return (int(parts[0]) << 24) | (int(parts[1]) << 16) | (int(parts[2]) << 8) | int(parts[3])
+    return (
+        (int(parts[0]) << 24)
+        | (int(parts[1]) << 16)
+        | (int(parts[2]) << 8)
+        | int(parts[3])
+    )
 
 
 def _is_private_ip(host: str) -> bool:
     """Check if a hostname resolves to a private/reserved IP."""
     import ipaddress
+
     try:
         addr = ipaddress.ip_address(host)
-        return addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
+        return (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+        )
     except ValueError:
         return False
 
@@ -71,7 +82,9 @@ class CrawlerTool(BaseTool):
     async def execute(self, **kwargs) -> ToolResult:
         url = kwargs.get("url", "")
         if not url:
-            return ToolResult(success=False, error="No URL provided", tool_name=self.name)
+            return ToolResult(
+                success=False, error="No URL provided", tool_name=self.name
+            )
 
         # SSRF protection
         ssrf_error = _validate_url(url)
@@ -98,17 +111,23 @@ class CrawlerTool(BaseTool):
                 data={"url": url, "content": cleaned, "length": len(cleaned)},
                 tool_name=self.name,
             )
-            
+
             # 存入缓存
             self._cache.set(cache_key, result, ttl=CRAWLER_CACHE_TTL)
-            
+
             return result
         except aiohttp.ClientResponseError as e:
             if e.status == 404:
-                logger.warning(f"URL not found (404): {url} - returning fallback message")
+                logger.warning(
+                    f"URL not found (404): {url} - returning fallback message"
+                )
                 return ToolResult(
                     success=True,
-                    data={"url": url, "content": f"[Content unavailable: page not found at {url}]", "length": 0},
+                    data={
+                        "url": url,
+                        "content": f"[Content unavailable: page not found at {url}]",
+                        "length": 0,
+                    },
                     tool_name=self.name,
                 )
             logger.error(f"Crawler failed for {url}: {e}")
@@ -120,10 +139,12 @@ class CrawlerTool(BaseTool):
     async def _fetch(self, url: str) -> str:
         headers = {"User-Agent": self.config.user_agent}
         timeout = aiohttp.ClientTimeout(total=self.config.timeout)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, headers=headers) as resp:
-                resp.raise_for_status()
-                return await resp.text()
+        async with (
+            aiohttp.ClientSession(timeout=timeout) as session,
+            session.get(url, headers=headers) as resp,
+        ):
+            resp.raise_for_status()
+            return await resp.text()
 
     @staticmethod
     def _clean_text(html: str) -> str:
@@ -140,6 +161,10 @@ class CrawlerTool(BaseTool):
         logger.warning(f"Crawler fallback for: {url}")
         return ToolResult(
             success=True,
-            data={"url": url, "content": f"[Fallback] Unable to fetch content from {url}", "length": 0},
+            data={
+                "url": url,
+                "content": f"[Fallback] Unable to fetch content from {url}",
+                "length": 0,
+            },
             tool_name=self.name,
         )

@@ -6,8 +6,10 @@ Collects:
 - http_request_duration_seconds: request duration histogram
 - http_errors_total: error count (4xx + 5xx)
 """
+
 import re
 import time
+from typing import ClassVar
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -24,11 +26,16 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
     """FastAPI middleware for Prometheus metrics collection"""
 
     # Paths to skip (avoid high cardinality or noise)
-    SKIP_PATHS = {"/metrics", "/health", "/ping", "/favicon.ico"}
+    SKIP_PATHS: ClassVar[set[str]] = {"/metrics", "/health", "/ping", "/favicon.ico"}
 
     # Path patterns to normalize (replace IDs with placeholders)
-    ID_PATTERNS = [
-        (re.compile(r"/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"), "/{uuid}"),
+    ID_PATTERNS: ClassVar[list] = [
+        (
+            re.compile(
+                r"/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+            ),
+            "/{uuid}",
+        ),
         (re.compile(r"/\d+"), "/{id}"),
     ]
 

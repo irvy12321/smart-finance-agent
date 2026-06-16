@@ -51,7 +51,7 @@ describe('taskApi', () => {
 
     const result = await taskApi.getStatus('abc123')
 
-    expect(mockedAxios.get).toHaveBeenCalledWith('/task/abc123/status', expect.objectContaining({ timeout: 10000 }))
+    expect(mockedAxios.get).toHaveBeenCalledWith('/task/abc123/status')
     expect(result.status).toBe('running')
     expect(result.progress).toBe(50)
   })

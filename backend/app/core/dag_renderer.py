@@ -3,6 +3,7 @@ DAG Renderer - 任务依赖图可视化
 纯观察层模块，不参与执行逻辑
 使用 networkx + matplotlib 渲染有向图
 """
+
 from pathlib import Path
 
 from app.utils.logger import get_logger
@@ -44,6 +45,7 @@ def render_dag(
     try:
         import matplotlib
         import networkx as nx
+
         matplotlib.use("Agg")
         import matplotlib.patches as mpatches
         import matplotlib.pyplot as plt
@@ -85,10 +87,14 @@ def render_dag(
     except Exception:
         pos = nx.spring_layout(G, seed=42, k=2.0)
 
-    fig, ax = plt.subplots(figsize=(max(10, len(node_order) * 2.5), max(5, len(node_order) * 1.2)))
+    fig, ax = plt.subplots(
+        figsize=(max(10, len(node_order) * 2.5), max(5, len(node_order) * 1.2))
+    )
 
     nx.draw_networkx_edges(
-        G, pos, ax=ax,
+        G,
+        pos,
+        ax=ax,
         edge_color="#B0BEC5",
         arrows=True,
         arrowsize=20,
@@ -100,7 +106,9 @@ def render_dag(
     )
 
     nx.draw_networkx_nodes(
-        G, pos, ax=ax,
+        G,
+        pos,
+        ax=ax,
         node_color=node_colors,
         node_size=2200,
         edgecolors="#37474F",
@@ -108,7 +116,9 @@ def render_dag(
     )
 
     nx.draw_networkx_labels(
-        G, pos, ax=ax,
+        G,
+        pos,
+        ax=ax,
         labels=node_labels,
         font_size=8,
         font_weight="bold",
@@ -123,9 +133,14 @@ def render_dag(
             x, y = pos[node]
             label = f"{duration:.0f}ms"
             ax.text(
-                x, y - 0.15, label,
-                fontsize=7, ha="center", va="top",
-                color="#546E7A", style="italic",
+                x,
+                y - 0.15,
+                label,
+                fontsize=7,
+                ha="center",
+                va="top",
+                color="#546E7A",
+                style="italic",
             )
 
     legend_patches = [
@@ -133,8 +148,11 @@ def render_dag(
         for status, color in STATUS_COLORS.items()
     ]
     ax.legend(
-        handles=legend_patches, loc="upper left",
-        fontsize=8, framealpha=0.9, title="Task Status",
+        handles=legend_patches,
+        loc="upper left",
+        fontsize=8,
+        framealpha=0.9,
+        title="Task Status",
     )
 
     ax.set_title("Research Plan (DAG)", fontsize=14, fontweight="bold", pad=15)
@@ -178,6 +196,7 @@ def _assign_layers(G, node_order: list[str]) -> dict[str, int]:
 def _layered_layout(G, layers: dict[str, int]) -> dict:
     """从左到右分层布局"""
     from collections import defaultdict
+
     layer_groups = defaultdict(list)
     for node, layer in layers.items():
         layer_groups[layer].append(node)

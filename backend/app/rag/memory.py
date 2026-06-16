@@ -3,6 +3,7 @@
 - 短期记忆: 最近N轮对话，FIFO淘汰
 - 长期记忆: 向量化存储，语义检索
 """
+
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -38,15 +39,19 @@ class ConversationMemory:
 
     def add_assistant_message(self, content: str, metadata: dict | None = None):
         """添加助手消息到短期记忆"""
-        self.short_term.append(MemoryItem(role="assistant", content=content, metadata=metadata or {}))
+        self.short_term.append(
+            MemoryItem(role="assistant", content=content, metadata=metadata or {})
+        )
 
     def add_task_result(self, task_id: str, tool_name: str, content: str):
         """添加任务结果到短期记忆"""
-        self.short_term.append(MemoryItem(
-            role="task_result",
-            content=content,
-            metadata={"task_id": task_id, "tool": tool_name},
-        ))
+        self.short_term.append(
+            MemoryItem(
+                role="task_result",
+                content=content,
+                metadata={"task_id": task_id, "tool": tool_name},
+            )
+        )
 
     def archive_to_long_term(self, text: str, metadata: dict | None = None):
         """将重要内容归档到长期记忆 (向量存储)"""
@@ -69,7 +74,9 @@ class ConversationMemory:
         """从长期记忆中语义检索"""
         return self.long_term.retrieve(query, top_k=top_k)
 
-    def get_combined_context(self, query: str, short_tokens: int = 1500, long_term_top_k: int = 3) -> str:
+    def get_combined_context(
+        self, query: str, short_tokens: int = 1500, long_term_top_k: int = 3
+    ) -> str:
         """获取混合上下文: 短期记忆 + 长期记忆检索结果"""
         parts = []
 

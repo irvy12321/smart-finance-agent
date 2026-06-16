@@ -2,6 +2,7 @@
 Report Agent - 结构化研究报告生成
 输出: summary (短文本) + structured_analysis (JSON)
 """
+
 import asyncio
 import json
 from dataclasses import dataclass, field
@@ -19,8 +20,11 @@ logger = get_logger("report_agent")
 @dataclass
 class StructuredAnalysis:
     """结构化分析结果"""
+
     key_findings: list[str] = field(default_factory=list)
-    risk_factors: list[dict] = field(default_factory=list)  # [{"factor": "...", "severity": "high/medium/low", "description": "..."}]
+    risk_factors: list[dict] = field(
+        default_factory=list
+    )  # [{"factor": "...", "severity": "high/medium/low", "description": "..."}]
     market_trends: list[str] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
 
@@ -46,7 +50,9 @@ class ResearchReport:
         """生成 Markdown 格式报告"""
         sources_md = ""
         for i, src in enumerate(self.sources, 1):
-            sources_md += f"{i}. **{src.get('tool', 'N/A')}** ({src.get('task_id', '')})\n"
+            sources_md += (
+                f"{i}. **{src.get('tool', 'N/A')}** ({src.get('task_id', '')})\n"
+            )
 
         findings_md = "\n".join(f"- {f}" for f in self.analysis.key_findings)
         risks_md = "\n".join(
@@ -159,7 +165,9 @@ CRITICAL RULES:
 
 
 class ReportAgent:
-    def __init__(self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None):
+    def __init__(
+        self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None
+    ):
         self.router = router
         self.llm = llm_client or LLMClient.get_instance()
         self.event_bus = EventBus.get_instance()
@@ -174,29 +182,35 @@ class ReportAgent:
     ) -> ResearchReport:
         """生成结构化研究报告"""
         logger.info(f"Generating research report (language={language})...")
-        await self.event_bus.emit(AgentEvent(
-            event_type="report_start",
-            agent_name="report",
-            data={"query": query[:100]},
-        ))
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="report_start",
+                agent_name="report",
+                data={"query": query[:100]},
+            )
+        )
 
         # 收集成功任务数据
         sources = []
         data_parts = []
         for tr in exec_result.task_results:
             if tr.success and tr.data:
-                sources.append({
-                    "task_id": tr.task_id,
-                    "tool": tr.tool_name,
-                    "duration_ms": tr.duration_ms,
-                })
+                sources.append(
+                    {
+                        "task_id": tr.task_id,
+                        "tool": tr.tool_name,
+                        "duration_ms": tr.duration_ms,
+                    }
+                )
                 data_parts.append(f"[{tr.tool_name}] {self._format_data(tr.data)}")
 
         # 推理上下文
         if reasoning_result:
             data_parts.append(f"[reasoning] {reasoning_result.reasoning}")
             if reasoning_result.key_insights:
-                data_parts.append(f"[insights] {', '.join(reasoning_result.key_insights)}")
+                data_parts.append(
+                    f"[insights] {', '.join(reasoning_result.key_insights)}"
+                )
 
         context = "\n\n".join(data_parts)
         prompt = (
@@ -206,22 +220,28 @@ class ReportAgent:
         )
 
         # Select system prompt based on language
-        if language == "zh":
-            system_prompt = REPORT_SYSTEM_ZH
-        else:
-            system_prompt = REPORT_SYSTEM_EN
+        system_prompt = REPORT_SYSTEM_ZH if language == "zh" else REPORT_SYSTEM_EN
 
         try:
-            logger.info(f"Calling LLM for report generation (prompt length: {len(prompt)} chars)")
+            logger.info(
+                f"Calling LLM for report generation (prompt length: {len(prompt)} chars)"
+            )
             if self.router:
                 response = await asyncio.wait_for(
-                    self.router.complete("report", prompt=prompt, system=system_prompt, max_tokens=2000),
-                    timeout=120
+                    self.router.complete(
+                        "report", prompt=prompt, system=system_prompt, max_tokens=2000
+                    ),
+                    timeout=120,
                 )
             else:
                 response = await asyncio.wait_for(
-                    self.llm.complete(prompt=prompt, system=system_prompt, temperature=0.5, max_tokens=2000),
-                    timeout=120
+                    self.llm.complete(
+                        prompt=prompt,
+                        system=system_prompt,
+                        temperature=0.5,
+                        max_tokens=2000,
+                    ),
+                    timeout=120,
                 )
             logger.info(f"LLM response received ({len(response)} chars)")
 
@@ -249,11 +269,13 @@ class ReportAgent:
                 trace_id=trace_id,
             )
 
-            await self.event_bus.emit(AgentEvent(
-                event_type="report_complete",
-                agent_name="report",
-                data={"title": report.title, "sources_count": len(sources)},
-            ))
+            await self.event_bus.emit(
+                AgentEvent(
+                    event_type="report_complete",
+                    agent_name="report",
+                    data={"title": report.title, "sources_count": len(sources)},
+                )
+            )
 
             logger.info(f"Report generated: {report.title}")
             return report
@@ -262,7 +284,9 @@ class ReportAgent:
             logger.error(f"Report generation failed: {e}")
             return ResearchReport(
                 title=f"Research: {query[:50]}",
-                summary=exec_result.final_answer[:200] if exec_result.final_answer else "No results",
+                summary=exec_result.final_answer[:200]
+                if exec_result.final_answer
+                else "No results",
                 analysis=StructuredAnalysis(),
                 sources=sources,
                 metadata={"timestamp": datetime.now().isoformat(), "error": str(e)},
@@ -271,6 +295,7 @@ class ReportAgent:
 
     def _parse_response(self, response: str) -> dict:
         import re
+
         text = response.strip()
 
         logger.debug(f"Report response ({len(text)} chars): {text[:300]}")
@@ -284,7 +309,11 @@ class ReportAgent:
         start = text.find("{")
         if start == -1:
             logger.warning("No JSON object found")
-            return {"title": "Research Report", "summary": text[:200], "key_findings": [text[:200]]}
+            return {
+                "title": "Research Report",
+                "summary": text[:200],
+                "key_findings": [text[:200]],
+            }
 
         # 匹配闭合括号
         depth = 0
@@ -309,7 +338,9 @@ class ReportAgent:
             # Ensure summary is a string, not a JSON object
             if isinstance(data.get("summary"), dict):
                 data["summary"] = json.dumps(data["summary"], ensure_ascii=False)[:200]
-            elif isinstance(data.get("summary"), str) and data["summary"].startswith("{"):
+            elif isinstance(data.get("summary"), str) and data["summary"].startswith(
+                "{"
+            ):
                 # Try to parse as JSON and extract meaningful text
                 try:
                     summary_obj = json.loads(data["summary"])
@@ -320,7 +351,11 @@ class ReportAgent:
             return data
         except json.JSONDecodeError as e:
             logger.warning(f"JSON parse failed: {e}")
-            return {"title": "Research Report", "summary": text[:200], "key_findings": [text[:200]]}
+            return {
+                "title": "Research Report",
+                "summary": text[:200],
+                "key_findings": [text[:200]],
+            }
 
     @staticmethod
     def _format_data(data) -> str:

@@ -1,5 +1,6 @@
-import os
 import hashlib
+import os
+
 
 def check_jwt_secret():
     """Validate JWT_SECRET_KEY at startup. Fail fast if missing or weak."""

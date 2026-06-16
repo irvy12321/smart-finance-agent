@@ -1,6 +1,6 @@
 # Smart Finance Agent
 
-[![CI](https://github.com/YOUR_USERNAME/smart-finance-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/smart-finance-agent/actions/workflows/ci.yml)
+[![CI](https://github.com/irvy12321/smart-finance-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/irvy12321/smart-finance-agent/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Node.js 20+](https://img.shields.io/badge/node.js-20+-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -61,11 +61,11 @@ npm run dev
 
 ### 默认账户
 
-系统首次启动时会自动创建默认管理员账户：
+系统首次启动时会自动创建默认管理员账户 `admin`。密码取自环境变量 `DEFAULT_ADMIN_PASSWORD`；若未设置，则**随机生成一个一次性强口令并打印到启动日志**（不再使用硬编码弱口令）。
 
 | 用户名 | 密码 | 角色 |
 |--------|------|------|
-| admin | admin123 | admin |
+| admin | `$DEFAULT_ADMIN_PASSWORD`（未设置时为启动日志中的随机口令） | admin |
 
 ### 角色权限
 
@@ -83,7 +83,7 @@ npm run dev
 # 1. 管理员登录获取 token
 curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "admin123"}'
+  -d '{"username": "admin", "password": "<DEFAULT_ADMIN_PASSWORD>"}'
 
 # 2. 创建指定角色用户
 curl -X POST http://localhost:8000/api/auth/admin/create-user \
@@ -168,6 +168,29 @@ smart-finance-agent/
 ```
 
 ## API 接口
+
+### 股票研究主线 (Research Copilot)
+
+面向"AI 股票研究助手"的统一入口：输入股票代码，依次执行 **取数 → 规则计算 → 可信度聚合 → LLM 解释**，返回带数据来源与可信度的研究报告。
+
+```http
+POST /api/research/{symbol}        # 例: POST /api/research/AAPL (需 Admin/Analyst)
+```
+
+返回结构（节选）：
+
+```jsonc
+{
+  "symbol": "AAPL",
+  "data": { "price": { "source": "alpha_vantage", "is_mock": false, ... }, ... },
+  "indicators": { "sma_5": ..., "rsi_14": ..., "pe_ratio": ... },  // 纯 Python 计算，数据不足返回 null
+  "trust": { "data_confidence": 0.0-1.0, "source_reliability": "high|medium|low", "mock_ratio": 0-1 },
+  "report": { "summary": "...", "summary_source": "llm|rule_based", "key_findings": [ ... ] },
+  "disclaimer": "For research and educational purposes only — not investment advice. ..."
+}
+```
+
+设计要点：数据层显式标注 `source/is_mock`（无 key 或 API 失败时**不静默回退**，除非显式设 `ALLOW_MOCK_DATA=true`）；数值只由计算层产生，LLM 仅做解释、禁止编造数字；报告附数据可信度与统一免责声明。
 
 ### 任务管理
 

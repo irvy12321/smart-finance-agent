@@ -13,7 +13,6 @@ from app.core.agent_status import (
 from app.core.fallback_manager import FallbackManager
 from app.core.planner import Plan, SubTask
 from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
-from app.monitoring.collectors import LLMMetricsCollector
 from app.monitoring.prometheus import (
     tool_call_duration_seconds,
     tool_calls_total,
@@ -88,11 +87,13 @@ class ExecutorAgent:
         result = ExecutionResult(plan=plan)
 
         logger.info(f"Executing plan with {len(plan.subtasks)} subtasks")
-        await self.event_bus.emit(AgentEvent(
-            event_type="execution_start",
-            agent_name="executor",
-            data={"task_count": len(plan.subtasks)},
-        ))
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="execution_start",
+                agent_name="executor",
+                data={"task_count": len(plan.subtasks)},
+            )
+        )
 
         with trace.span("execute_plan"):
             task_graph = self._build_task_graph(plan.subtasks)
@@ -102,7 +103,8 @@ class ExecutorAgent:
             while task_graph:
                 # 找到所有依赖已完成的任务
                 ready = [
-                    tid for tid, deps in task_graph.items()
+                    tid
+                    for tid, deps in task_graph.items()
                     if all(d in completed for d in deps)
                 ]
 
@@ -111,60 +113,97 @@ class ExecutorAgent:
                     recoverable = self._try_resolve_deadlock(task_graph, completed)
                     if recoverable:
                         ready = recoverable
-                        logger.warning(f"Deadlock recovered: {len(ready)} tasks unlocked")
+                        logger.warning(
+                            f"Deadlock recovered: {len(ready)} tasks unlocked"
+                        )
                     else:
-                        logger.error("Deadlock detected in task graph, skipping remaining tasks")
+                        logger.error(
+                            "Deadlock detected in task graph, skipping remaining tasks"
+                        )
                         for tid in task_graph:
                             self.state_tracker.set_status(tid, TaskStatus.SKIPPED)
-                            result.task_results.append(TaskResult(
-                                task_id=tid, tool_name="unknown", success=False,
-                                error="Deadlock: unresolvable dependencies", status=TaskStatus.SKIPPED,
-                            ))
+                            result.task_results.append(
+                                TaskResult(
+                                    task_id=tid,
+                                    tool_name="unknown",
+                                    success=False,
+                                    error="Deadlock: unresolvable dependencies",
+                                    status=TaskStatus.SKIPPED,
+                                )
+                            )
                         break
 
                 round_num += 1
-                logger.info(f"Execution round {round_num}: {len(ready)} tasks (parallel)")
+                logger.info(
+                    f"Execution round {round_num}: {len(ready)} tasks (parallel)"
+                )
 
                 # 并行执行本轮所有就绪任务
                 with trace.span("parallel_batch", tasks=ready, round=round_num):
                     batch_results = await asyncio.gather(
-                        *[self._execute_task(plan.subtasks, tid, completed, trace) for tid in ready],
+                        *[
+                            self._execute_task(plan.subtasks, tid, completed, trace)
+                            for tid in ready
+                        ],
                         return_exceptions=True,
                     )
 
                 for tid, res in zip(ready, batch_results, strict=False):
                     if isinstance(res, Exception):
                         tr = TaskResult(
-                            task_id=tid, tool_name="unknown", success=False,
-                            error=str(res), status=TaskStatus.FAILED,
+                            task_id=tid,
+                            tool_name="unknown",
+                            success=False,
+                            error=str(res),
+                            status=TaskStatus.FAILED,
                         )
-                        self.state_tracker.set_status(tid, TaskStatus.FAILED, {"error": str(res)})
+                        self.state_tracker.set_status(
+                            tid, TaskStatus.FAILED, {"error": str(res)}
+                        )
                     else:
                         tr = res
-                        self.state_tracker.set_status(tid, tr.status, {
-                            "duration_ms": tr.duration_ms, "tool": tr.tool_name,
-                        })
+                        self.state_tracker.set_status(
+                            tid,
+                            tr.status,
+                            {
+                                "duration_ms": tr.duration_ms,
+                                "tool": tr.tool_name,
+                            },
+                        )
 
                     result.task_results.append(tr)
                     completed[tid] = tr
 
-                    await self.event_bus.emit(AgentEvent(
-                        event_type="task_complete",
-                        agent_name="executor",
-                        data={
-                            "task_id": tid, "tool": tr.tool_name,
-                            "success": tr.success, "duration_ms": tr.duration_ms,
-                            "round": round_num,
-                        },
-                    ))
+                    await self.event_bus.emit(
+                        AgentEvent(
+                            event_type="task_complete",
+                            agent_name="executor",
+                            data={
+                                "task_id": tid,
+                                "tool": tr.tool_name,
+                                "success": tr.success,
+                                "duration_ms": tr.duration_ms,
+                                "round": round_num,
+                            },
+                        )
+                    )
                     del task_graph[tid]
 
             # 提取最终答案
-            if any(t.tool_name == "llm_synthesize" and t.success for t in result.task_results):
-                synth = next(t for t in result.task_results if t.tool_name == "llm_synthesize" and t.success)
+            if any(
+                t.tool_name == "llm_synthesize" and t.success
+                for t in result.task_results
+            ):
+                synth = next(
+                    t
+                    for t in result.task_results
+                    if t.tool_name == "llm_synthesize" and t.success
+                )
                 result.final_answer = synth.data
             else:
-                result.final_answer = await self._auto_synthesize(plan, result.task_results, trace)
+                result.final_answer = await self._auto_synthesize(
+                    plan, result.task_results, trace
+                )
 
         result.total_duration_ms = trace.summary()["total_ms"]
         logger.info(
@@ -172,15 +211,17 @@ class ExecutorAgent:
             f"(success={result.success_count}, failed={result.failed_count})"
         )
 
-        await self.event_bus.emit(AgentEvent(
-            event_type="execution_complete",
-            agent_name="executor",
-            data={
-                "total_ms": result.total_duration_ms,
-                "success": result.success_count,
-                "failed": result.failed_count,
-            },
-        ))
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="execution_complete",
+                agent_name="executor",
+                data={
+                    "total_ms": result.total_duration_ms,
+                    "success": result.success_count,
+                    "failed": result.failed_count,
+                },
+            )
+        )
 
         return result
 
@@ -193,18 +234,29 @@ class ExecutorAgent:
     ) -> TaskResult:
         task = next((t for t in subtasks if t.task_id == task_id), None)
         if not task:
-            return TaskResult(task_id=task_id, tool_name="unknown", success=False, error="Task not found")
+            return TaskResult(
+                task_id=task_id,
+                tool_name="unknown",
+                success=False,
+                error="Task not found",
+            )
 
         start = time.perf_counter()
         self.state_tracker.set_status(task_id, TaskStatus.RUNNING)
 
         logger.info(f"Executing {task.task_id}: {task.tool_name} - {task.description}")
 
-        await self.event_bus.emit(AgentEvent(
-            event_type="task_start",
-            agent_name="executor",
-            data={"task_id": task.task_id, "tool": task.tool_name, "description": task.description},
-        ))
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="task_start",
+                agent_name="executor",
+                data={
+                    "task_id": task.task_id,
+                    "tool": task.tool_name,
+                    "description": task.description,
+                },
+            )
+        )
 
         if task.tool_name == "llm_synthesize":
             result = await self._run_synthesize(task, completed, trace)
@@ -212,8 +264,10 @@ class ExecutorAgent:
             tool = self.registry.get(task.tool_name)
             if not tool:
                 return TaskResult(
-                    task_id=task.task_id, tool_name=task.tool_name,
-                    success=False, error=f"Tool '{task.tool_name}' not found in registry",
+                    task_id=task.task_id,
+                    tool_name=task.tool_name,
+                    success=False,
+                    error=f"Tool '{task.tool_name}' not found in registry",
                     status=TaskStatus.FAILED,
                 )
 
@@ -226,14 +280,20 @@ class ExecutorAgent:
                     if dep_result and dep_result.success and dep_result.data:
                         context_parts.append(f"[{dep_id}] {dep_result.data}")
                 if context_parts and "query" in params:
-                    params["query"] = params["query"] + "\n\nContext from prior tasks:\n" + "\n".join(context_parts)
+                    params["query"] = (
+                        params["query"]
+                        + "\n\nContext from prior tasks:\n"
+                        + "\n".join(context_parts)
+                    )
 
             # === 熔断器检查 ===
             breaker = self.circuit_breaker_mgr.get_breaker(task.tool_name)
             try:
                 breaker.check_or_raise()
             except CircuitBreakerOpenError as e:
-                logger.warning(f"[trace:{trace.trace_id}] Circuit breaker OPEN for {task.tool_name}: {e}")
+                logger.warning(
+                    f"[trace:{trace.trace_id}] Circuit breaker OPEN for {task.tool_name}: {e}"
+                )
                 # 熔断时直接走降级
                 result = await self._execute_with_fallback(task, params, trace)
                 result.duration_ms = (time.perf_counter() - start) * 1000
@@ -246,21 +306,34 @@ class ExecutorAgent:
                     tool_start = time.perf_counter()
                     tool_result = await tool.execute(**params)
                     tool_duration = time.perf_counter() - tool_start
-                    tool_call_duration_seconds.labels(tool_name=task.tool_name).observe(tool_duration)
+                    tool_call_duration_seconds.labels(tool_name=task.tool_name).observe(
+                        tool_duration
+                    )
                 except Exception as e:
-                    logger.error(f"[trace:{trace.trace_id}] Tool {task.tool_name} exception: {e}")
-                    tool_errors_total.labels(tool_name=task.tool_name, error_type=type(e).__name__).inc()
-                    tool_result = ToolResult(success=False, error=str(e), tool_name=task.tool_name)
+                    logger.error(
+                        f"[trace:{trace.trace_id}] Tool {task.tool_name} exception: {e}"
+                    )
+                    tool_errors_total.labels(
+                        tool_name=task.tool_name, error_type=type(e).__name__
+                    ).inc()
+                    tool_result = ToolResult(
+                        success=False, error=str(e), tool_name=task.tool_name
+                    )
 
             if tool_result.success:
                 breaker.record_success()
                 result = TaskResult(
-                    task_id=task.task_id, tool_name=task.tool_name,
-                    success=True, data=tool_result.data, status=TaskStatus.SUCCESS,
+                    task_id=task.task_id,
+                    tool_name=task.tool_name,
+                    success=True,
+                    data=tool_result.data,
+                    status=TaskStatus.SUCCESS,
                 )
             else:
                 breaker.record_failure()
-                logger.info(f"[trace:{trace.trace_id}] Tool {task.tool_name} failed, trying fallback...")
+                logger.info(
+                    f"[trace:{trace.trace_id}] Tool {task.tool_name} failed, trying fallback..."
+                )
                 result = await self._execute_with_fallback(task, params, trace)
 
         result.duration_ms = (time.perf_counter() - start) * 1000
@@ -272,7 +345,9 @@ class ExecutorAgent:
         """执行降级链"""
         try:
             fallback_result, used_tool = await self.fallback_mgr.execute_with_fallback(
-                task.tool_name, params, trace_id=trace.trace_id,
+                task.tool_name,
+                params,
+                trace_id=trace.trace_id,
             )
             if fallback_result.success:
                 is_degraded = used_tool != task.tool_name
@@ -292,7 +367,9 @@ class ExecutorAgent:
                     status=TaskStatus.FAILED,
                 )
         except Exception as e:
-            logger.error(f"[trace:{trace.trace_id}] Fallback also failed for {task.tool_name}: {e}")
+            logger.error(
+                f"[trace:{trace.trace_id}] Fallback also failed for {task.tool_name}: {e}"
+            )
             return TaskResult(
                 task_id=task.task_id,
                 tool_name=task.tool_name,
@@ -308,17 +385,27 @@ class ExecutorAgent:
         for dep_id in task.depends_on:
             dep = completed.get(dep_id)
             if dep and dep.success and dep.data:
-                context_parts.append(f"=== {dep.tool_name} ({dep.task_id}) ===\n{self._format_data(dep.data)}")
+                context_parts.append(
+                    f"=== {dep.tool_name} ({dep.task_id}) ===\n{self._format_data(dep.data)}"
+                )
 
         if not context_parts:
             for _dep_id, dep in completed.items():
                 if dep.success and dep.data:
-                    context_parts.append(f"=== {dep.tool_name} ({dep.task_id}) ===\n{self._format_data(dep.data)}")
+                    context_parts.append(
+                        f"=== {dep.tool_name} ({dep.task_id}) ===\n{self._format_data(dep.data)}"
+                    )
 
-        synthesis_prompt = task.params.get("prompt", "Analyze and summarize the following information:")
-        full_prompt = f"{synthesis_prompt}\n\n" + "\n\n".join(context_parts) if context_parts else synthesis_prompt
+        synthesis_prompt = task.params.get(
+            "prompt", "Analyze and summarize the following information:"
+        )
+        full_prompt = (
+            f"{synthesis_prompt}\n\n" + "\n\n".join(context_parts)
+            if context_parts
+            else synthesis_prompt
+        )
 
-        language = getattr(self, '_current_language', 'en')
+        language = getattr(self, "_current_language", "en")
         if language == "zh":
             system = "你是一位研究分析师。根据提供的数据提供清晰、结构化、全面的分析。必须使用中文回复。"
             full_prompt += "\n\n请使用中文回复。"
@@ -342,7 +429,13 @@ class ExecutorAgent:
                     max_tokens=4096,
                 )
 
-        return TaskResult(task_id=task.task_id, tool_name="llm_synthesize", success=True, data=answer, status=TaskStatus.SUCCESS)
+        return TaskResult(
+            task_id=task.task_id,
+            tool_name="llm_synthesize",
+            success=True,
+            data=answer,
+            status=TaskStatus.SUCCESS,
+        )
 
     async def _auto_synthesize(
         self, plan: Plan, results: list[TaskResult], trace: TraceContext
@@ -350,15 +443,23 @@ class ExecutorAgent:
         context_parts = []
         for r in results:
             if r.success and r.data:
-                context_parts.append(f"=== {r.tool_name} ({r.task_id}) ===\n{self._format_data(r.data)}")
+                context_parts.append(
+                    f"=== {r.tool_name} ({r.task_id}) ===\n{self._format_data(r.data)}"
+                )
 
         if not context_parts:
             logger.warning("No successful task results to synthesize")
-            return "No successful task results to synthesize." if self._current_language == "en" else "没有成功的任务结果可供综合分析。"
+            return (
+                "No successful task results to synthesize."
+                if self._current_language == "en"
+                else "没有成功的任务结果可供综合分析。"
+            )
 
-        language = getattr(self, '_current_language', 'en')
-        logger.info(f"Auto-synthesizing with language={language}, {len(context_parts)} context parts")
-        
+        language = getattr(self, "_current_language", "en")
+        logger.info(
+            f"Auto-synthesizing with language={language}, {len(context_parts)} context parts"
+        )
+
         if language == "zh":
             prompt = (
                 f"基于以下关于'{plan.original_query}'的研究结果\n\n"
@@ -376,11 +477,17 @@ class ExecutorAgent:
 
         with trace.span("auto_synthesize"):
             if self.router:
-                result = await self.router.complete("executor", prompt=prompt, system=system, max_tokens=4096)
+                result = await self.router.complete(
+                    "executor", prompt=prompt, system=system, max_tokens=4096
+                )
             else:
-                result = await self.llm.complete(prompt=prompt, system=system, temperature=0.3, max_tokens=4096)
-            
-            logger.info(f"Auto-synthesize result length: {len(result) if result else 0}")
+                result = await self.llm.complete(
+                    prompt=prompt, system=system, temperature=0.3, max_tokens=4096
+                )
+
+            logger.info(
+                f"Auto-synthesize result length: {len(result) if result else 0}"
+            )
             return result
 
     @staticmethod
@@ -393,6 +500,7 @@ class ExecutorAgent:
             return data
         if isinstance(data, dict):
             import json
+
             return json.dumps(data, ensure_ascii=False, indent=2)
         return str(data)
 
@@ -406,20 +514,20 @@ class ExecutorAgent:
         """
         unlockable = []
         for tid, deps in task_graph.items():
-            unresolved = [
-                d for d in deps
-                if d not in completed and d in task_graph
-            ]
+            unresolved = [d for d in deps if d not in completed and d in task_graph]
             if not unresolved:
                 # 检查是否有失败/跳过的依赖（允许继续）
                 failed_deps = [
-                    d for d in deps
-                    if d in completed and not completed[d].success
+                    d for d in deps if d in completed and not completed[d].success
                 ]
-                if failed_deps and all(d in completed for d in deps if d not in task_graph):
+                if failed_deps and all(
+                    d in completed for d in deps if d not in task_graph
+                ):
                     unlockable.append(tid)
 
         if unlockable:
-            logger.info(f"Deadlock recovery: unlocking {len(unlockable)} tasks with failed deps")
+            logger.info(
+                f"Deadlock recovery: unlocking {len(unlockable)} tasks with failed deps"
+            )
             return unlockable
         return None

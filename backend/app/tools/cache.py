@@ -7,17 +7,19 @@
 
 使用方式:
     from app.tools.cache import cached, get_cache_stats
-    
+
     @cached(ttl=60)
     async def fetch_stock_price(symbol: str):
         ...
 """
+
 import hashlib
-import time
 import threading
+import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 from app.utils.logger import get_logger
 
@@ -27,6 +29,7 @@ logger = get_logger("cache")
 @dataclass
 class CacheEntry:
     """缓存条目"""
+
     key: str
     value: Any
     created_at: float
@@ -45,7 +48,7 @@ class CacheEntry:
 class MemoryTTLCache:
     """
     内存 TTL Cache - 线程安全，LRU 淘汰
-    
+
     特点:
     - 基于 TTL 自动过期
     - LRU 淘汰策略
@@ -58,7 +61,7 @@ class MemoryTTLCache:
         self._max_size = max_size
         self._default_ttl = default_ttl
         self._lock = threading.Lock()
-        
+
         # 统计
         self._hits = 0
         self._misses = 0
@@ -66,22 +69,22 @@ class MemoryTTLCache:
     def get(self, key: str) -> tuple[bool, Any]:
         """
         获取缓存值
-        
+
         Returns:
             (hit: bool, value: Any)
         """
         with self._lock:
             entry = self._cache.get(key)
-            
+
             if entry is None:
                 self._misses += 1
                 return False, None
-            
+
             if entry.is_expired:
                 del self._cache[key]
                 self._misses += 1
                 return False, None
-            
+
             # 更新访问顺序和命中次数
             entry.hits += 1
             self._cache.move_to_end(key)
@@ -94,11 +97,11 @@ class MemoryTTLCache:
             # 如果已存在，先删除
             if key in self._cache:
                 del self._cache[key]
-            
+
             # 检查容量，淘汰最旧的
             while len(self._cache) >= self._max_size:
                 self._cache.popitem(last=False)
-            
+
             self._cache[key] = CacheEntry(
                 key=key,
                 value=value,
@@ -125,8 +128,7 @@ class MemoryTTLCache:
         """清理过期条目"""
         with self._lock:
             expired_keys = [
-                key for key, entry in self._cache.items()
-                if entry.is_expired
+                key for key, entry in self._cache.items() if entry.is_expired
             ]
             for key in expired_keys:
                 del self._cache[key]
@@ -142,7 +144,7 @@ class MemoryTTLCache:
         """缓存统计"""
         total = self._hits + self._misses
         hit_rate = (self._hits / total * 100) if total > 0 else 0
-        
+
         return {
             "size": self.size,
             "max_size": self._max_size,
@@ -181,35 +183,42 @@ def make_cache_key(*args, **kwargs) -> str:
 def cached(ttl: int = 300, key_prefix: str = ""):
     """
     缓存装饰器
-    
+
     Usage:
         @cached(ttl=60, key_prefix="stock")
         async def get_stock_price(symbol: str):
             ...
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             cache = get_cache()
-            
+
             # 生成缓存键
-            cache_key = f"{key_prefix}:{make_cache_key(*args, **kwargs)}" if key_prefix else make_cache_key(*args, **kwargs)
-            
+            cache_key = (
+                f"{key_prefix}:{make_cache_key(*args, **kwargs)}"
+                if key_prefix
+                else make_cache_key(*args, **kwargs)
+            )
+
             # 尝试从缓存获取
             hit, value = cache.get(cache_key)
             if hit:
                 logger.debug(f"Cache hit: {cache_key}")
                 return value
-            
+
             # 缓存未命中，执行函数
             logger.debug(f"Cache miss: {cache_key}")
             result = await func(*args, **kwargs)
-            
+
             # 存入缓存
             cache.set(cache_key, result, ttl=ttl)
-            
+
             return result
+
         return wrapper
+
     return decorator
 
 

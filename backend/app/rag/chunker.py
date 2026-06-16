@@ -1,7 +1,9 @@
 from app.infrastructure.config import get_rag_config
 
 
-def chunk_text(text: str, chunk_size: int | None = None, overlap: int | None = None) -> list[str]:
+def chunk_text(
+    text: str, chunk_size: int | None = None, overlap: int | None = None
+) -> list[str]:
     config = get_rag_config()
     chunk_size = chunk_size or config.chunk_size
     overlap = overlap or config.chunk_overlap

@@ -1,6 +1,7 @@
 """
 财务报告分析工具 - 支持财务数据查询和分析
 """
+
 import os
 from datetime import datetime
 
@@ -88,21 +89,31 @@ class FinancialReportTool(BaseTool):
 
     async def execute(self, **kwargs) -> ToolResult:
         symbol = kwargs.get("symbol", "").upper()
-        report_type = kwargs.get("report_type", "summary")  # summary, detailed, quarterly
+        report_type = kwargs.get(
+            "report_type", "summary"
+        )  # summary, detailed, quarterly
 
         if not symbol:
-            return ToolResult(success=False, error="No stock symbol provided", tool_name=self.name)
+            return ToolResult(
+                success=False, error="No stock symbol provided", tool_name=self.name
+            )
 
         if not self.api_key:
-            return await self._unavailable(symbol, report_type, "FMP_API_KEY not configured")
+            return await self._unavailable(
+                symbol, report_type, "FMP_API_KEY not configured"
+            )
 
         try:
             return await self._fetch_real_data(symbol, report_type)
         except Exception as e:
             logger.error(f"Financial report query failed for {symbol}: {e}")
-            return await self._unavailable(symbol, report_type, f"real data unavailable: {e}")
+            return await self._unavailable(
+                symbol, report_type, f"real data unavailable: {e}"
+            )
 
-    async def _unavailable(self, symbol: str, report_type: str, reason: str) -> ToolResult:
+    async def _unavailable(
+        self, symbol: str, report_type: str, reason: str
+    ) -> ToolResult:
         if not mock_enabled():
             return ToolResult(
                 success=False,
@@ -123,7 +134,11 @@ class FinancialReportTool(BaseTool):
             async with session.get(profile_url) as resp:
                 profile_data = await resp.json()
 
-            if not profile_data or not isinstance(profile_data, list) or len(profile_data) == 0:
+            if (
+                not profile_data
+                or not isinstance(profile_data, list)
+                or len(profile_data) == 0
+            ):
                 raise ValueError("FMP returned an empty profile")
 
             profile = profile_data[0]
@@ -139,7 +154,9 @@ class FinancialReportTool(BaseTool):
                 balance_data = await resp.json()
 
             # 获取关键指标
-            metrics_url = f"{FMP_BASE_URL}/key-metrics/{symbol}?limit=3&apikey={self.api_key}"
+            metrics_url = (
+                f"{FMP_BASE_URL}/key-metrics/{symbol}?limit=3&apikey={self.api_key}"
+            )
             async with session.get(metrics_url) as resp:
                 metrics_data = await resp.json()
 
@@ -168,11 +185,16 @@ class FinancialReportTool(BaseTool):
                 result["quarterly"] = self._parse_quarterly(quarterly_data)
 
             return ToolResult(
-                success=True, data=result, tool_name=self.name,
-                source="fmp", is_mock=False,
+                success=True,
+                data=result,
+                tool_name=self.name,
+                source="fmp",
+                is_mock=False,
             )
 
-    def _parse_financials(self, income_data: list, balance_data: list, metrics_data: list) -> dict:
+    def _parse_financials(
+        self, income_data: list, balance_data: list, metrics_data: list
+    ) -> dict:
         """解析财务报表数据"""
         financials = {
             "revenue": {},
@@ -202,7 +224,9 @@ class FinancialReportTool(BaseTool):
             if year:
                 total_equity = item.get("totalStockholdersEquity", 1)
                 total_debt = item.get("totalDebt", 0)
-                financials["debt_to_equity"][year] = total_debt / total_equity if total_equity else 0
+                financials["debt_to_equity"][year] = (
+                    total_debt / total_equity if total_equity else 0
+                )
 
         # 计算 ROE
         for year in financials["net_income"]:
@@ -210,7 +234,9 @@ class FinancialReportTool(BaseTool):
                 if balance.get("calendarYear") == year:
                     equity = balance.get("totalStockholdersEquity", 1)
                     net_income = financials["net_income"].get(year, 0)
-                    financials["return_on_equity"][year] = net_income / equity if equity else 0
+                    financials["return_on_equity"][year] = (
+                        net_income / equity if equity else 0
+                    )
 
         return financials
 
@@ -263,8 +289,12 @@ class FinancialReportTool(BaseTool):
                 result = data
 
             return ToolResult(
-                success=True, data=result, tool_name=self.name,
-                source="mock", is_mock=True, warning=MOCK_WARNING,
+                success=True,
+                data=result,
+                tool_name=self.name,
+                source="mock",
+                is_mock=True,
+                warning=MOCK_WARNING,
             )
         else:
             # 返回通用模拟数据
@@ -287,7 +317,9 @@ class FinancialReportTool(BaseTool):
                     "warning": MOCK_WARNING,
                 },
                 tool_name=self.name,
-                source="mock", is_mock=True, warning=MOCK_WARNING,
+                source="mock",
+                is_mock=True,
+                warning=MOCK_WARNING,
             )
 
     async def fallback_execute(self, **kwargs) -> ToolResult:
@@ -306,18 +338,28 @@ class FinancialAnalysisTool(BaseTool):
 
     async def execute(self, **kwargs) -> ToolResult:
         symbol = kwargs.get("symbol", "").upper()
-        analysis_type = kwargs.get("analysis_type", "comprehensive")  # comprehensive, valuation, profitability, growth
+        analysis_type = kwargs.get(
+            "analysis_type", "comprehensive"
+        )  # comprehensive, valuation, profitability, growth
 
         if not symbol:
-            return ToolResult(success=False, error="No stock symbol provided", tool_name=self.name)
+            return ToolResult(
+                success=False, error="No stock symbol provided", tool_name=self.name
+            )
 
         try:
             # 获取财务数据
             report_tool = FinancialReportTool(api_key=self.api_key)
-            report_result = await report_tool.execute(symbol=symbol, report_type="detailed")
+            report_result = await report_tool.execute(
+                symbol=symbol, report_type="detailed"
+            )
 
             if not report_result.success:
-                return ToolResult(success=False, error="Failed to fetch financial data", tool_name=self.name)
+                return ToolResult(
+                    success=False,
+                    error="Failed to fetch financial data",
+                    tool_name=self.name,
+                )
 
             data = report_result.data
             analysis = self._analyze_financials(data, analysis_type)
@@ -389,12 +431,16 @@ class FinancialAnalysisTool(BaseTool):
             analysis["threats"].append("Potentially overvalued")
 
         # 生成摘要
-        company_name = data.get('name', 'Unknown Company')
+        company_name = data.get("name", "Unknown Company")
         if len(analysis["strengths"]) > len(analysis["weaknesses"]):
-            analysis["summary"] = f"{company_name} shows strong financial health with {len(analysis['strengths'])} strengths identified."
+            analysis["summary"] = (
+                f"{company_name} shows strong financial health with {len(analysis['strengths'])} strengths identified."
+            )
             analysis["recommendation"] = "Consider buying or holding"
         elif len(analysis["weaknesses"]) > len(analysis["strengths"]):
-            analysis["summary"] = f"{company_name} faces some financial challenges with {len(analysis['weaknesses'])} weaknesses identified."
+            analysis["summary"] = (
+                f"{company_name} faces some financial challenges with {len(analysis['weaknesses'])} weaknesses identified."
+            )
             analysis["recommendation"] = "Exercise caution"
         else:
             analysis["summary"] = f"{company_name} shows mixed financial signals."

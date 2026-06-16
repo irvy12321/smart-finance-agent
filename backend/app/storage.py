@@ -2,6 +2,7 @@
 SQLite-based persistent storage for chat conversations and tasks.
 Replaces the in-memory dict with a real database.
 """
+
 import json
 import os
 import sqlite3
@@ -28,6 +29,7 @@ def _ensure_db_dir() -> Path:
     except (PermissionError, OSError) as e:
         # Fallback to temp directory
         import warnings
+
         temp_dir = Path(tempfile.gettempdir()) / "smart_finance_agent"
         temp_dir.mkdir(parents=True, exist_ok=True)
         warnings.warn(
@@ -129,7 +131,7 @@ def init_db() -> None:
         # Migrate existing tables: add user_id column if missing
         _migrate_add_column(conn, "conversations", "user_id", "INTEGER DEFAULT NULL")
         _migrate_add_column(conn, "tasks", "user_id", "INTEGER DEFAULT NULL")
-        
+
         # Migrate users table: add role column if missing
         _migrate_add_column(conn, "users", "role", "TEXT NOT NULL DEFAULT 'viewer'")
 
@@ -141,7 +143,9 @@ def init_db() -> None:
         conn.close()
 
 
-def _migrate_add_column(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
+def _migrate_add_column(
+    conn: sqlite3.Connection, table: str, column: str, col_type: str
+) -> None:
     """Add a column to a table if it doesn't already exist"""
     try:
         cursor = conn.execute(f"PRAGMA table_info({table})")
@@ -155,12 +159,12 @@ def _migrate_add_column(conn: sqlite3.Connection, table: str, column: str, col_t
 def _create_default_admin(conn: sqlite3.Connection) -> None:
     """Create default admin user if not exists"""
     import bcrypt
-    
+
     # Check if admin user exists
     cursor = conn.execute("SELECT id FROM users WHERE username = 'admin'")
     if cursor.fetchone():
         return
-    
+
     # Create default admin user
     now = datetime.now().isoformat()
     default_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "")
@@ -169,14 +173,17 @@ def _create_default_admin(conn: sqlite3.Connection) -> None:
         # Never fall back to a hard-coded/weak password. Generate a strong
         # one-time password and surface it once so it can be rotated.
         import secrets
+
         default_password = secrets.token_urlsafe(18)
         generated = True
-    hashed_password = bcrypt.hashpw(default_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    hashed_password = bcrypt.hashpw(
+        default_password.encode("utf-8"), bcrypt.gensalt()
+    ).decode("utf-8")
 
     conn.execute(
         """INSERT INTO users (username, email, hashed_password, is_active, role, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        ("admin", "admin@sfa.local", hashed_password, True, "admin", now, now)
+        ("admin", "admin@sfa.local", hashed_password, True, "admin", now, now),
     )
     if generated:
         print(
@@ -185,7 +192,9 @@ def _create_default_admin(conn: sqlite3.Connection) -> None:
             "Store it now and rotate it; it will NOT be shown again."
         )
     else:
-        print("[INFO] Default admin user created (username: admin) using DEFAULT_ADMIN_PASSWORD.")
+        print(
+            "[INFO] Default admin user created (username: admin) using DEFAULT_ADMIN_PASSWORD."
+        )
 
 
 # Initialize on import
@@ -194,7 +203,10 @@ init_db()
 
 # ── Conversation CRUD ──────────────────────────────────────
 
-def create_conversation(conversation_id: str, user_id: int | None = None) -> dict[str, Any]:
+
+def create_conversation(
+    conversation_id: str, user_id: int | None = None
+) -> dict[str, Any]:
     now = datetime.now().isoformat()
     conn = _get_connection()
     try:
@@ -203,7 +215,13 @@ def create_conversation(conversation_id: str, user_id: int | None = None) -> dic
             (conversation_id, user_id, now, now),
         )
         conn.commit()
-        return {"conversation_id": conversation_id, "user_id": user_id, "created_at": now, "updated_at": now, "messages": []}
+        return {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "created_at": now,
+            "updated_at": now,
+            "messages": [],
+        }
     finally:
         conn.close()
 
@@ -249,12 +267,14 @@ def list_conversations(user_id: int | None = None) -> list[dict[str, Any]]:
                 "SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = ?",
                 (row["conversation_id"],),
             ).fetchone()
-            result.append({
-                "conversation_id": row["conversation_id"],
-                "created_at": row["created_at"],
-                "updated_at": row["updated_at"],
-                "message_count": count["cnt"],
-            })
+            result.append(
+                {
+                    "conversation_id": row["conversation_id"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "message_count": count["cnt"],
+                }
+            )
         return result
     finally:
         conn.close()
@@ -277,7 +297,8 @@ def get_conversation_owner(conversation_id: str) -> int | None:
     conn = _get_connection()
     try:
         row = conn.execute(
-            "SELECT user_id FROM conversations WHERE conversation_id = ?", (conversation_id,)
+            "SELECT user_id FROM conversations WHERE conversation_id = ?",
+            (conversation_id,),
         ).fetchone()
         return row["user_id"] if row else None
     finally:
@@ -316,7 +337,10 @@ def add_message(conversation_id: str, role: str, content: str) -> dict[str, Any]
 
 # ── Task CRUD ──────────────────────────────────────────────
 
-def create_task(task_id: str, query: str, priority: int = 1, user_id: int | None = None) -> dict[str, Any]:
+
+def create_task(
+    task_id: str, query: str, priority: int = 1, user_id: int | None = None
+) -> dict[str, Any]:
     now = datetime.now().isoformat()
     conn = _get_connection()
     try:
@@ -353,7 +377,9 @@ def get_task(task_id: str) -> dict[str, Any] | None:
         if row is None:
             return None
         task = dict(row)
-        task["result"] = json.loads(task["result_json"]) if task["result_json"] else None
+        task["result"] = (
+            json.loads(task["result_json"]) if task["result_json"] else None
+        )
         task["events"] = json.loads(task["events_json"]) if task["events_json"] else []
         del task["result_json"]
         del task["events_json"]
@@ -397,7 +423,16 @@ def update_task_result(task_id: str, result: dict[str, Any], events: list) -> bo
         now = datetime.now().isoformat()
         cursor = conn.execute(
             "UPDATE tasks SET status = ?, progress = ?, current_stage = ?, message = ?, result_json = ?, events_json = ?, updated_at = ? WHERE task_id = ?",
-            ("completed", 100.0, "completed", "Task completed successfully.", json.dumps(result), json.dumps(events), now, task_id),
+            (
+                "completed",
+                100.0,
+                "completed",
+                "Task completed successfully.",
+                json.dumps(result),
+                json.dumps(events),
+                now,
+                task_id,
+            ),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -405,7 +440,9 @@ def update_task_result(task_id: str, result: dict[str, Any], events: list) -> bo
         conn.close()
 
 
-def update_task_failure(task_id: str, status: str, current_stage: str, message: str) -> bool:
+def update_task_failure(
+    task_id: str, status: str, current_stage: str, message: str
+) -> bool:
     conn = _get_connection()
     try:
         now = datetime.now().isoformat()

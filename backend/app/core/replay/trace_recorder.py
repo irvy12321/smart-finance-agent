@@ -2,6 +2,7 @@
 Trace Recorder - 通过 EventBus 订阅零侵入记录执行 trace
 不修改 Orchestrator / Executor / Planner
 """
+
 import json
 import threading
 import time
@@ -19,6 +20,7 @@ logger = get_logger("trace_recorder")
 @dataclass
 class TraceEvent:
     """单条 trace 事件"""
+
     task_id: str
     event: str  # "start" | "end" | "pipeline_start" | "pipeline_end"
     timestamp: float
@@ -52,6 +54,7 @@ class TraceEvent:
 @dataclass
 class TraceSession:
     """一次完整的 trace 会话"""
+
     trace_id: str
     query: str
     start_time: float
@@ -102,6 +105,7 @@ class TraceRecorder:
     Trace 记录器 - 通过 EventBus 订阅自动记录
     线程安全，零侵入
     """
+
     _instance: "TraceRecorder | None" = None
     _lock = threading.Lock()
 
@@ -166,13 +170,15 @@ class TraceRecorder:
                     query=data.get("query", ""),
                     start_time=now,
                 )
-                self._current_session.events.append(TraceEvent(
-                    task_id="pipeline",
-                    event="pipeline_start",
-                    timestamp=now,
-                    wall_time=datetime.now().isoformat(),
-                    metadata={"query": data.get("query", "")[:200]},
-                ))
+                self._current_session.events.append(
+                    TraceEvent(
+                        task_id="pipeline",
+                        event="pipeline_start",
+                        timestamp=now,
+                        wall_time=datetime.now().isoformat(),
+                        metadata={"query": data.get("query", "")[:200]},
+                    )
+                )
 
             elif etype == "plan_ready" and self._current_session:
                 self._current_session.subtasks = data.get("subtasks", [])
@@ -181,15 +187,17 @@ class TraceRecorder:
                 task_id = data.get("task_id", "")
                 tool = data.get("tool", "")
                 self._task_starts[task_id] = now
-                self._current_session.events.append(TraceEvent(
-                    task_id=task_id,
-                    event="start",
-                    timestamp=now,
-                    wall_time=datetime.now().isoformat(),
-                    tool=tool,
-                    input_data=data.get("description", ""),
-                    metadata={"round": data.get("round", 0)},
-                ))
+                self._current_session.events.append(
+                    TraceEvent(
+                        task_id=task_id,
+                        event="start",
+                        timestamp=now,
+                        wall_time=datetime.now().isoformat(),
+                        tool=tool,
+                        input_data=data.get("description", ""),
+                        metadata={"round": data.get("round", 0)},
+                    )
+                )
 
             elif etype == "task_complete" and self._current_session:
                 task_id = data.get("task_id", "")
@@ -198,18 +206,20 @@ class TraceRecorder:
                 duration_ms = data.get("duration_ms", 0)
                 self._task_starts.pop(task_id, now)
 
-                self._current_session.events.append(TraceEvent(
-                    task_id=task_id,
-                    event="end",
-                    timestamp=now,
-                    wall_time=datetime.now().isoformat(),
-                    tool=tool,
-                    output_data=data.get("data", ""),
-                    success=success,
-                    latency_ms=duration_ms,
-                    error=data.get("error", ""),
-                    round_num=data.get("round", 0),
-                ))
+                self._current_session.events.append(
+                    TraceEvent(
+                        task_id=task_id,
+                        event="end",
+                        timestamp=now,
+                        wall_time=datetime.now().isoformat(),
+                        tool=tool,
+                        output_data=data.get("data", ""),
+                        success=success,
+                        latency_ms=duration_ms,
+                        error=data.get("error", ""),
+                        round_num=data.get("round", 0),
+                    )
+                )
 
                 if success:
                     self._current_session.success_count += 1
@@ -221,18 +231,22 @@ class TraceRecorder:
 
             elif etype == "pipeline_end" and self._current_session:
                 self._current_session.end_time = now
-                self._current_session.total_ms = (now - self._current_session.start_time) * 1000
-                self._current_session.events.append(TraceEvent(
-                    task_id="pipeline",
-                    event="pipeline_end",
-                    timestamp=now,
-                    wall_time=datetime.now().isoformat(),
-                    latency_ms=self._current_session.total_ms,
-                ))
+                self._current_session.total_ms = (
+                    now - self._current_session.start_time
+                ) * 1000
+                self._current_session.events.append(
+                    TraceEvent(
+                        task_id="pipeline",
+                        event="pipeline_end",
+                        timestamp=now,
+                        wall_time=datetime.now().isoformat(),
+                        latency_ms=self._current_session.total_ms,
+                    )
+                )
 
                 self._sessions.append(self._current_session)
                 if len(self._sessions) > self._max_sessions:
-                    self._sessions = self._sessions[-self._max_sessions:]
+                    self._sessions = self._sessions[-self._max_sessions :]
 
                 logger.info(
                     f"Trace recorded: {self._current_session.trace_id} "
@@ -258,7 +272,9 @@ class TraceRecorder:
 
         if filepath is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filepath = str(self._storage_path / f"trace_{timestamp}_{session.trace_id[:8]}.json")
+            filepath = str(
+                self._storage_path / f"trace_{timestamp}_{session.trace_id[:8]}.json"
+            )
 
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(session.to_dict(), f, ensure_ascii=False, indent=2)
@@ -273,20 +289,22 @@ class TraceRecorder:
 
         events = []
         for e in data.get("events", []):
-            events.append(TraceEvent(
-                task_id=e["task_id"],
-                event=e["event"],
-                timestamp=e["timestamp"],
-                wall_time=e["wall_time"],
-                tool=e.get("tool", ""),
-                input_data=e.get("input_data"),
-                output_data=e.get("output_data"),
-                success=e.get("success", True),
-                latency_ms=e.get("latency_ms", 0),
-                error=e.get("error", ""),
-                round_num=e.get("round_num", 0),
-                metadata=e.get("metadata", {}),
-            ))
+            events.append(
+                TraceEvent(
+                    task_id=e["task_id"],
+                    event=e["event"],
+                    timestamp=e["timestamp"],
+                    wall_time=e["wall_time"],
+                    tool=e.get("tool", ""),
+                    input_data=e.get("input_data"),
+                    output_data=e.get("output_data"),
+                    success=e.get("success", True),
+                    latency_ms=e.get("latency_ms", 0),
+                    error=e.get("error", ""),
+                    round_num=e.get("round_num", 0),
+                    metadata=e.get("metadata", {}),
+                )
+            )
 
         session = TraceSession(
             trace_id=data["trace_id"],
@@ -314,15 +332,17 @@ class TraceRecorder:
             try:
                 with open(filepath, encoding="utf-8") as f:
                     data = json.load(f)
-                traces.append({
-                    "filepath": str(filepath),
-                    "trace_id": data.get("trace_id", ""),
-                    "query": data.get("query", "")[:80],
-                    "total_ms": data.get("total_ms", 0),
-                    "event_count": len(data.get("events", [])),
-                    "success_count": data.get("success_count", 0),
-                    "failed_count": data.get("failed_count", 0),
-                })
+                traces.append(
+                    {
+                        "filepath": str(filepath),
+                        "trace_id": data.get("trace_id", ""),
+                        "query": data.get("query", "")[:80],
+                        "total_ms": data.get("total_ms", 0),
+                        "event_count": len(data.get("events", [])),
+                        "success_count": data.get("success_count", 0),
+                        "failed_count": data.get("failed_count", 0),
+                    }
+                )
             except Exception:
                 pass
 

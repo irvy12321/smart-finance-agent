@@ -16,7 +16,9 @@ def get_retriever() -> Retriever:
 
 class RAGTool(BaseTool):
     name = "rag_retrieve"
-    description = "Retrieves relevant text chunks from the knowledge base using semantic search"
+    description = (
+        "Retrieves relevant text chunks from the knowledge base using semantic search"
+    )
 
     def __init__(self, retriever: Retriever | None = None):
         self.retriever = retriever or get_retriever()
@@ -26,17 +28,24 @@ class RAGTool(BaseTool):
         top_k = kwargs.get("top_k", 5)
 
         if not query:
-            return ToolResult(success=False, error="No query provided", tool_name=self.name)
+            return ToolResult(
+                success=False, error="No query provided", tool_name=self.name
+            )
 
         try:
             results = self.retriever.retrieve(query, top_k=top_k)
             if not results:
                 return ToolResult(
                     success=True,
-                    data={"results": [], "message": "No documents in knowledge base yet"},
+                    data={
+                        "results": [],
+                        "message": "No documents in knowledge base yet",
+                    },
                     tool_name=self.name,
                 )
-            return ToolResult(success=True, data={"results": results}, tool_name=self.name)
+            return ToolResult(
+                success=True, data={"results": results}, tool_name=self.name
+            )
         except Exception as e:
             logger.error(f"RAG retrieve failed: {e}")
             return ToolResult(success=False, error=str(e), tool_name=self.name)
@@ -50,6 +59,9 @@ class RAGTool(BaseTool):
         logger.warning(f"RAG fallback for: {query}")
         return ToolResult(
             success=True,
-            data={"results": [], "message": f"[Fallback] No local knowledge available for: {query}"},
+            data={
+                "results": [],
+                "message": f"[Fallback] No local knowledge available for: {query}",
+            },
             tool_name=self.name,
         )

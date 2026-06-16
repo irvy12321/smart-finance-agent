@@ -16,19 +16,25 @@ ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # do not perform function calls in argument defaults
     "UP007",  # use X | Y for union types (keep for compatibility)
+    # The codebase intentionally uses Chinese (CJK) text in strings, docstrings
+    # and comments; full-width punctuation is not a bug.
+    "RUF001", # ambiguous-unicode-character-string
+    "RUF002", # ambiguous-unicode-character-docstring
+    "RUF003", # ambiguous-unicode-character-comment
 ]
 
 [lint.per-file-ignores]
 "tests/*" = ["S101", "SLF001"]  # allow assert and private access in tests
+# Imports run after sys.path setup + load_dotenv, which must happen first.
+"app/main.py" = ["E402"]
+# Imports are guarded availability probes for optional parsers.
+"tests/test_file_parser.py" = ["F401"]
 
 [format]
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-
-[isort]
-known-first-party = ["app"]
 
 [lint.isort]
 known-first-party = ["app"]
