@@ -466,7 +466,36 @@ Dependabot 会每周一自动检查并创建依赖更新 PR。
 
 ## 部署
 
-### Docker 部署
+### ECS 部署 checklist（生产）
+
+> 目标：把代码推到 GitHub 后，在 ECS 上一条命令拉起。镜像构建已在 CI（push 到 `master` 时的 `Docker Build` job）验证可构建。
+
+1. **准备环境变量**：在 ECS 的 `backend/.env` 中填好（这些值绝不进 Git）：
+
+   ```bash
+   JWT_SECRET_KEY=<python -c "import secrets;print(secrets.token_urlsafe(64))">
+   DEFAULT_ADMIN_PASSWORD=<自定义强口令>
+   ENVIRONMENT=production
+   CORS_ORIGINS=https://你的域名          # ⚠️ 默认是 localhost，不改前端会被 CORS 拦截
+   MIMO_API_KEY=<你的 key>                # 或 DEEPSEEK_API_KEY，二选一
+   ALPHA_VANTAGE_API_KEY=<可选，真实股价>
+   ALLOW_MOCK_DATA=true                   # 缺真实数据时回退带标记的模拟数据；严格模式设 false
+   ```
+
+2. **拉起服务**（在 ECS 项目根目录）：
+
+   ```bash
+   git pull
+   docker-compose -f docker-compose.prod.yml up -d --build
+   ```
+
+3. **验证**：`curl http://localhost:8000/ping` 返回 `{"status":"ok"}`；前端经 nginx 暴露在 80/443。
+
+4. **首次创建管理员后**：用上面「ECS 部署后创建用户」的接口添加其它账号，并尽快修改 admin 口令。
+
+> 说明：当前仓库没有自动 CD（不会 push 后自动上线）。若需要「push 自动部署」，可新增一个 deploy workflow：构建镜像 → 推送阿里云 ACR → SSH 到 ECS 执行 `compose pull && up -d`（需要配置 ACR / SSH 的 GitHub Secrets）。
+
+### Docker 部署（本地）
 
 ```bash
 # 开发环境 (backend + frontend)

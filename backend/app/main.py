@@ -135,6 +135,9 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     logger.info("Initializing Smart Finance Agent Orchestrator...")
 
+    # Fail fast if the JWT secret is missing/weak
+    check_jwt_secret()
+
     # Initialize Sentry
     init_sentry()
 
@@ -198,12 +201,6 @@ app = FastAPI(
 )
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Run startup checks"""
-    check_jwt_secret()
-
-
 # Add rate limiting
 app.state.limiter = limiter
 
@@ -257,19 +254,18 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.middleware("http")
 async def sentry_middleware(request: Request, call_next):
     """Middleware to add request context to Sentry"""
-    with sentry_sdk.configure_scope() as scope:
-        scope.set_context(
-            "request",
-            {
-                "method": request.method,
-                "url": str(request.url),
-                "headers": dict(request.headers),
-            },
-        )
+    sentry_sdk.set_context(
+        "request",
+        {
+            "method": request.method,
+            "url": str(request.url),
+            "headers": dict(request.headers),
+        },
+    )
 
-        response = await call_next(request)
+    response = await call_next(request)
 
-        scope.set_tag("http.status_code", response.status_code)
+    sentry_sdk.set_tag("http.status_code", response.status_code)
 
     return response
 
