@@ -1,7 +1,13 @@
 """
-Embedding 模块 - 支持 dev/prod 模式切换
-- dev: HashEmbedder (MD5哈希伪向量, 快速, 无语义)
-- prod: BGEEmbedder (BAAI/bge-m3, 真实语义)
+Embedding / retrieval module - dev/prod mode switch.
+
+Neither mode produces true neural semantic embeddings; both are lexical:
+- dev:  HashEmbedder   (MD5 hashed pseudo-vectors, fast, no semantics)
+- prod: BM25Embedder   (BM25 / TF-IDF over word + char n-grams, lexical only)
+
+This is intentionally honest naming: there is no bge-m3 / sentence-transformers
+model loaded. If true semantic search is required, swap BM25Embedder for a real
+sentence-transformers backend and update the configured ``dim`` accordingly.
 """
 import hashlib
 from abc import ABC, abstractmethod
@@ -58,8 +64,13 @@ class HashEmbedder(BaseEmbedder):
         return np.array([self.embed_text(t) for t in texts], dtype=np.float32)
 
 
-class BGEEmbedder(BaseEmbedder):
-    """生产模式: 使用字符 n-gram + BM25 实现语义嵌入 (无需下载模型)"""
+class BM25Embedder(BaseEmbedder):
+    """BM25 / TF-IDF lexical retrieval over word + char n-grams.
+
+    NOT a semantic embedding model: similarity is purely lexical (token overlap),
+    not meaning-based. ``model_name``/``device``/``batch_size`` are accepted for
+    interface compatibility but unused (no model is downloaded or run).
+    """
 
     def __init__(self, model_name: str = "", device: str = "cpu", batch_size: int = 32):
         self._dim_value = 384
@@ -190,8 +201,8 @@ def create_embedder() -> BaseEmbedder:
     rag_config = get_rag_config()
 
     if embed_config.mode == "prod":
-        logger.info(f"Creating BGEEmbedder (mode=prod, model={embed_config.model_name})")
-        return BGEEmbedder(
+        logger.info("Creating BM25Embedder (mode=prod, lexical BM25 retrieval - not semantic)")
+        return BM25Embedder(
             model_name=embed_config.model_name,
             device=embed_config.device,
             batch_size=embed_config.batch_size,
@@ -212,7 +223,7 @@ class Embedder(BaseEmbedder):
         rag_config = get_rag_config()
 
         if config.mode == "prod":
-            self._inner = BGEEmbedder(
+            self._inner = BM25Embedder(
                 model_name=config.model_name,
                 device=config.device,
                 batch_size=config.batch_size,
@@ -229,3 +240,8 @@ class Embedder(BaseEmbedder):
 
     def embed_batch(self, texts: list[str]) -> np.ndarray:
         return self._inner.embed_batch(texts)
+
+
+# Backwards-compatible alias. Historically this class was named ``BGEEmbedder``
+# and claimed to be bge-m3 semantic embeddings, which it never was.
+BGEEmbedder = BM25Embedder

@@ -5,10 +5,13 @@ embedding_dim: 384
 top_k: 5
 
 # Embedding 配置
-# mode: "prod" = hash mock (快速, 无语义), "prod" = bge-m3 (真实语义)
+# mode: "dev"  = HashEmbedder (MD5 哈希伪向量, 快速, 无语义)
+#       "prod" = BM25Embedder (BM25/TF-IDF 词法检索, 非神经语义嵌入)
+# 注意: 当前两种模式都不是真正的语义向量; model_name 在 BM25 模式下未被使用。
+# dim 必须与实现一致 (BM25Embedder 固定输出 384 维)。
 embedding:
   mode: "prod"
-  model_name: "all-MiniLM-L6-v2"
-  dim: 1024
+  model_name: "bm25-lexical"
+  dim: 384
   batch_size: 32
   device: "cpu"

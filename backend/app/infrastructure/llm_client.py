@@ -57,7 +57,18 @@ class LLMClient:
             cls._instance = cls(config)
         return cls._instance
 
-    @async_retry(max_retries=3, delay=1.0, backoff=2.0, exceptions=(Exception,))
+    @async_retry(
+        max_retries=3,
+        delay=1.0,
+        backoff=2.0,
+        exceptions=(Exception,),
+        # Do not waste retries on errors that will never succeed on retry.
+        exclude=(
+            litellm.AuthenticationError,
+            litellm.BadRequestError,
+            litellm.NotFoundError,
+        ),
+    )
     async def _call_litellm(self, messages: list[dict], **kwargs) -> dict:
         call_params = {
             "model": self.config.model,
@@ -210,7 +221,18 @@ class LiteLLMRouter:
         """清除所有模型 override"""
         self._model_overrides.clear()
 
-    @async_retry(max_retries=3, delay=1.0, backoff=2.0, exceptions=(Exception,))
+    @async_retry(
+        max_retries=3,
+        delay=1.0,
+        backoff=2.0,
+        exceptions=(Exception,),
+        # Do not waste retries on errors that will never succeed on retry.
+        exclude=(
+            litellm.AuthenticationError,
+            litellm.BadRequestError,
+            litellm.NotFoundError,
+        ),
+    )
     async def _call_litellm(self, messages: list[dict], **kwargs) -> dict:
         call_params = {
             "model": kwargs["model"],

@@ -163,15 +163,29 @@ def _create_default_admin(conn: sqlite3.Connection) -> None:
     
     # Create default admin user
     now = datetime.now().isoformat()
-    default_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
+    default_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "")
+    generated = False
+    if not default_password:
+        # Never fall back to a hard-coded/weak password. Generate a strong
+        # one-time password and surface it once so it can be rotated.
+        import secrets
+        default_password = secrets.token_urlsafe(18)
+        generated = True
     hashed_password = bcrypt.hashpw(default_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    
+
     conn.execute(
         """INSERT INTO users (username, email, hashed_password, is_active, role, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         ("admin", "admin@sfa.local", hashed_password, True, "admin", now, now)
     )
-    print(f"[INFO] Default admin user created (username: admin, password: {default_password})")
+    if generated:
+        print(
+            "[WARN] DEFAULT_ADMIN_PASSWORD not set. Generated a random admin password "
+            f"(username: admin, password: {default_password}). "
+            "Store it now and rotate it; it will NOT be shown again."
+        )
+    else:
+        print("[INFO] Default admin user created (username: admin) using DEFAULT_ADMIN_PASSWORD.")
 
 
 # Initialize on import

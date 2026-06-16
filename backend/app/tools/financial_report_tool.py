@@ -6,7 +6,7 @@ from datetime import datetime
 
 import aiohttp
 
-from app.tools.base_tool import BaseTool, ToolResult
+from app.tools.base_tool import MOCK_WARNING, BaseTool, ToolResult, mock_enabled
 from app.utils.logger import get_logger
 
 logger = get_logger("financial_report_tool")
@@ -21,8 +21,8 @@ MOCK_FINANCIAL_DATA = {
         "sector": "Technology",
         "industry": "Consumer Electronics",
         "financials": {
-            "revenue": {"2024": 383.29e9, "2023": 383.29e9, "2022": 394.33e9},
-            "net_income": {"2024": 97.00e9, "2023": 96.99e9, "2022": 99.80e9},
+            "revenue": {"2024": 391.04e9, "2023": 383.29e9, "2022": 394.33e9},
+            "net_income": {"2024": 93.74e9, "2023": 96.99e9, "2022": 99.80e9},
             "eps": {"2024": 6.13, "2023": 6.15, "2022": 6.11},
             "pe_ratio": {"2024": 28.5, "2023": 29.2, "2022": 24.8},
             "dividend_yield": {"2024": 0.55, "2023": 0.50, "2022": 0.60},
@@ -41,8 +41,8 @@ MOCK_FINANCIAL_DATA = {
         "sector": "Consumer Cyclical",
         "industry": "Auto Manufacturers",
         "financials": {
-            "revenue": {"2024": 96.77e9, "2023": 96.77e9, "2022": 81.46e9},
-            "net_income": {"2024": 14.97e9, "2023": 14.99e9, "2022": 12.56e9},
+            "revenue": {"2024": 97.69e9, "2023": 96.77e9, "2022": 81.46e9},
+            "net_income": {"2024": 7.13e9, "2023": 14.99e9, "2022": 12.56e9},
             "eps": {"2024": 4.30, "2023": 4.31, "2022": 3.62},
             "pe_ratio": {"2024": 62.3, "2023": 78.5, "2022": 52.4},
             "dividend_yield": {"2024": 0, "2023": 0, "2022": 0},
@@ -61,9 +61,9 @@ MOCK_FINANCIAL_DATA = {
         "sector": "Communication Services",
         "industry": "Internet Content & Information",
         "financials": {
-            "revenue": {"2024": 307.39e9, "2023": 307.39e9, "2022": 282.84e9},
-            "net_income": {"2024": 73.80e9, "2023": 73.80e9, "2022": 59.97e9},
-            "eps": {"2024": 5.80, "2023": 5.80, "2022": 4.56},
+            "revenue": {"2024": 350.02e9, "2023": 307.39e9, "2022": 282.84e9},
+            "net_income": {"2024": 100.12e9, "2023": 73.80e9, "2022": 59.97e9},
+            "eps": {"2024": 8.04, "2023": 5.80, "2022": 4.56},
             "pe_ratio": {"2024": 24.8, "2023": 24.5, "2022": 20.2},
             "dividend_yield": {"2024": 0, "2023": 0, "2022": 0},
             "debt_to_equity": {"2024": 0.05, "2023": 0.06, "2022": 0.06},
@@ -93,15 +93,25 @@ class FinancialReportTool(BaseTool):
         if not symbol:
             return ToolResult(success=False, error="No stock symbol provided", tool_name=self.name)
 
+        if not self.api_key:
+            return await self._unavailable(symbol, report_type, "FMP_API_KEY not configured")
+
         try:
-            # 尝试使用真实 API
-            if self.api_key:
-                return await self._fetch_real_data(symbol, report_type)
-            else:
-                return await self._get_mock_data(symbol, report_type)
+            return await self._fetch_real_data(symbol, report_type)
         except Exception as e:
             logger.error(f"Financial report query failed for {symbol}: {e}")
-            return await self._get_mock_data(symbol, report_type)
+            return await self._unavailable(symbol, report_type, f"real data unavailable: {e}")
+
+    async def _unavailable(self, symbol: str, report_type: str, reason: str) -> ToolResult:
+        if not mock_enabled():
+            return ToolResult(
+                success=False,
+                error=f"Real financial data unavailable for {symbol} ({reason}). "
+                f"Set ALLOW_MOCK_DATA=true to allow simulated data.",
+                tool_name=self.name,
+                source="fmp",
+            )
+        return await self._get_mock_data(symbol, report_type)
 
     async def _fetch_real_data(self, symbol: str, report_type: str) -> ToolResult:
         """从 Financial Modeling Prep API 获取真实财务数据"""
@@ -114,7 +124,7 @@ class FinancialReportTool(BaseTool):
                 profile_data = await resp.json()
 
             if not profile_data or not isinstance(profile_data, list) or len(profile_data) == 0:
-                return await self._get_mock_data(symbol, report_type)
+                raise ValueError("FMP returned an empty profile")
 
             profile = profile_data[0]
 
@@ -157,7 +167,10 @@ class FinancialReportTool(BaseTool):
                     quarterly_data = await resp.json()
                 result["quarterly"] = self._parse_quarterly(quarterly_data)
 
-            return ToolResult(success=True, data=result, tool_name=self.name)
+            return ToolResult(
+                success=True, data=result, tool_name=self.name,
+                source="fmp", is_mock=False,
+            )
 
     def _parse_financials(self, income_data: list, balance_data: list, metrics_data: list) -> dict:
         """解析财务报表数据"""
@@ -214,13 +227,15 @@ class FinancialReportTool(BaseTool):
         return quarterly
 
     async def _get_mock_data(self, symbol: str, report_type: str) -> ToolResult:
-        """获取模拟数据（降级方案）"""
+        """Clearly-labelled simulated data (only when ALLOW_MOCK_DATA=true)."""
         if symbol in MOCK_FINANCIAL_DATA:
             data = MOCK_FINANCIAL_DATA[symbol].copy()
             data["symbol"] = symbol
             data["report_type"] = report_type
             data["timestamp"] = datetime.now().isoformat()
-            data["source"] = "mock_data"
+            data["source"] = "mock"
+            data["is_mock"] = True
+            data["warning"] = MOCK_WARNING
 
             if report_type == "summary":
                 # 返回摘要信息
@@ -247,7 +262,10 @@ class FinancialReportTool(BaseTool):
                 # 返回详细数据
                 result = data
 
-            return ToolResult(success=True, data=result, tool_name=self.name)
+            return ToolResult(
+                success=True, data=result, tool_name=self.name,
+                source="mock", is_mock=True, warning=MOCK_WARNING,
+            )
         else:
             # 返回通用模拟数据
             return ToolResult(
@@ -264,17 +282,19 @@ class FinancialReportTool(BaseTool):
                         "pe_ratio": {"2024": 25.0, "2023": 28.0, "2022": 22.0},
                     },
                     "timestamp": datetime.now().isoformat(),
-                    "source": "mock_data",
-                    "note": f"Simulated data for {symbol}. Configure financial API for real data.",
+                    "source": "mock",
+                    "is_mock": True,
+                    "warning": MOCK_WARNING,
                 },
                 tool_name=self.name,
+                source="mock", is_mock=True, warning=MOCK_WARNING,
             )
 
     async def fallback_execute(self, **kwargs) -> ToolResult:
         """降级执行"""
         symbol = kwargs.get("symbol", "UNKNOWN").upper()
         logger.warning(f"Financial report fallback for: {symbol}")
-        return await self._get_mock_data(symbol, "summary")
+        return await self._unavailable(symbol, "summary", "primary execution failed")
 
 
 class FinancialAnalysisTool(BaseTool):
@@ -311,6 +331,9 @@ class FinancialAnalysisTool(BaseTool):
                     "timestamp": datetime.now().isoformat(),
                 },
                 tool_name=self.name,
+                source=report_result.source,
+                is_mock=report_result.is_mock,
+                warning=report_result.warning,
             )
         except Exception as e:
             logger.error(f"Financial analysis failed for {symbol}: {e}")

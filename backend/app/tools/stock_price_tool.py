@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import aiohttp
 
-from app.tools.base_tool import BaseTool, ToolResult
+from app.tools.base_tool import MOCK_WARNING, BaseTool, ToolResult, mock_enabled
 from app.tools.cache import get_cache, make_cache_key
 from app.utils.logger import get_logger
 
@@ -117,21 +117,29 @@ class StockPriceTool(BaseTool):
             logger.debug(f"Stock price cache hit: {symbol}")
             return cached_result
 
+        if not self.api_key:
+            return self._unavailable(symbol, "ALPHA_VANTAGE_API_KEY not configured")
+
         try:
-            # 尝试使用真实API（如果配置了API key）
-            if self.api_key:
-                result = await self._fetch_real_price(symbol)
-            else:
-                result = await self._get_mock_price(symbol)
-            
-            # 存入缓存
+            result = await self._fetch_real_price(symbol)
             if result.success:
                 self._cache.set(cache_key, result, ttl=STOCK_PRICE_CACHE_TTL)
-            
             return result
         except Exception as e:
             logger.error(f"Stock price query failed for {symbol}: {e}")
-            return await self._get_mock_price(symbol)
+            return self._unavailable(symbol, f"real data unavailable: {e}")
+
+    def _unavailable(self, symbol: str, reason: str) -> ToolResult:
+        """Return an explicit failure, or a clearly-labelled mock if ALLOW_MOCK_DATA is set."""
+        if not mock_enabled():
+            return ToolResult(
+                success=False,
+                error=f"Real stock price unavailable for {symbol} ({reason}). "
+                f"Set ALLOW_MOCK_DATA=true to allow simulated data.",
+                tool_name=self.name,
+                source="alpha_vantage",
+            )
+        return self._mock_price_sync(symbol)
 
     async def _fetch_real_price(self, symbol: str) -> ToolResult:
         """从真实API获取股价（使用Alpha Vantage）"""
@@ -153,8 +161,7 @@ class StockPriceTool(BaseTool):
                     quote = data.get("Global Quote", {})
 
                     if not quote:
-                        logger.warning(f"Alpha Vantage returned empty quote for {symbol}")
-                        return await self._get_mock_price(symbol)
+                        raise ValueError("Alpha Vantage returned an empty quote")
 
                     result = {
                         "symbol": symbol,
@@ -170,46 +177,45 @@ class StockPriceTool(BaseTool):
                         "source": "alpha_vantage",
                     }
 
-                    return ToolResult(success=True, data=result, tool_name=self.name)
+                    return ToolResult(
+                        success=True, data=result, tool_name=self.name,
+                        source="alpha_vantage", is_mock=False,
+                    )
         except Exception as e:
             logger.error(f"Alpha Vantage API error for {symbol}: {e}")
-            return await self._get_mock_price(symbol)
+            raise
 
-    async def _get_mock_price(self, symbol: str) -> ToolResult:
-        """获取模拟股价数据"""
+    def _mock_price_sync(self, symbol: str) -> ToolResult:
+        """Clearly-labelled simulated price data (only when ALLOW_MOCK_DATA=true)."""
         if symbol in MOCK_STOCK_DATA:
             data = MOCK_STOCK_DATA[symbol].copy()
             data["symbol"] = symbol
-            data["timestamp"] = datetime.now().isoformat()
-            data["source"] = "mock_data"
-            return ToolResult(success=True, data=data, tool_name=self.name)
         else:
-            # 返回通用模拟数据
-            return ToolResult(
-                success=True,
-                data={
-                    "symbol": symbol,
-                    "name": f"{symbol} Corp.",
-                    "price": 150.00,
-                    "change": 1.50,
-                    "change_percent": 1.01,
-                    "volume": 10000000,
-                    "market_cap": 5.0e11,
-                    "pe_ratio": 25.0,
-                    "52w_high": 175.00,
-                    "52w_low": 120.00,
-                    "timestamp": datetime.now().isoformat(),
-                    "source": "mock_data",
-                    "note": f"Simulated data for {symbol}. Configure ALPHA_VANTAGE_API_KEY for real data.",
-                },
-                tool_name=self.name,
-            )
+            data = {
+                "symbol": symbol,
+                "name": f"{symbol} Corp.",
+                "price": 150.00,
+                "change": 1.50,
+                "change_percent": 1.01,
+                "volume": 10000000,
+                "market_cap": 5.0e11,
+                "pe_ratio": 25.0,
+                "52w_high": 175.00,
+                "52w_low": 120.00,
+            }
+        data["timestamp"] = datetime.now().isoformat()
+        data["source"] = "mock"
+        data["is_mock"] = True
+        data["warning"] = MOCK_WARNING
+        return ToolResult(
+            success=True, data=data, tool_name=self.name,
+            source="mock", is_mock=True, warning=MOCK_WARNING,
+        )
 
     async def fallback_execute(self, **kwargs) -> ToolResult:
-        """降级执行：返回模拟数据"""
         symbol = kwargs.get("symbol", "UNKNOWN").upper()
         logger.warning(f"Stock price fallback for: {symbol}")
-        return await self._get_mock_price(symbol)
+        return self._unavailable(symbol, "primary execution failed")
 
 
 class StockHistoryTool(BaseTool):
@@ -226,14 +232,25 @@ class StockHistoryTool(BaseTool):
         if not symbol:
             return ToolResult(success=False, error="No stock symbol provided", tool_name=self.name)
 
+        if not self.api_key:
+            return self._unavailable(symbol, period, "ALPHA_VANTAGE_API_KEY not configured")
+
         try:
-            if self.api_key:
-                return await self._fetch_real_history(symbol, period)
-            else:
-                return await self._get_mock_history(symbol, period)
+            return await self._fetch_real_history(symbol, period)
         except Exception as e:
             logger.error(f"Stock history query failed for {symbol}: {e}")
-            return await self._get_mock_history(symbol, period)
+            return self._unavailable(symbol, period, f"real data unavailable: {e}")
+
+    def _unavailable(self, symbol: str, period: str, reason: str) -> ToolResult:
+        if not mock_enabled():
+            return ToolResult(
+                success=False,
+                error=f"Real stock history unavailable for {symbol} ({reason}). "
+                f"Set ALLOW_MOCK_DATA=true to allow simulated data.",
+                tool_name=self.name,
+                source="alpha_vantage",
+            )
+        return self._mock_history_sync(symbol, period)
 
     async def _fetch_real_history(self, symbol: str, period: str) -> ToolResult:
         """从真实API获取历史数据"""
@@ -252,7 +269,7 @@ class StockHistoryTool(BaseTool):
                 time_series = data.get("Time Series (Daily)", {})
 
                 if not time_series:
-                    return await self._get_mock_history(symbol, period)
+                    raise ValueError("Alpha Vantage returned an empty time series")
 
                 # 转换数据格式
                 history = []
@@ -270,10 +287,11 @@ class StockHistoryTool(BaseTool):
                     success=True,
                     data={"symbol": symbol, "period": period, "history": history},
                     tool_name=self.name,
+                    source="alpha_vantage", is_mock=False,
                 )
 
-    async def _get_mock_history(self, symbol: str, period: str) -> ToolResult:
-        """生成模拟历史数据"""
+    def _mock_history_sync(self, symbol: str, period: str) -> ToolResult:
+        """Clearly-labelled simulated history (only when ALLOW_MOCK_DATA=true)."""
         import random
 
         base_price = MOCK_STOCK_DATA.get(symbol, {}).get("price", 150.00)
@@ -303,10 +321,12 @@ class StockHistoryTool(BaseTool):
                 "symbol": symbol,
                 "period": period,
                 "history": history,
-                "source": "mock_data",
-                "note": "Simulated data. Configure ALPHA_VANTAGE_API_KEY for real data.",
+                "source": "mock",
+                "is_mock": True,
+                "warning": MOCK_WARNING,
             },
             tool_name=self.name,
+            source="mock", is_mock=True, warning=MOCK_WARNING,
         )
 
     async def fallback_execute(self, **kwargs) -> ToolResult:
@@ -314,4 +334,4 @@ class StockHistoryTool(BaseTool):
         symbol = kwargs.get("symbol", "UNKNOWN").upper()
         period = kwargs.get("period", "1m")
         logger.warning(f"Stock history fallback for: {symbol}")
-        return await self._get_mock_history(symbol, period)
+        return self._unavailable(symbol, period, "primary execution failed")
