@@ -2,7 +2,9 @@
 股票价格查询工具 - 支持实时股价查询和历史数据
 """
 
+import hashlib
 import os
+import random
 from datetime import datetime, timedelta
 
 import aiohttp
@@ -37,6 +39,36 @@ def _raise_if_rate_limited(data: dict) -> None:
     message = data.get("Note") or data.get("Information")
     if message:
         raise RateLimitError(message)
+
+
+def _symbol_rng(symbol: str) -> "random.Random":
+    """Deterministic RNG seeded by symbol so each symbol gets stable, distinct values."""
+    seed = int(hashlib.sha256(symbol.encode("utf-8")).hexdigest(), 16)
+    return random.Random(seed)
+
+
+def _generate_mock_price(symbol: str) -> dict:
+    """Plausible, per-symbol-varied simulated quote for unknown symbols.
+
+    Deterministic (same symbol -> same numbers) so the demo is stable, but
+    different symbols no longer collapse to one identical placeholder price.
+    """
+    rng = _symbol_rng(symbol)
+    price = round(rng.uniform(25.0, 650.0), 2)
+    change_percent = round(rng.uniform(-3.5, 3.5), 2)
+    change = round(price * change_percent / 100, 2)
+    return {
+        "symbol": symbol,
+        "name": f"{symbol} Corp.",
+        "price": price,
+        "change": change,
+        "change_percent": change_percent,
+        "volume": rng.randint(1_000_000, 90_000_000),
+        "market_cap": round(price * rng.randint(50_000_000, 5_000_000_000)),
+        "pe_ratio": round(rng.uniform(8.0, 60.0), 1),
+        "52w_high": round(price * rng.uniform(1.05, 1.45), 2),
+        "52w_low": round(price * rng.uniform(0.55, 0.95), 2),
+    }
 
 
 # 模拟股票数据（生产环境应接入真实API）
@@ -117,6 +149,51 @@ MOCK_STOCK_DATA = {
         "pe_ratio": 28.9,
         "52w_high": 542.81,
         "52w_low": 274.38,
+    },
+    # Common market-index proxies (ETFs) shown on the dashboard overview.
+    "SPY": {
+        "name": "SPDR S&P 500 ETF",
+        "price": 542.34,
+        "change": 1.87,
+        "change_percent": 0.35,
+        "volume": 41234567,
+        "market_cap": 4.9e11,
+        "pe_ratio": 24.6,
+        "52w_high": 565.16,
+        "52w_low": 418.92,
+    },
+    "QQQ": {
+        "name": "Invesco QQQ (NASDAQ-100)",
+        "price": 478.21,
+        "change": -2.43,
+        "change_percent": -0.51,
+        "volume": 33456789,
+        "market_cap": 2.7e11,
+        "pe_ratio": 31.2,
+        "52w_high": 503.52,
+        "52w_low": 342.21,
+    },
+    "DIA": {
+        "name": "SPDR Dow Jones ETF",
+        "price": 393.07,
+        "change": 0.62,
+        "change_percent": 0.16,
+        "volume": 3456789,
+        "market_cap": 3.4e10,
+        "pe_ratio": 22.1,
+        "52w_high": 411.10,
+        "52w_low": 327.45,
+    },
+    "VIX": {
+        "name": "CBOE Volatility Index",
+        "price": 14.27,
+        "change": -0.53,
+        "change_percent": -3.58,
+        "volume": 0,
+        "market_cap": 0,
+        "pe_ratio": 0,
+        "52w_high": 65.73,
+        "52w_low": 11.52,
     },
 }
 
@@ -228,18 +305,7 @@ class StockPriceTool(BaseTool):
             data = MOCK_STOCK_DATA[symbol].copy()
             data["symbol"] = symbol
         else:
-            data = {
-                "symbol": symbol,
-                "name": f"{symbol} Corp.",
-                "price": 150.00,
-                "change": 1.50,
-                "change_percent": 1.01,
-                "volume": 10000000,
-                "market_cap": 5.0e11,
-                "pe_ratio": 25.0,
-                "52w_high": 175.00,
-                "52w_low": 120.00,
-            }
+            data = _generate_mock_price(symbol)
         data["timestamp"] = datetime.now().isoformat()
         data["source"] = "mock"
         data["is_mock"] = True
@@ -347,9 +413,10 @@ class StockHistoryTool(BaseTool):
 
     def _mock_history_sync(self, symbol: str, period: str) -> ToolResult:
         """Clearly-labelled simulated history (only when ALLOW_MOCK_DATA=true)."""
-        import random
-
-        base_price = MOCK_STOCK_DATA.get(symbol, {}).get("price", 150.00)
+        rng = _symbol_rng(symbol)
+        base_price = MOCK_STOCK_DATA.get(symbol, {}).get(
+            "price", _generate_mock_price(symbol)["price"]
+        )
         days = {"1d": 1, "1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365}.get(
             period, 30
         )
@@ -360,17 +427,17 @@ class StockHistoryTool(BaseTool):
 
         for i in range(min(days, 30)):  # 最多返回30个数据点
             date = current_date - timedelta(days=days - i)
-            change = random.uniform(-0.03, 0.03) * price
+            change = rng.uniform(-0.03, 0.03) * price
             price = max(price + change, base_price * 0.5)
 
             history.append(
                 {
                     "date": date.strftime("%Y-%m-%d"),
-                    "open": round(price * random.uniform(0.99, 1.01), 2),
-                    "high": round(price * random.uniform(1.00, 1.03), 2),
-                    "low": round(price * random.uniform(0.97, 1.00), 2),
+                    "open": round(price * rng.uniform(0.99, 1.01), 2),
+                    "high": round(price * rng.uniform(1.00, 1.03), 2),
+                    "low": round(price * rng.uniform(0.97, 1.00), 2),
                     "close": round(price, 2),
-                    "volume": random.randint(5000000, 100000000),
+                    "volume": rng.randint(5000000, 100000000),
                 }
             )
 

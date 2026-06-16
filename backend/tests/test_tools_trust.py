@@ -21,6 +21,22 @@ def test_parse_percent_handles_alpha_vantage_string():
     assert _parse_percent("n/a") == 0.0
 
 
+@pytest.mark.asyncio
+async def test_mock_prices_differ_per_symbol(monkeypatch):
+    # Unknown symbols (e.g. index proxies) must not all collapse to one price.
+    monkeypatch.setenv("ALLOW_MOCK_DATA", "true")
+    prices = {}
+    for sym in ["SPY", "QQQ", "DIA", "VIX", "FOO", "BAR"]:
+        res = await StockPriceTool(api_key="").execute(symbol=sym)
+        assert res.success is True and res.is_mock is True
+        prices[sym] = res.data["price"]
+    # All distinct -> the "everything is 150" bug stays fixed.
+    assert len(set(prices.values())) == len(prices)
+    # Deterministic: same symbol yields the same simulated price.
+    again = (await StockPriceTool(api_key="").execute(symbol="FOO")).data["price"]
+    assert again == prices["FOO"]
+
+
 def test_raise_if_rate_limited_detects_note():
     with pytest.raises(RateLimitError):
         _raise_if_rate_limited({"Note": "Thank you... 25 requests per day"})
