@@ -9,10 +9,13 @@ MOCK_WARNING = "SIMULATED DATA - NOT FOR INVESTMENT"
 def mock_enabled() -> bool:
     """Whether tools may serve simulated data as a fallback.
 
-    Defaults to False: real data sources that are unavailable must surface an
-    explicit error rather than silently returning fabricated numbers.
+    Defaults to True so the app always has something to show (useful for demos
+    and offline review). Fallback data is never silent: it is always tagged with
+    ``is_mock=True``/``source="mock"``/``MOCK_WARNING`` and lowers the report's
+    data_confidence. Set ``ALLOW_MOCK_DATA=false`` for strict real-data-only mode
+    where unavailable sources surface an explicit error instead.
     """
-    return os.getenv("ALLOW_MOCK_DATA", "false").lower() in ("1", "true", "yes")
+    return os.getenv("ALLOW_MOCK_DATA", "true").lower() in ("1", "true", "yes")
 
 
 @dataclass
