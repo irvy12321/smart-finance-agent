@@ -303,14 +303,14 @@ jobs:
 
   # ============================================================
   # Auto-deploy to ECS
-  # Build + push images to Aliyun ACR, then SSH to the ECS host and
-  # pull & restart via docker-compose.deploy.yml.
+  # SSH to the ECS host, pull the latest code, and rebuild + restart
+  # the production stack with docker-compose.prod.yml.
   #
   # Dormant by default: only runs on push to master AND when the repo
   # variable DEPLOY_ENABLED == 'true'. This keeps CI green until all
   # required secrets/variables are configured. Required secrets:
-  #   ACR_REGISTRY, ACR_NAMESPACE, ACR_USERNAME, ACR_PASSWORD,
-  #   ECS_HOST, ECS_SSH_USER, ECS_SSH_KEY, ECS_SSH_PORT, ECS_PROJECT_DIR
+  #   ECS_HOST, ECS_SSH_USER, ECS_SSH_PASSWORD, ECS_PROJECT_DIR
+  #   (optional) ECS_SSH_PORT
   # ============================================================
   deploy:
     name: Deploy to ECS
@@ -318,76 +318,22 @@ jobs:
     needs: [frontend-lint, frontend-test, frontend-build, backend-lint, backend-test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.DEPLOY_ENABLED == 'true'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Aliyun ACR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.ACR_REGISTRY }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
-
-      - name: Compute image names
-        id: img
-        run: |
-          BASE="${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}"
-          echo "backend=${BASE}/sfa-backend" >> "$GITHUB_OUTPUT"
-          echo "frontend=${BASE}/sfa-frontend" >> "$GITHUB_OUTPUT"
-
-      - name: Build & push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          target: production
-          push: true
-          tags: |
-            ${{ steps.img.outputs.backend }}:latest
-            ${{ steps.img.outputs.backend }}:${{ github.sha }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
-
-      - name: Build & push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          target: production
-          push: true
-          build-args: |
-            VITE_API_URL=/api
-          tags: |
-            ${{ steps.img.outputs.frontend }}:latest
-            ${{ steps.img.outputs.frontend }}:${{ github.sha }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-
       - name: Deploy on ECS over SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.ECS_HOST }}
           username: ${{ secrets.ECS_SSH_USER }}
-          key: ${{ secrets.ECS_SSH_KEY }}
+          password: ${{ secrets.ECS_SSH_PASSWORD }}
           port: ${{ secrets.ECS_SSH_PORT || '22' }}
-          envs: ACR_REGISTRY,ACR_USERNAME,ACR_PASSWORD,BACKEND_IMAGE,FRONTEND_IMAGE,ECS_PROJECT_DIR
+          envs: ECS_PROJECT_DIR
+          command_timeout: 30m
           script_stop: true
           script: |
             set -e
             cd "$ECS_PROJECT_DIR"
-            git pull --ff-only
-            echo "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin
-            export BACKEND_IMAGE FRONTEND_IMAGE
-            docker compose -f docker-compose.deploy.yml pull
-            docker compose -f docker-compose.deploy.yml up -d
+            git fetch --all
+            git reset --hard origin/master
+            docker compose -f docker-compose.prod.yml up -d --build
             docker image prune -f
         env:
-          ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
-          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
-          BACKEND_IMAGE: ${{ steps.img.outputs.backend }}:${{ github.sha }}
-          FRONTEND_IMAGE: ${{ steps.img.outputs.frontend }}:${{ github.sha }}
           ECS_PROJECT_DIR: ${{ secrets.ECS_PROJECT_DIR }}
