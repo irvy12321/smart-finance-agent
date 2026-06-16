@@ -493,7 +493,31 @@ Dependabot 会每周一自动检查并创建依赖更新 PR。
 
 4. **首次创建管理员后**：用上面「ECS 部署后创建用户」的接口添加其它账号，并尽快修改 admin 口令。
 
-> 说明：当前仓库没有自动 CD（不会 push 后自动上线）。若需要「push 自动部署」，可新增一个 deploy workflow：构建镜像 → 推送阿里云 ACR → SSH 到 ECS 执行 `compose pull && up -d`（需要配置 ACR / SSH 的 GitHub Secrets）。
+### 自动部署到 ECS（CI/CD：push → ACR → ECS）
+
+仓库已内置自动部署流水线（`.github/workflows/ci.yml` 的 `deploy` 任务）：**push 到 `master` 且测试全绿后**，自动「构建镜像 → 推送阿里云 ACR → SSH 到 ECS 用 `docker-compose.deploy.yml` 拉起最新镜像」。
+
+该任务默认**休眠**，只有在仓库变量 `DEPLOY_ENABLED=true` 时才运行（没配好凭据前不会让 CI 变红）。启用步骤：
+
+1. **在 GitHub 配置 Secrets**（仓库 Settings → Secrets and variables → Actions → New repository secret，值加密、不进代码、日志自动打码）：
+
+   | Secret | 说明 / 示例 |
+   | --- | --- |
+   | `ACR_REGISTRY` | ACR 地址，如 `registry.cn-hangzhou.aliyuncs.com` |
+   | `ACR_NAMESPACE` | ACR 命名空间 |
+   | `ACR_USERNAME` | ACR 登录用户名 |
+   | `ACR_PASSWORD` | ACR 登录密码（容器镜像服务里设置的密码） |
+   | `ECS_HOST` | ECS 公网 IP 或域名 |
+   | `ECS_SSH_USER` | SSH 用户名，如 `root` |
+   | `ECS_SSH_KEY` | SSH 私钥**全文**（对应公钥已加入 ECS 的 `~/.ssh/authorized_keys`） |
+   | `ECS_SSH_PORT` | SSH 端口（可选，默认 22） |
+   | `ECS_PROJECT_DIR` | ECS 上仓库路径，如 `/root/smart-finance-agent` |
+
+2. **配置开关变量**：同页 → Variables 标签 → New repository variable → `DEPLOY_ENABLED` = `true`。
+
+3. **ECS 前置条件**（一次性）：已装 Docker + Docker Compose v2 + git；已 `git clone` 本仓库到 `ECS_PROJECT_DIR`；该目录下存在 `backend/.env`（生产密钥，含 `CORS_ORIGINS` 等）。
+
+配好后，下一次 push 到 `master`（测试通过）即自动部署。镜像同时打 `latest` 和 commit SHA 两个 tag，便于回滚。
 
 ### Docker 部署（本地）
 

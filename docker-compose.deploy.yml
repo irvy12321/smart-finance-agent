@@ -1,0 +1,77 @@
+# ============================================================
+# Deploy compose — runs PRE-BUILT images pulled from a registry
+# (e.g. Aliyun ACR). Used by the CI auto-deploy workflow on the ECS host.
+# Images are NOT built here; set BACKEND_IMAGE / FRONTEND_IMAGE to the
+# fully-qualified registry tags before running:
+#
+#   export BACKEND_IMAGE=registry.cn-hangzhou.aliyuncs.com/<ns>/sfa-backend:latest
+#   export FRONTEND_IMAGE=registry.cn-hangzhou.aliyuncs.com/<ns>/sfa-frontend:latest
+#   docker compose -f docker-compose.deploy.yml pull
+#   docker compose -f docker-compose.deploy.yml up -d
+#
+# Requires ./backend/.env to exist on the host (production secrets).
+# ============================================================
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE to the ACR backend tag}
+    container_name: sfa-backend-prod
+    env_file:
+      - ./backend/.env
+    environment:
+      - ENVIRONMENT=production
+      - PYTHONUNBUFFERED=1
+    expose:
+      - "8000"
+    volumes:
+      - backend_data:/app/data
+      - backend_output:/app/output
+      - backend_logs:/app/logs
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - sfa-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?set FRONTEND_IMAGE to the ACR frontend tag}
+    container_name: sfa-frontend-prod
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sfa-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  backend_data:
+    driver: local
+  backend_output:
+    driver: local
+  backend_logs:
+    driver: local
+
+networks:
+  sfa-network:
+    driver: bridge
