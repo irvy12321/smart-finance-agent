@@ -1,7 +1,9 @@
 """
 Task API routes
 """
+
 import asyncio
+import contextlib
 import json
 import uuid
 from datetime import datetime
@@ -21,19 +23,28 @@ logger = get_logger("api.task")
 
 router = APIRouter(prefix="/task", tags=["task"])
 
+# Keep strong references to fire-and-forget background tasks so they are not
+# garbage-collected mid-execution.
+_background_tasks: set[asyncio.Task] = set()
+
 
 # ============================================================
 # Pydantic Models
 # ============================================================
 
+
 class TaskCreateRequest(BaseModel):
     """Request model for creating a new task"""
-    query: str = Field(..., min_length=10, max_length=1000, description="Research query")
+
+    query: str = Field(
+        ..., min_length=10, max_length=1000, description="Research query"
+    )
     priority: int = Field(default=1, ge=1, le=5, description="Task priority (1-5)")
 
 
 class TaskCreateResponse(BaseModel):
     """Response model for task creation"""
+
     task_id: str
     status: str
     message: str
@@ -41,6 +52,7 @@ class TaskCreateResponse(BaseModel):
 
 class TaskStatusResponse(BaseModel):
     """Response model for task status"""
+
     task_id: str
     status: str  # pending, running, completed, failed
     progress: float = 0.0  # 0-100
@@ -50,6 +62,7 @@ class TaskStatusResponse(BaseModel):
 
 class SubTaskInfo(BaseModel):
     """Information about a subtask"""
+
     id: str
     tool: str
     desc: str
@@ -61,6 +74,7 @@ class SubTaskInfo(BaseModel):
 
 class TaskResultResponse(BaseModel):
     """Response model for task result"""
+
     task_id: str
     status: str
     query: str
@@ -90,12 +104,14 @@ class TaskResultResponse(BaseModel):
 
 class TaskListResponse(BaseModel):
     """Response model for task list"""
+
     tasks: list[dict[str, Any]]
 
 
 # ============================================================
 # Helper: Get orchestrator from app.state
 # ============================================================
+
 
 def _get_orchestrator(request: Request):
     """Get orchestrator from app.state"""
@@ -109,6 +125,7 @@ def _get_orchestrator(request: Request):
 # API Routes
 # ============================================================
 
+
 @router.post("/create", response_model=TaskCreateResponse)
 async def create_task(
     request: TaskCreateRequest,
@@ -120,14 +137,18 @@ async def create_task(
         task_id = str(uuid.uuid4())[:8]
 
         # Store task in SQLite with user_id
-        storage.create_task(task_id, request.query, request.priority, user_id=current_user.id)
+        storage.create_task(
+            task_id, request.query, request.priority, user_id=current_user.id
+        )
 
-        logger.info(f"Created task {task_id} for user {current_user.username}: {request.query[:50]}...")
+        logger.info(
+            f"Created task {task_id} for user {current_user.username}: {request.query[:50]}..."
+        )
 
         return TaskCreateResponse(
             task_id=task_id,
             status="pending",
-            message=f"Task created successfully. Use /api/task/{task_id}/run to start execution."
+            message=f"Task created successfully. Use /api/task/{task_id}/run to start execution.",
         )
     except Exception as e:
         logger.error(f"Error creating task: {e}")
@@ -153,7 +174,7 @@ async def get_task_status(
         status=task["status"],
         progress=task["progress"],
         current_stage=task["current_stage"],
-        message=task.get("message", f"Task is {task['status']}")
+        message=task.get("message", f"Task is {task['status']}"),
     )
 
 
@@ -177,16 +198,17 @@ async def run_task(
 
     # Get language from Accept-Language header
     language = request.headers.get("accept-language", "en")
-    if language.startswith("zh"):
-        language = "zh"
-    else:
-        language = "en"
+    language = "zh" if language.startswith("zh") else "en"
 
     # Get orchestrator from app.state
     orchestrator = _get_orchestrator(request)
 
     # Start task execution in background using asyncio.create_task
-    asyncio.create_task(execute_task_background(task_id, orchestrator, language))
+    bg_task = asyncio.create_task(
+        execute_task_background(task_id, orchestrator, language)
+    )
+    _background_tasks.add(bg_task)
+    bg_task.add_done_callback(_background_tasks.discard)
 
     return {"message": "Task execution started", "task_id": task_id}
 
@@ -206,7 +228,10 @@ async def get_task_result(
         raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
-        raise HTTPException(status_code=400, detail=f"Task is not completed. Current status: {task['status']}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Task is not completed. Current status: {task['status']}",
+        )
 
     result = task.get("result", {})
     if not result:
@@ -219,12 +244,11 @@ async def get_task_result(
             answer="Research completed but no detailed results available.",
         )
 
-    logger.info(f"[task:{task_id}] Returning result with {len(result.get('key_findings', []))} findings")
+    logger.info(
+        f"[task:{task_id}] Returning result with {len(result.get('key_findings', []))} findings"
+    )
     return TaskResultResponse(
-        task_id=task_id,
-        status="completed",
-        query=task["query"],
-        **result
+        task_id=task_id, status="completed", query=task["query"], **result
     )
 
 
@@ -241,6 +265,7 @@ async def list_tasks(
 # Background Task Execution
 # ============================================================
 
+
 async def execute_task_background(task_id: str, orchestrator, language: str = "en"):
     """Execute task in background with overall timeout"""
 
@@ -253,11 +278,21 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
 
     try:
         if language == "zh":
-            storage.update_task(task_id, status="running", current_stage="planning", progress=10.0, message="正在规划研究任务...")
+            storage.update_task(
+                task_id,
+                status="running",
+                current_stage="planning",
+                progress=10.0,
+                message="正在规划研究任务...",
+            )
         else:
-            storage.update_task(task_id, status="running", current_stage="planning", progress=10.0)
+            storage.update_task(
+                task_id, status="running", current_stage="planning", progress=10.0
+            )
 
-        logger.info(f"[task:{task_id}] Starting execution: {query[:80]}... (lang={language})")
+        logger.info(
+            f"[task:{task_id}] Starting execution: {query[:80]}... (lang={language})"
+        )
 
         # Run with overall timeout (900s)
         events = []
@@ -275,11 +310,19 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
                 # Gradually increase progress during long operations
                 if current_stage == "planning" and elapsed > 30:
                     current_progress = min(current_progress + 2.0, 25.0)
-                    msg = "正在规划中..." if language == "zh" else "Planning in progress..."
+                    msg = (
+                        "正在规划中..."
+                        if language == "zh"
+                        else "Planning in progress..."
+                    )
                     storage.update_task(task_id, progress=current_progress, message=msg)
                 elif current_stage == "executing" and elapsed > 60:
                     current_progress = min(current_progress + 3.0, 75.0)
-                    msg = f"执行中 {current_progress:.0f}%" if language == "zh" else f"Executing {current_progress:.0f}%"
+                    msg = (
+                        f"执行中 {current_progress:.0f}%"
+                        if language == "zh"
+                        else f"Executing {current_progress:.0f}%"
+                    )
                     storage.update_task(task_id, progress=current_progress, message=msg)
                 elif current_stage == "reasoning" and elapsed > 120:
                     current_progress = min(current_progress + 2.0, 88.0)
@@ -287,19 +330,25 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
                     storage.update_task(task_id, progress=current_progress, message=msg)
                 elif current_stage == "reporting" and elapsed > 180:
                     current_progress = min(current_progress + 1.0, 95.0)
-                    msg = "生成报告中..." if language == "zh" else "Generating report..."
+                    msg = (
+                        "生成报告中..." if language == "zh" else "Generating report..."
+                    )
                     storage.update_task(task_id, progress=current_progress, message=msg)
 
         progress_task = asyncio.create_task(_progress_updater())
 
         async def _run_pipeline():
             nonlocal last_event_time, current_progress, current_stage
-            async for event in orchestrator.run_with_streaming(query, language=language):
+            async for event in orchestrator.run_with_streaming(
+                query, language=language
+            ):
                 events.append(event)
                 last_event_time = datetime.now().timestamp()
                 elapsed = last_event_time - pipeline_start_time
                 stage = event.get("stage", "")
-                logger.debug(f"[task:{task_id}] Event #{len(events)}: stage={stage} elapsed={elapsed:.1f}s")
+                logger.debug(
+                    f"[task:{task_id}] Event #{len(events)}: stage={stage} elapsed={elapsed:.1f}s"
+                )
 
                 # Update task progress based on events
                 stage = event.get("stage", "")
@@ -307,40 +356,72 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
                     current_stage = "planning"
                     current_progress = 10.0
                     msg = "正在规划..." if language == "zh" else "Planning..."
-                    storage.update_task(task_id, progress=10.0, current_stage="planning", message=msg)
+                    storage.update_task(
+                        task_id, progress=10.0, current_stage="planning", message=msg
+                    )
                     logger.info(f"[task:{task_id}] Stage: planning")
                 elif stage == "plan_ready":
                     current_stage = "executing"
                     current_progress = 30.0
-                    msg = "正在执行研究..." if language == "zh" else "Executing research..."
-                    storage.update_task(task_id, progress=30.0, current_stage="executing", message=msg)
+                    msg = (
+                        "正在执行研究..."
+                        if language == "zh"
+                        else "Executing research..."
+                    )
+                    storage.update_task(
+                        task_id, progress=30.0, current_stage="executing", message=msg
+                    )
                     subtask_count = len(event.get("subtasks", []))
-                    logger.info(f"[task:{task_id}] Plan ready: {subtask_count} subtasks")
+                    logger.info(
+                        f"[task:{task_id}] Plan ready: {subtask_count} subtasks"
+                    )
                 elif stage == "task_done":
                     task = storage.get_task(task_id)
-                    current_progress = min(task["progress"] + 10.0, 80.0) if task else 40.0
-                    msg = f"已完成 {current_progress:.0f}%" if language == "zh" else f"Progress {current_progress:.0f}%"
+                    current_progress = (
+                        min(task["progress"] + 10.0, 80.0) if task else 40.0
+                    )
+                    msg = (
+                        f"已完成 {current_progress:.0f}%"
+                        if language == "zh"
+                        else f"Progress {current_progress:.0f}%"
+                    )
                     storage.update_task(task_id, progress=current_progress, message=msg)
                     success = event.get("success", False)
                     tool = event.get("tool", "")
-                    logger.info(f"[task:{task_id}] Subtask done: tool={tool} success={success}")
+                    logger.info(
+                        f"[task:{task_id}] Subtask done: tool={tool} success={success}"
+                    )
                 elif stage == "reasoning":
                     current_stage = "reasoning"
                     current_progress = 85.0
-                    msg = "正在分析结果..." if language == "zh" else "Analyzing results..."
-                    storage.update_task(task_id, progress=85.0, current_stage="reasoning", message=msg)
+                    msg = (
+                        "正在分析结果..."
+                        if language == "zh"
+                        else "Analyzing results..."
+                    )
+                    storage.update_task(
+                        task_id, progress=85.0, current_stage="reasoning", message=msg
+                    )
                     logger.info(f"[task:{task_id}] Stage: reasoning")
                 elif stage == "reporting":
                     current_stage = "reporting"
                     current_progress = 90.0
-                    msg = "正在生成报告..." if language == "zh" else "Generating report..."
-                    storage.update_task(task_id, progress=90.0, current_stage="reporting", message=msg)
+                    msg = (
+                        "正在生成报告..."
+                        if language == "zh"
+                        else "Generating report..."
+                    )
+                    storage.update_task(
+                        task_id, progress=90.0, current_stage="reporting", message=msg
+                    )
                     logger.info(f"[task:{task_id}] Stage: reporting")
                 elif stage == "complete":
                     current_stage = "completed"
                     current_progress = 100.0
                     msg = "研究完成" if language == "zh" else "Research completed"
-                    storage.update_task(task_id, progress=100.0, current_stage="completed", message=msg)
+                    storage.update_task(
+                        task_id, progress=100.0, current_stage="completed", message=msg
+                    )
                     logger.info(f"[task:{task_id}] Stage: complete")
                 elif stage == "plan_fallback":
                     logger.warning(f"[task:{task_id}] Using fallback plan")
@@ -353,10 +434,8 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
 
         # Cancel progress updater
         progress_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await progress_task
-        except asyncio.CancelledError:
-            pass
 
         # Process events and create result
         result = process_events(events, query, language)
@@ -367,24 +446,34 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
     except asyncio.TimeoutError:
         # Cancel progress updater
         progress_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await progress_task
-        except asyncio.CancelledError:
-            pass
         elapsed = datetime.now().timestamp() - pipeline_start_time
-        logger.error(f"[task:{task_id}] Timed out after {elapsed:.0f}s (last event {datetime.now().timestamp() - last_event_time:.0f}s ago). Events collected: {len(events)}")
-        timeout_msg = "研究超时，请尝试简化查询或重试。" if language == "zh" else "Research pipeline timed out. Please try a simpler query or try again later."
+        logger.error(
+            f"[task:{task_id}] Timed out after {elapsed:.0f}s (last event {datetime.now().timestamp() - last_event_time:.0f}s ago). Events collected: {len(events)}"
+        )
+        timeout_msg = (
+            "研究超时，请尝试简化查询或重试。"
+            if language == "zh"
+            else "Research pipeline timed out. Please try a simpler query or try again later."
+        )
         storage.update_task_failure(task_id, "failed", "timeout", timeout_msg)
     except Exception as e:
         # Cancel progress updater
         progress_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await progress_task
-        except asyncio.CancelledError:
-            pass
         elapsed = datetime.now().timestamp() - pipeline_start_time
-        logger.error(f"[task:{task_id}] Failed after {elapsed:.0f}s with error: {type(e).__name__}: {e}", exc_info=True)
-        storage.update_task_failure(task_id, "failed", "error", f"Task failed: {type(e).__name__}: {str(e)[:200]}")
+        logger.error(
+            f"[task:{task_id}] Failed after {elapsed:.0f}s with error: {type(e).__name__}: {e}",
+            exc_info=True,
+        )
+        storage.update_task_failure(
+            task_id,
+            "failed",
+            "error",
+            f"Task failed: {type(e).__name__}: {str(e)[:200]}",
+        )
 
 
 def process_events(events: list, query: str, language: str = "en") -> dict[str, Any]:
@@ -416,7 +505,9 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
                 "tool": event.get("tool", ""),
                 "success": event.get("success", False),
                 "duration_ms": event.get("duration_ms", 0),
-                "status": event.get("status", "success" if event.get("success") else "failed"),
+                "status": event.get(
+                    "status", "success" if event.get("success") else "failed"
+                ),
             }
         elif stage == "reasoning_done":
             reasoning_confidence = event.get("confidence", 0)
@@ -440,22 +531,34 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
         current_section = None
         for line in lines:
             line_stripped = line.strip()
-            if line_stripped.startswith("## 摘要") or line_stripped.startswith("## Summary"):
+            if line_stripped.startswith("## 摘要") or line_stripped.startswith(
+                "## Summary"
+            ):
                 current_section = "summary"
                 continue
-            elif line_stripped.startswith("## 关键发现") or line_stripped.startswith("## Key Findings"):
+            elif line_stripped.startswith("## 关键发现") or line_stripped.startswith(
+                "## Key Findings"
+            ):
                 current_section = "findings"
                 continue
-            elif line_stripped.startswith("## 风险因素") or line_stripped.startswith("## Risk Factors"):
+            elif line_stripped.startswith("## 风险因素") or line_stripped.startswith(
+                "## Risk Factors"
+            ):
                 current_section = "risks"
                 continue
-            elif line_stripped.startswith("## 市场趋势") or line_stripped.startswith("## Market Trends"):
+            elif line_stripped.startswith("## 市场趋势") or line_stripped.startswith(
+                "## Market Trends"
+            ):
                 current_section = "trends"
                 continue
-            elif line_stripped.startswith("## 建议") or line_stripped.startswith("## Recommendations"):
+            elif line_stripped.startswith("## 建议") or line_stripped.startswith(
+                "## Recommendations"
+            ):
                 current_section = "recommendations"
                 continue
-            elif line_stripped.startswith("## 数据来源") or line_stripped.startswith("## Data Sources"):
+            elif line_stripped.startswith("## 数据来源") or line_stripped.startswith(
+                "## Data Sources"
+            ):
                 current_section = "sources"
                 continue
             elif line_stripped.startswith("#") or line_stripped.startswith("---"):
@@ -468,7 +571,9 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
                 if current_section == "findings":
                     key_findings.append(item)
                 elif current_section == "risks":
-                    risk_factors.append({"factor": item, "severity": "medium", "description": item})
+                    risk_factors.append(
+                        {"factor": item, "severity": "medium", "description": item}
+                    )
                 elif current_section == "trends":
                     market_trends.append(item)
                 elif current_section == "recommendations":
@@ -510,7 +615,9 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
     # Compute task stats
     total_tasks = len(dag_subtasks)
     success_tasks = sum(1 for ts in task_states.values() if ts.get("success"))
-    failed_tasks = sum(1 for ts in task_states.values() if ts.get("status") in ("failed", "skipped"))
+    failed_tasks = sum(
+        1 for ts in task_states.values() if ts.get("status") in ("failed", "skipped")
+    )
 
     # Get plan reasoning
     plan_reasoning = ""
@@ -522,7 +629,9 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
     return {
         "answer": answer,
         "report_markdown": report_md,
-        "report_title": report_md.split("\n")[0].lstrip("# ").strip() if report_md else query[:60],
+        "report_title": report_md.split("\n")[0].lstrip("# ").strip()
+        if report_md
+        else query[:60],
         "summary": summary,
         "key_findings": key_findings,
         "risk_factors": risk_factors,
@@ -549,6 +658,7 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
 # SSE Endpoint for Real-time Workflow Visualization
 # ============================================================
 
+
 @router.get("/{task_id}/stream")
 async def stream_task_events(
     task_id: str,
@@ -556,7 +666,7 @@ async def stream_task_events(
 ):
     """
     SSE endpoint for real-time task execution updates.
-    
+
     Events:
     - connected: Connection established
     - plan_ready: Task plan generated with subtasks
@@ -590,7 +700,7 @@ async def stream_task_events(
                     yield f"event: {stage}\ndata: {json.dumps(event)}\n\n"
             except (json.JSONDecodeError, TypeError):
                 pass
-            
+
             yield f"event: complete\ndata: {json.dumps({'stage': 'complete', 'status': task['status']})}\n\n"
             return
 
@@ -598,7 +708,7 @@ async def stream_task_events(
         last_progress = -1
         last_stage = ""
         last_events_count = 0
-        
+
         while True:
             try:
                 # Get current task state
@@ -610,7 +720,7 @@ async def stream_task_events(
                 # Send progress update if changed
                 current_progress = current_task.get("progress", 0)
                 current_stage = current_task.get("current_stage", "")
-                
+
                 if current_progress != last_progress or current_stage != last_stage:
                     yield f"event: stage_change\ndata: {json.dumps({'stage': current_stage, 'progress': current_progress})}\n\n"
                     last_progress = current_progress
@@ -635,7 +745,7 @@ async def stream_task_events(
 
                 # Wait before next poll
                 await asyncio.sleep(1)
-                
+
                 # Send heartbeat every 30 seconds
                 yield ": heartbeat\n\n"
 

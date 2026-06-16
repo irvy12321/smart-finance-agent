@@ -4,6 +4,7 @@ CLOSED: 正常放行
 OPEN: 熔断拒绝，等待恢复
 HALF_OPEN: 探测恢复
 """
+
 import threading
 import time
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ class BreakerState(Enum):
 @dataclass
 class CircuitBreaker:
     """单个资源的熔断器"""
+
     name: str
     failure_threshold: int = 5
     recovery_timeout: float = 60.0
@@ -44,7 +46,9 @@ class CircuitBreaker:
                 if elapsed >= self.recovery_timeout:
                     self._state = BreakerState.HALF_OPEN
                     self._half_open_attempts = 0
-                    logger.info(f"[{self.name}] OPEN -> HALF_OPEN (recovery timeout reached)")
+                    logger.info(
+                        f"[{self.name}] OPEN -> HALF_OPEN (recovery timeout reached)"
+                    )
             return self._state
 
     def allow_request(self) -> bool:
@@ -92,7 +96,9 @@ class CircuitBreaker:
     def check_or_raise(self):
         """检查熔断器状态，OPEN 时抛出异常"""
         if not self.allow_request():
-            remaining = self.recovery_timeout - (time.monotonic() - self._last_failure_time)
+            remaining = self.recovery_timeout - (
+                time.monotonic() - self._last_failure_time
+            )
             raise CircuitBreakerOpenError(self.name, retry_after=max(0, remaining))
 
     def reset(self):
@@ -117,6 +123,7 @@ class CircuitBreaker:
 
 class CircuitBreakerManager:
     """熔断器管理器 - 每个 tool_name 独立熔断器"""
+
     _instance: "CircuitBreakerManager | None" = None
     _lock = threading.Lock()
 

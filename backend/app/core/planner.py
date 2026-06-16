@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
 from app.infrastructure.smart_router import RouteDecision
@@ -101,7 +102,7 @@ PLAN_SIZE_HINTS = {
 
 class PlannerAgent:
     # Prompt injection 危险模式
-    _INJECTION_PATTERNS = [
+    _INJECTION_PATTERNS: ClassVar[list[str]] = [
         "ignore previous instructions",
         "ignore all instructions",
         "forget your instructions",
@@ -113,7 +114,9 @@ class PlannerAgent:
         "bypass",
     ]
 
-    def __init__(self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None):
+    def __init__(
+        self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None
+    ):
         self.router = router
         self.llm = llm_client or LLMClient.get_instance()
 
@@ -125,10 +128,16 @@ class PlannerAgent:
         for pattern in cls._INJECTION_PATTERNS:
             if pattern in lower_query:
                 logger.warning(f"Potential prompt injection detected: '{pattern}'")
-                sanitized = sanitized.replace(pattern, "").replace(pattern.upper(), "").replace(pattern.title(), "")
+                sanitized = (
+                    sanitized.replace(pattern, "")
+                    .replace(pattern.upper(), "")
+                    .replace(pattern.title(), "")
+                )
         return sanitized[:2000]
 
-    async def plan(self, query: str, route_decision: RouteDecision | None = None) -> Plan:
+    async def plan(
+        self, query: str, route_decision: RouteDecision | None = None
+    ) -> Plan:
         safe_query = self._sanitize_query(query)
         logger.info(f"Planning for query: {safe_query[:80]}...")
 
@@ -172,7 +181,9 @@ class PlannerAgent:
             logger.error(f"Planning failed: {e}")
             raise PlannerError(f"Failed to create plan: {e}") from e
 
-    def _build_enhanced_system(self, route_decision: RouteDecision | None = None) -> str:
+    def _build_enhanced_system(
+        self, route_decision: RouteDecision | None = None
+    ) -> str:
         """构建增强 system prompt (动态注入工具可用性 + plan size hint)"""
         parts = [PLANNER_SYSTEM]
 
@@ -210,7 +221,9 @@ class PlannerAgent:
             end = text.rfind("}") + 1
             if start >= 0 and end > start:
                 return json.loads(text[start:end])
-            raise PlannerError(f"Cannot parse planner response as JSON: {text[:200]}") from e
+            raise PlannerError(
+                f"Cannot parse planner response as JSON: {text[:200]}"
+            ) from e
 
     def _build_subtasks(
         self, plan_data: dict, route_decision: RouteDecision | None = None
@@ -235,16 +248,18 @@ class PlannerAgent:
 
             reasoning = item.get("reasoning", "")
 
-            subtasks.append(SubTask(
-                task_id=item.get("task_id", f"task_{len(subtasks)+1}"),
-                tool_name=tool_name,
-                params=item.get("params", {}),
-                description=item.get("description", ""),
-                depends_on=item.get("depends_on", []),
-                priority=item.get("priority", 3),
-                tool_priority_score=round(priority_score, 3),
-                reasoning=reasoning,
-                confidence=confidence,
-            ))
+            subtasks.append(
+                SubTask(
+                    task_id=item.get("task_id", f"task_{len(subtasks) + 1}"),
+                    tool_name=tool_name,
+                    params=item.get("params", {}),
+                    description=item.get("description", ""),
+                    depends_on=item.get("depends_on", []),
+                    priority=item.get("priority", 3),
+                    tool_priority_score=round(priority_score, 3),
+                    reasoning=reasoning,
+                    confidence=confidence,
+                )
+            )
 
         return subtasks

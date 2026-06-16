@@ -23,7 +23,9 @@ class NewsTool(BaseTool):
     async def execute(self, **kwargs) -> ToolResult:
         query = kwargs.get("query", "")
         if not query:
-            return ToolResult(success=False, error="No query provided", tool_name=self.name)
+            return ToolResult(
+                success=False, error="No query provided", tool_name=self.name
+            )
 
         # 检查缓存
         cache_key = f"news:{query}"
@@ -48,21 +50,37 @@ class NewsTool(BaseTool):
         return result
 
     async def _search_newsapi(self, query: str) -> ToolResult:
-        params = {"q": query, "language": "en", "sortBy": "publishedAt", "pageSize": 5, "apiKey": self.api_key}
+        params = {
+            "q": query,
+            "language": "en",
+            "sortBy": "publishedAt",
+            "pageSize": 5,
+            "apiKey": self.api_key,
+        }
         timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(self.NEWS_API_URL, params=params) as resp:
-                data = await resp.json()
-                articles = data.get("articles", [])
-                results = [
-                    {"title": a.get("title", ""), "description": a.get("description", ""), "url": a.get("url", "")}
-                    for a in articles
-                ]
-                return ToolResult(success=True, data=results, tool_name=self.name)
+        async with (
+            aiohttp.ClientSession(timeout=timeout) as session,
+            session.get(self.NEWS_API_URL, params=params) as resp,
+        ):
+            data = await resp.json()
+            articles = data.get("articles", [])
+            results = [
+                {
+                    "title": a.get("title", ""),
+                    "description": a.get("description", ""),
+                    "url": a.get("url", ""),
+                }
+                for a in articles
+            ]
+            return ToolResult(success=True, data=results, tool_name=self.name)
 
     async def _fallback(self, query: str) -> ToolResult:
         results = [
-            {"title": f"[Simulated] Latest news about: {query}", "description": "This is simulated news data for MVP. Configure NEWS_API_KEY for real results.", "url": ""},
+            {
+                "title": f"[Simulated] Latest news about: {query}",
+                "description": "This is simulated news data for MVP. Configure NEWS_API_KEY for real results.",
+                "url": "",
+            },
         ]
         return ToolResult(success=True, data=results, tool_name=self.name)
 

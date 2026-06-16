@@ -4,6 +4,7 @@ Layer 1: Planner (任务拆解)
 Layer 2: Executor (并行执行)
 Layer 3: Synthesizer (Reasoner → Report → Chart)
 """
+
 import os
 from dataclasses import dataclass
 
@@ -20,6 +21,11 @@ from app.core.reasoner import Reasoner, ReasoningResult
 from app.core.report_agent import ReportAgent, ResearchReport
 from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
 from app.infrastructure.smart_router import SmartRouter
+from app.monitoring.prometheus import (
+    agent_calls_total,
+    agent_errors_total,
+    agent_stage_duration_seconds,
+)
 from app.rag.memory import ConversationMemory
 from app.tools.crawler_tool import CrawlerTool
 from app.tools.financial_report_tool import FinancialAnalysisTool, FinancialReportTool
@@ -28,11 +34,6 @@ from app.tools.news_tool import NewsTool
 from app.tools.rag_tool import RAGTool
 from app.tools.registry import ToolRegistry
 from app.tools.stock_price_tool import StockHistoryTool, StockPriceTool
-from app.monitoring.prometheus import (
-    agent_calls_total,
-    agent_errors_total,
-    agent_stage_duration_seconds,
-)
 from app.utils.logger import LogContext, get_logger
 from app.utils.tracing import PipelineTracker, TraceContext
 
@@ -95,7 +96,9 @@ class Orchestrator:
 
         self.memory = ConversationMemory()
 
-        logger.info(f"Orchestrator initialized (3-layer, router={'enabled' if use_router else 'disabled'})")
+        logger.info(
+            f"Orchestrator initialized (3-layer, router={'enabled' if use_router else 'disabled'})"
+        )
 
     def _register_tools(self):
         # Read API keys from environment
@@ -130,15 +133,18 @@ class Orchestrator:
         if self.router:
             self.router.token_budget.reset()
 
-        await self.event_bus.emit(AgentEvent(
-            event_type="pipeline_start",
-            agent_name="orchestrator",
-            data={"query": query},
-            trace_id=trace.trace_id,
-        ))
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="pipeline_start",
+                agent_name="orchestrator",
+                data={"query": query},
+                trace_id=trace.trace_id,
+            )
+        )
 
         # Layer 0: Smart Routing Assessment
         import time
+
         t0 = time.perf_counter()
         route = self.smart_router.assess(query)
         routing_ms = (time.perf_counter() - t0) * 1000
@@ -159,8 +165,12 @@ class Orchestrator:
                 plan = await self.planner.plan(query, route_decision=route)
                 agent_calls_total.labels(agent_name="planner").inc()
             except Exception as e:
-                logger.error(f"[trace:{trace.trace_id}] Planning failed, using fallback plan: {e}")
-                agent_errors_total.labels(agent_name="planner", error_type=type(e).__name__).inc()
+                logger.error(
+                    f"[trace:{trace.trace_id}] Planning failed, using fallback plan: {e}"
+                )
+                agent_errors_total.labels(
+                    agent_name="planner", error_type=type(e).__name__
+                ).inc()
                 plan = self._create_fallback_plan(query)
         planning_ms = (time.perf_counter() - t0) * 1000
         agent_stage_duration_seconds.labels(stage="planner").observe(planning_ms / 1000)
@@ -179,12 +189,17 @@ class Orchestrator:
                 agent_calls_total.labels(agent_name="executor").inc()
             except Exception as e:
                 logger.error(f"[trace:{trace.trace_id}] Execution failed: {e}")
-                agent_errors_total.labels(agent_name="executor", error_type=type(e).__name__).inc()
+                agent_errors_total.labels(
+                    agent_name="executor", error_type=type(e).__name__
+                ).inc()
                 exec_result = ExecutionResult(
-                    plan=plan, final_answer=f"Execution failed: {e}",
+                    plan=plan,
+                    final_answer=f"Execution failed: {e}",
                 )
         execution_ms = (time.perf_counter() - t0) * 1000
-        agent_stage_duration_seconds.labels(stage="executor").observe(execution_ms / 1000)
+        agent_stage_duration_seconds.labels(stage="executor").observe(
+            execution_ms / 1000
+        )
 
         # 记录任务结果 metrics + 更新工具可靠性
         for tr in exec_result.task_results:
@@ -216,10 +231,15 @@ class Orchestrator:
                     )
                     agent_calls_total.labels(agent_name="reasoner").inc()
                 except Exception as e:
-                    logger.error(f"[trace:{trace.trace_id}] Reasoning failed, using fallback: {e}")
-                    agent_errors_total.labels(agent_name="reasoner", error_type=type(e).__name__).inc()
+                    logger.error(
+                        f"[trace:{trace.trace_id}] Reasoning failed, using fallback: {e}"
+                    )
+                    agent_errors_total.labels(
+                        agent_name="reasoner", error_type=type(e).__name__
+                    ).inc()
                     fallback_data = await self._fallback_mgr.fallback_reasoner(
-                        exec_result.final_answer, query,
+                        exec_result.final_answer,
+                        query,
                     )
                     reasoning_result = ReasoningResult(**fallback_data)
 
@@ -234,11 +254,17 @@ class Orchestrator:
                 )
                 agent_calls_total.labels(agent_name="reporter").inc()
             except Exception as e:
-                logger.error(f"[trace:{trace.trace_id}] Report generation failed, using fallback: {e}")
-                agent_errors_total.labels(agent_name="reporter", error_type=type(e).__name__).inc()
+                logger.error(
+                    f"[trace:{trace.trace_id}] Report generation failed, using fallback: {e}"
+                )
+                agent_errors_total.labels(
+                    agent_name="reporter", error_type=type(e).__name__
+                ).inc()
                 from app.core.report_agent import StructuredAnalysis
+
                 fallback_data = await self._fallback_mgr.fallback_report(
-                    query, exec_result.final_answer,
+                    query,
+                    exec_result.final_answer,
                 )
                 report = ResearchReport(
                     title=fallback_data["title"],
@@ -255,13 +281,19 @@ class Orchestrator:
             # 3c: Chart Rendering (no LLM call, already safe)
             if reasoning_result and reasoning_result.chart_specs:
                 try:
-                    chart_paths = self.chart_renderer.render_all(reasoning_result.chart_specs)
+                    chart_paths = self.chart_renderer.render_all(
+                        reasoning_result.chart_specs
+                    )
                     logger.info(f"Rendered {len(chart_paths)} charts")
                 except Exception as e:
-                    logger.warning(f"[trace:{trace.trace_id}] Chart rendering failed: {e}")
+                    logger.warning(
+                        f"[trace:{trace.trace_id}] Chart rendering failed: {e}"
+                    )
                     chart_paths = []
         synthesizer_ms = (time.perf_counter() - t0) * 1000
-        tracker.record_stage("synthesizer", "reasoner+report", synthesizer_ms, status="ok")
+        tracker.record_stage(
+            "synthesizer", "reasoner+report", synthesizer_ms, status="ok"
+        )
 
         # 归档记忆
         if report:
@@ -307,7 +339,10 @@ class Orchestrator:
             self.router.token_budget.reset()
 
         # Layer 0: Smart Routing
-        yield {"stage": "planning", "message": "Analyzing question complexity and selecting strategy..."}
+        yield {
+            "stage": "planning",
+            "message": "Analyzing question complexity and selecting strategy...",
+        }
         route = self.smart_router.assess(query)
 
         # 临时覆盖 planner 模型
@@ -321,7 +356,10 @@ class Orchestrator:
             except Exception as e:
                 logger.error(f"Planning failed, using fallback plan: {e}")
                 plan = self._create_fallback_plan(query)
-                yield {"stage": "plan_fallback", "message": f"Planning failed: {e}, using fallback plan"}
+                yield {
+                    "stage": "plan_fallback",
+                    "message": f"Planning failed: {e}, using fallback plan",
+                }
 
         # 清除 override
         if self.router:
@@ -360,28 +398,32 @@ class Orchestrator:
 
         async def _on_task_start(event: AgentEvent):
             if event.event_type == "task_start":
-                _task_events.append({
-                    "type": "task_start",
-                    "task_id": event.data.get("task_id", ""),
-                    "tool": event.data.get("tool", ""),
-                    "description": event.data.get("description", ""),
-                })
+                _task_events.append(
+                    {
+                        "type": "task_start",
+                        "task_id": event.data.get("task_id", ""),
+                        "tool": event.data.get("tool", ""),
+                        "description": event.data.get("description", ""),
+                    }
+                )
 
         async def _on_task_complete(event: AgentEvent):
             if event.event_type == "task_complete":
-                _task_events.append({
-                    "type": "task_complete",
-                    "task_id": event.data.get("task_id", ""),
-                    "tool": event.data.get("tool", ""),
-                    "success": event.data.get("success", False),
-                    "duration_ms": event.data.get("duration_ms", 0),
-                })
+                _task_events.append(
+                    {
+                        "type": "task_complete",
+                        "task_id": event.data.get("task_id", ""),
+                        "tool": event.data.get("tool", ""),
+                        "success": event.data.get("success", False),
+                        "duration_ms": event.data.get("duration_ms", 0),
+                    }
+                )
 
         self.event_bus.subscribe("task_start", _on_task_start)
         self.event_bus.subscribe("task_complete", _on_task_complete)
 
         # Set executor language
-        self.executor._current_language = getattr(self, '_current_language', 'en')
+        self.executor._current_language = getattr(self, "_current_language", "en")
 
         with trace.span("execution"):
             try:
@@ -389,7 +431,8 @@ class Orchestrator:
             except Exception as e:
                 logger.error(f"Execution failed: {e}")
                 exec_result = ExecutionResult(
-                    plan=plan, final_answer=f"Execution failed: {e}",
+                    plan=plan,
+                    final_answer=f"Execution failed: {e}",
                 )
 
         self.event_bus.unsubscribe("task_start", _on_task_start)
@@ -422,8 +465,9 @@ class Orchestrator:
         if exec_result.final_answer:
             try:
                 reasoning_result = await self.reasoner.reason(
-                    context=exec_result.final_answer, question=query,
-                    language=getattr(self, '_current_language', 'en'),
+                    context=exec_result.final_answer,
+                    question=query,
+                    language=getattr(self, "_current_language", "en"),
                 )
                 yield {
                     "stage": "reasoning_done",
@@ -434,24 +478,32 @@ class Orchestrator:
             except Exception as e:
                 logger.error(f"Reasoning failed, using fallback: {e}")
                 fallback_data = await self._fallback_mgr.fallback_reasoner(
-                    exec_result.final_answer, query,
+                    exec_result.final_answer,
+                    query,
                 )
                 reasoning_result = ReasoningResult(**fallback_data)
-                yield {"stage": "reasoning_fallback", "message": f"Reasoning failed: {e}"}
+                yield {
+                    "stage": "reasoning_fallback",
+                    "message": f"Reasoning failed: {e}",
+                }
 
         yield {"stage": "reporting", "message": "Generating structured report..."}
         report = None
         try:
             report = await self.report_agent.generate(
-                query=query, exec_result=exec_result,
-                reasoning_result=reasoning_result, trace_id=trace.trace_id,
-                language=getattr(self, '_current_language', 'en'),
+                query=query,
+                exec_result=exec_result,
+                reasoning_result=reasoning_result,
+                trace_id=trace.trace_id,
+                language=getattr(self, "_current_language", "en"),
             )
         except Exception as e:
             logger.error(f"Report generation failed, using fallback: {e}")
             from app.core.report_agent import StructuredAnalysis
+
             fallback_data = await self._fallback_mgr.fallback_report(
-                query, exec_result.final_answer,
+                query,
+                exec_result.final_answer,
             )
             report = ResearchReport(
                 title=fallback_data["title"],
@@ -470,7 +522,9 @@ class Orchestrator:
         chart_paths = []
         if reasoning_result and reasoning_result.chart_specs:
             try:
-                chart_paths = self.chart_renderer.render_all(reasoning_result.chart_specs)
+                chart_paths = self.chart_renderer.render_all(
+                    reasoning_result.chart_specs
+                )
             except Exception as e:
                 logger.warning(f"Chart rendering failed: {e}")
 
@@ -485,12 +539,22 @@ class Orchestrator:
         yield {
             "stage": "complete",
             "answer": exec_result.final_answer,
-            "report_markdown": report.to_markdown(language=getattr(self, '_current_language', 'en')) if report else "",
+            "report_markdown": report.to_markdown(
+                language=getattr(self, "_current_language", "en")
+            )
+            if report
+            else "",
             "report_title": report.title if report else "",
             "chart_paths": chart_paths,
             "chart_specs": [
-                {"chart_type": c.chart_type, "title": c.title, "x_label": c.x_label,
-                 "y_label": c.y_label, "data": c.data, "description": c.description}
+                {
+                    "chart_type": c.chart_type,
+                    "title": c.title,
+                    "x_label": c.x_label,
+                    "y_label": c.y_label,
+                    "data": c.data,
+                    "description": c.description,
+                }
                 for c in (reasoning_result.chart_specs if reasoning_result else [])
             ],
             "total_duration_ms": trace.summary()["total_ms"],
@@ -499,11 +563,13 @@ class Orchestrator:
         }
 
     async def _emit_stage(self, stage: AgentStage):
-        await self.event_bus.emit(AgentEvent(
-            event_type="stage_change",
-            agent_name="orchestrator",
-            data={"stage": stage.value},
-        ))
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="stage_change",
+                agent_name="orchestrator",
+                data={"stage": stage.value},
+            )
+        )
 
     def get_llm_stats(self) -> dict:
         stats = self.llm.get_stats()
@@ -534,7 +600,9 @@ class Orchestrator:
                 SubTask(
                     task_id="fallback_1",
                     tool_name="llm_synthesize",
-                    params={"prompt": f"Answer this question based on your knowledge: {query}"},
+                    params={
+                        "prompt": f"Answer this question based on your knowledge: {query}"
+                    },
                     description="Fallback: LLM synthesis without external data",
                     priority=1,
                     confidence=0.5,

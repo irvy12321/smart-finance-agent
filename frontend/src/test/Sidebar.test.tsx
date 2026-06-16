@@ -18,11 +18,11 @@ const mockAuthReturn = {
   register: vi.fn(),
   logout: vi.fn(),
   refreshAccessToken: vi.fn(),
-  hasRole: vi.fn(),
-  hasAnyRole: vi.fn(),
-  isAdmin: vi.fn(),
-  isAnalyst: vi.fn(),
-  isViewer: vi.fn(),
+  hasRole: vi.fn(() => true),
+  hasAnyRole: vi.fn(() => true),
+  isAdmin: vi.fn(() => true),
+  isAnalyst: vi.fn(() => true),
+  isViewer: vi.fn(() => true),
 }
 
 describe('Sidebar', () => {

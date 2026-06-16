@@ -2,6 +2,7 @@
 Smart Router - 查询复杂度评估 + 任务类型分类 + 工具优先级评分 + 模型选择
 纯决策模块，不修改任何执行逻辑
 """
+
 from dataclasses import dataclass, field
 
 from app.infrastructure.config import SmartRouterConfig, get_smart_router_config
@@ -11,39 +12,105 @@ logger = get_logger("smart_router")
 
 COMPLEXITY_KEYWORDS = {
     "high": [
-        "compare", "analyze", "evaluate", "risk", "forecast", "implications",
-        "comprehensive", "detailed", "multi-factor", "correlation", "strategy",
-        "assessment", "investment", "portfolio", "diversification", "volatility",
+        "compare",
+        "analyze",
+        "evaluate",
+        "risk",
+        "forecast",
+        "implications",
+        "comprehensive",
+        "detailed",
+        "multi-factor",
+        "correlation",
+        "strategy",
+        "assessment",
+        "investment",
+        "portfolio",
+        "diversification",
+        "volatility",
     ],
     "medium": [
-        "summary", "overview", "trend", "performance", "report", "latest",
-        "quarterly", "annual", "revenue", "earnings", "growth", "market",
+        "summary",
+        "overview",
+        "trend",
+        "performance",
+        "report",
+        "latest",
+        "quarterly",
+        "annual",
+        "revenue",
+        "earnings",
+        "growth",
+        "market",
     ],
     "low": [
-        "what is", "price of", "current", "news about", "define", "who is",
-        "when did", "how much", "today",
+        "what is",
+        "price of",
+        "current",
+        "news about",
+        "define",
+        "who is",
+        "when did",
+        "how much",
+        "today",
     ],
 }
 
 TOOL_PATTERNS = {
     "rag_retrieve": [
-        "explain", "history", "background", "definition", "based on",
-        "previous", "prior", "knowledge", "document", "analysis of",
+        "explain",
+        "history",
+        "background",
+        "definition",
+        "based on",
+        "previous",
+        "prior",
+        "knowledge",
+        "document",
+        "analysis of",
     ],
     "news_search": [
-        "latest", "recent", "news", "today", "current", "breaking",
-        "announcement", "update", "just", "this week", "this month",
+        "latest",
+        "recent",
+        "news",
+        "today",
+        "current",
+        "breaking",
+        "announcement",
+        "update",
+        "just",
+        "this week",
+        "this month",
     ],
     "crawler": [
-        "sec filing", "website", "url", "page", "document from",
-        "official", "report from", "data from",
+        "sec filing",
+        "website",
+        "url",
+        "page",
+        "document from",
+        "official",
+        "report from",
+        "data from",
     ],
 }
 
 TIME_PATTERNS = [
-    "today", "yesterday", "this week", "this month", "this year",
-    "last quarter", "q1", "q2", "q3", "q4", "2024", "2025", "2026",
-    "latest", "recent", "current",
+    "today",
+    "yesterday",
+    "this week",
+    "this month",
+    "this year",
+    "last quarter",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+    "2024",
+    "2025",
+    "2026",
+    "latest",
+    "recent",
+    "current",
 ]
 
 TASK_TYPE_TOOL_MAP = {
@@ -57,6 +124,7 @@ TASK_TYPE_TOOL_MAP = {
 @dataclass
 class RouteDecision:
     """路由决策结果"""
+
     complexity: float = 0.0
     task_type: str = "llm"
     tool_scores: dict[str, float] = field(default_factory=dict)
@@ -231,8 +299,11 @@ class SmartRouter:
         return "simple"
 
     def _build_reasoning(
-        self, complexity: float, task_type: str,
-        tool_scores: dict[str, float], plan_hint: str,
+        self,
+        complexity: float,
+        task_type: str,
+        tool_scores: dict[str, float],
+        plan_hint: str,
     ) -> str:
         """构建路由推理说明"""
         top_tools = sorted(tool_scores.items(), key=lambda x: -x[1])[:3]

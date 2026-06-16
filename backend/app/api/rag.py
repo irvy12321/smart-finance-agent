@@ -1,6 +1,7 @@
 """
 RAG API 路由 - 文档上传、向量化、检索管理
 """
+
 import contextlib
 import json
 import uuid
@@ -19,7 +20,7 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
-from app.auth.dependencies import get_current_user, require_role
+from app.auth.dependencies import require_role
 from app.auth.models import UserResponse
 from app.auth.roles import Role
 from app.rag.chunker import chunk_text
@@ -92,8 +93,10 @@ def _save_documents(documents: list[dict[str, Any]]):
 # Pydantic Models
 # ============================================================
 
+
 class DocumentInfo(BaseModel):
     """文档信息"""
+
     id: str
     filename: str
     file_type: str
@@ -107,12 +110,14 @@ class DocumentInfo(BaseModel):
 
 class DocumentListResponse(BaseModel):
     """文档列表响应"""
+
     documents: list[DocumentInfo]
     total: int
 
 
 class DocumentUploadResponse(BaseModel):
     """文档上传响应"""
+
     document_id: str
     filename: str
     status: str
@@ -121,18 +126,21 @@ class DocumentUploadResponse(BaseModel):
 
 class DocumentDeleteResponse(BaseModel):
     """文档删除响应"""
+
     document_id: str
     message: str
 
 
 class RAGSearchRequest(BaseModel):
     """RAG 搜索请求"""
+
     query: str = Field(..., min_length=1, max_length=1000)
     top_k: int = Field(default=5, ge=1, le=20)
 
 
 class RAGSearchResult(BaseModel):
     """RAG 搜索结果"""
+
     text: str
     score: float
     metadata: dict[str, Any] = {}
@@ -140,6 +148,7 @@ class RAGSearchResult(BaseModel):
 
 class RAGSearchResponse(BaseModel):
     """RAG 搜索响应"""
+
     query: str
     results: list[RAGSearchResult]
     total: int
@@ -147,6 +156,7 @@ class RAGSearchResponse(BaseModel):
 
 class RAGStatsResponse(BaseModel):
     """RAG 统计响应"""
+
     total_documents: int
     total_chunks: int
     vector_store_size: int
@@ -157,13 +167,15 @@ class RAGStatsResponse(BaseModel):
 # API Routes
 # ============================================================
 
+
 @router.get("/documents", response_model=DocumentListResponse)
-async def list_documents(current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
+async def list_documents(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
     """获取所有文档列表"""
     documents = _load_documents()
     return DocumentListResponse(
-        documents=[DocumentInfo(**doc) for doc in documents],
-        total=len(documents)
+        documents=[DocumentInfo(**doc) for doc in documents], total=len(documents)
     )
 
 
@@ -183,16 +195,18 @@ async def upload_document(
     if file_ext not in allowed_types:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type: {file_ext}. Allowed: {', '.join(allowed_types)}"
+            detail=f"Unsupported file type: {file_ext}. Allowed: {', '.join(allowed_types)}",
         )
 
     # 读取文件内容
     content = await file.read()
-    
+
     # 解析文件内容
     try:
         text_content = parse_file(content, file.filename)
-        logger.info(f"File parsed successfully: {file.filename} ({len(text_content)} chars)")
+        logger.info(
+            f"File parsed successfully: {file.filename} ({len(text_content)} chars)"
+        )
     except FileParserError as e:
         logger.error(f"File parsing failed: {file.filename} - {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -204,7 +218,7 @@ async def upload_document(
     upload_dir = RAG_DATA_DIR / "uploads"
     upload_dir.mkdir(exist_ok=True)
     file_path = upload_dir / f"{doc_id}{file_ext}"
-    
+
     # 根据文件类型选择写入模式
     if file_ext in {".txt", ".md", ".csv", ".json"}:
         with open(file_path, "w", encoding="utf-8") as f:
@@ -248,7 +262,7 @@ async def upload_document(
         document_id=doc_id,
         filename=file.filename,
         status="processing",
-        message="Document uploaded. Vectorization in progress."
+        message="Document uploaded. Vectorization in progress.",
     )
 
 
@@ -268,8 +282,7 @@ async def _process_document(doc_id: str, content: str, metadata: dict[str, Any])
         # 存储到向量数据库
         vector_store = _get_vector_store()
         chunk_metadata = [
-            {**metadata, "doc_id": doc_id, "chunk_index": i}
-            for i in range(len(chunks))
+            {**metadata, "doc_id": doc_id, "chunk_index": i} for i in range(len(chunks))
         ]
         vector_store.add(embeddings, chunks, chunk_metadata)
         vector_store.save()
@@ -297,7 +310,10 @@ def _update_document_status(doc_id: str, status: str, chunk_count: int):
 
 
 @router.get("/documents/{doc_id}", response_model=DocumentInfo)
-async def get_document(doc_id: str, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
+async def get_document(
+    doc_id: str,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
     """获取单个文档信息"""
     documents = _load_documents()
     for doc in documents:
@@ -307,7 +323,9 @@ async def get_document(doc_id: str, current_user: UserResponse = Depends(require
 
 
 @router.delete("/documents/{doc_id}", response_model=DocumentDeleteResponse)
-async def delete_document(doc_id: str, current_user: UserResponse = Depends(require_role(Role.ADMIN))):
+async def delete_document(
+    doc_id: str, current_user: UserResponse = Depends(require_role(Role.ADMIN))
+):
     """删除文档及其向量数据"""
     documents = _load_documents()
     doc_to_delete = None
@@ -362,12 +380,15 @@ async def delete_document(doc_id: str, current_user: UserResponse = Depends(requ
 
     return DocumentDeleteResponse(
         document_id=doc_id,
-        message="Document and associated vectors deleted successfully"
+        message="Document and associated vectors deleted successfully",
     )
 
 
 @router.post("/search", response_model=RAGSearchResponse)
-async def search_documents(request: RAGSearchRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
+async def search_documents(
+    request: RAGSearchRequest,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
     """搜索相关文档片段"""
     try:
         embedder = _get_embedder()
@@ -383,13 +404,11 @@ async def search_documents(request: RAGSearchRequest, current_user: UserResponse
             query=request.query,
             results=[
                 RAGSearchResult(
-                    text=r["text"],
-                    score=r["score"],
-                    metadata=r["metadata"]
+                    text=r["text"], score=r["score"], metadata=r["metadata"]
                 )
                 for r in results
             ],
-            total=len(results)
+            total=len(results),
         )
     except Exception as e:
         logger.error(f"RAG search failed: {e}")
@@ -397,7 +416,9 @@ async def search_documents(request: RAGSearchRequest, current_user: UserResponse
 
 
 @router.get("/stats", response_model=RAGStatsResponse)
-async def get_rag_stats(current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
+async def get_rag_stats(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
     """获取 RAG 系统统计信息"""
     documents = _load_documents()
     vector_store = _get_vector_store()
@@ -413,7 +434,10 @@ async def get_rag_stats(current_user: UserResponse = Depends(require_role(Role.A
 
 
 @router.post("/reindex")
-async def reindex_documents(background_tasks: BackgroundTasks, current_user: UserResponse = Depends(require_role(Role.ADMIN))):
+async def reindex_documents(
+    background_tasks: BackgroundTasks,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN)),
+):
     """重新索引所有文档"""
     documents = _load_documents()
     if not documents:
@@ -436,7 +460,9 @@ async def reindex_documents(background_tasks: BackgroundTasks, current_user: Use
             try:
                 with open(doc["file_path"], encoding="utf-8") as f:
                     content = f.read()
-                background_tasks.add_task(_process_document, doc["id"], content, doc.get("metadata", {}))
+                background_tasks.add_task(
+                    _process_document, doc["id"], content, doc.get("metadata", {})
+                )
             except Exception as e:
                 logger.error(f"Failed to read document {doc['id']}: {e}")
 
@@ -446,4 +472,5 @@ async def reindex_documents(background_tasks: BackgroundTasks, current_user: Use
 def get_embedding_config():
     """获取嵌入配置"""
     from app.infrastructure.config import get_embedding_config as _get_config
+
     return _get_config()

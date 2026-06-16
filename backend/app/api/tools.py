@@ -1,6 +1,7 @@
 """
 Tools API routes - 提供工具查询和执行接口
 """
+
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,25 +25,32 @@ router = APIRouter(prefix="/tools", tags=["tools"])
 # Pydantic Models
 # ============================================================
 
+
 class ToolInfo(BaseModel):
     """Tool information"""
+
     name: str
     description: str
 
 
 class ToolListResponse(BaseModel):
     """Response model for tool list"""
+
     tools: list[ToolInfo]
     total: int
 
 
 class StockPriceRequest(BaseModel):
     """Request model for stock price query"""
-    symbol: str = Field(..., min_length=1, max_length=10, description="Stock symbol (e.g., AAPL, TSLA)")
+
+    symbol: str = Field(
+        ..., min_length=1, max_length=10, description="Stock symbol (e.g., AAPL, TSLA)"
+    )
 
 
 class StockPriceResponse(BaseModel):
     """Response model for stock price"""
+
     symbol: str
     name: str = ""
     price: float
@@ -59,12 +67,16 @@ class StockPriceResponse(BaseModel):
 
 class StockHistoryRequest(BaseModel):
     """Request model for stock history"""
+
     symbol: str = Field(..., min_length=1, max_length=10, description="Stock symbol")
-    period: str = Field(default="1m", description="Time period (1d, 1w, 1m, 3m, 6m, 1y)")
+    period: str = Field(
+        default="1m", description="Time period (1d, 1w, 1m, 3m, 6m, 1y)"
+    )
 
 
 class StockHistoryResponse(BaseModel):
     """Response model for stock history"""
+
     symbol: str
     period: str
     history: list[dict[str, Any]]
@@ -73,12 +85,16 @@ class StockHistoryResponse(BaseModel):
 
 class FinancialReportRequest(BaseModel):
     """Request model for financial report"""
+
     symbol: str = Field(..., min_length=1, max_length=10, description="Stock symbol")
-    report_type: str = Field(default="summary", description="Report type (summary, detailed, quarterly)")
+    report_type: str = Field(
+        default="summary", description="Report type (summary, detailed, quarterly)"
+    )
 
 
 class FinancialReportResponse(BaseModel):
     """Response model for financial report"""
+
     symbol: str
     name: str = ""
     sector: str = ""
@@ -91,12 +107,17 @@ class FinancialReportResponse(BaseModel):
 
 class FinancialAnalysisRequest(BaseModel):
     """Request model for financial analysis"""
+
     symbol: str = Field(..., min_length=1, max_length=10, description="Stock symbol")
-    analysis_type: str = Field(default="comprehensive", description="Analysis type (comprehensive, valuation, profitability, growth)")
+    analysis_type: str = Field(
+        default="comprehensive",
+        description="Analysis type (comprehensive, valuation, profitability, growth)",
+    )
 
 
 class FinancialAnalysisResponse(BaseModel):
     """Response model for financial analysis"""
+
     symbol: str
     analysis_type: str
     analysis: dict[str, Any]
@@ -105,12 +126,14 @@ class FinancialAnalysisResponse(BaseModel):
 
 class NewsRequest(BaseModel):
     """Request model for news query"""
+
     query: str = Field(..., min_length=1, max_length=200, description="Search query")
     max_results: int = Field(default=5, ge=1, le=20, description="Maximum results")
 
 
 class NewsResponse(BaseModel):
     """Response model for news"""
+
     query: str
     results: list[dict[str, Any]]
     summary: str
@@ -121,12 +144,14 @@ class NewsResponse(BaseModel):
 
 class NewsAnalysisRequest(BaseModel):
     """Request model for news analysis"""
+
     query: str = Field(..., min_length=1, max_length=200, description="Search query")
     period: str = Field(default="7d", description="Analysis period (1d, 7d, 30d)")
 
 
 class NewsAnalysisResponse(BaseModel):
     """Response model for news analysis"""
+
     query: str
     period: str
     analysis: dict[str, Any]
@@ -137,6 +162,7 @@ class NewsAnalysisResponse(BaseModel):
 # API Routes
 # ============================================================
 
+
 @router.get("/list", response_model=ToolListResponse)
 async def list_tools(current_user: UserResponse = Depends(get_current_user)):
     """List all available tools"""
@@ -144,7 +170,9 @@ async def list_tools(current_user: UserResponse = Depends(get_current_user)):
         registry = ToolRegistry()
         tools = registry.list_tools()
         return ToolListResponse(
-            tools=[ToolInfo(name=t["name"], description=t["description"]) for t in tools],
+            tools=[
+                ToolInfo(name=t["name"], description=t["description"]) for t in tools
+            ],
             total=len(tools),
         )
     except Exception as e:
@@ -153,7 +181,10 @@ async def list_tools(current_user: UserResponse = Depends(get_current_user)):
 
 
 @router.post("/stock/price", response_model=StockPriceResponse)
-async def get_stock_price(request: StockPriceRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
+async def get_stock_price(
+    request: StockPriceRequest,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
     """Get real-time stock price"""
     try:
         tool = StockPriceTool()
@@ -185,7 +216,10 @@ async def get_stock_price(request: StockPriceRequest, current_user: UserResponse
 
 
 @router.post("/stock/history", response_model=StockHistoryResponse)
-async def get_stock_history(request: StockHistoryRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
+async def get_stock_history(
+    request: StockHistoryRequest,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
     """Get historical stock data"""
     try:
         tool = StockHistoryTool()
@@ -209,11 +243,16 @@ async def get_stock_history(request: StockHistoryRequest, current_user: UserResp
 
 
 @router.post("/financial/report", response_model=FinancialReportResponse)
-async def get_financial_report(request: FinancialReportRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
+async def get_financial_report(
+    request: FinancialReportRequest,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
     """Get financial report for a company"""
     try:
         tool = FinancialReportTool()
-        result = await tool.execute(symbol=request.symbol, report_type=request.report_type)
+        result = await tool.execute(
+            symbol=request.symbol, report_type=request.report_type
+        )
 
         if not result.success:
             raise HTTPException(status_code=400, detail=result.error)
@@ -237,11 +276,16 @@ async def get_financial_report(request: FinancialReportRequest, current_user: Us
 
 
 @router.post("/financial/analysis", response_model=FinancialAnalysisResponse)
-async def get_financial_analysis(request: FinancialAnalysisRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
+async def get_financial_analysis(
+    request: FinancialAnalysisRequest,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
     """Get financial analysis for a company"""
     try:
         tool = FinancialAnalysisTool()
-        result = await tool.execute(symbol=request.symbol, analysis_type=request.analysis_type)
+        result = await tool.execute(
+            symbol=request.symbol, analysis_type=request.analysis_type
+        )
 
         if not result.success:
             raise HTTPException(status_code=400, detail=result.error)
@@ -261,11 +305,16 @@ async def get_financial_analysis(request: FinancialAnalysisRequest, current_user
 
 
 @router.post("/news/search", response_model=NewsResponse)
-async def search_news(request: NewsRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
+async def search_news(
+    request: NewsRequest,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
     """Search for news articles"""
     try:
         tool = NewsSummaryTool()
-        result = await tool.execute(query=request.query, max_results=request.max_results)
+        result = await tool.execute(
+            query=request.query, max_results=request.max_results
+        )
 
         if not result.success:
             raise HTTPException(status_code=400, detail=result.error)
@@ -287,7 +336,10 @@ async def search_news(request: NewsRequest, current_user: UserResponse = Depends
 
 
 @router.post("/news/analysis", response_model=NewsAnalysisResponse)
-async def get_news_analysis(request: NewsAnalysisRequest, current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST))):
+async def get_news_analysis(
+    request: NewsAnalysisRequest,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
     """Get news sentiment analysis"""
     try:
         tool = NewsAnalysisTool()

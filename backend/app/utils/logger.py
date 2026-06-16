@@ -1,6 +1,7 @@
 """
 增强日志模块 - 结构化输出 + trace_id 关联 + 并发安全
 """
+
 import json
 import logging
 import sys
@@ -110,10 +111,7 @@ class LogContext:
     @classmethod
     def get_extra(cls) -> dict:
         """获取当前上下文的额外字段"""
-        return {
-            k: v for k, v in cls._local.__dict__.items()
-            if not k.startswith("_")
-        }
+        return {k: v for k, v in cls._local.__dict__.items() if not k.startswith("_")}
 
 
 def log_with_context(logger_name: str, level: str, message: str, **extra):

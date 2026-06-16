@@ -6,11 +6,13 @@ Roles:
 - analyst: Can use research, chat, tools, RAG
 - viewer: Can only view reports and system status
 """
+
 from enum import Enum
 
 
 class Role(str, Enum):
     """User roles"""
+
     ADMIN = "admin"
     ANALYST = "analyst"
     VIEWER = "viewer"

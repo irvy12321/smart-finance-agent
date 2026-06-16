@@ -1,6 +1,7 @@
 """
 System API routes
 """
+
 import hashlib
 import time
 from datetime import datetime
@@ -21,8 +22,10 @@ router = APIRouter(prefix="/system", tags=["system"])
 # Pydantic Models
 # ============================================================
 
+
 class SystemStatusResponse(BaseModel):
     """Response model for system status"""
+
     status: str
     version: str
     uptime: float
@@ -34,6 +37,7 @@ class SystemStatusResponse(BaseModel):
 
 class SystemMetricsResponse(BaseModel):
     """Response model for system metrics"""
+
     total_requests: int
     successful_requests: int
     failed_requests: int
@@ -49,6 +53,7 @@ class SystemMetricsResponse(BaseModel):
 
 class AgentStatusResponse(BaseModel):
     """Response model for agent status"""
+
     planner: dict[str, Any]
     executor: dict[str, Any]
     reasoner: dict[str, Any]
@@ -58,6 +63,7 @@ class AgentStatusResponse(BaseModel):
 
 class SystemConfigResponse(BaseModel):
     """Response model for system configuration"""
+
     model: str
     embedding: str
     features: dict[str, bool]
@@ -82,6 +88,7 @@ total_latency = 0.0
 # API Routes
 # ============================================================
 
+
 @router.get("/status", response_model=SystemStatusResponse)
 async def get_system_status():
     """Get system status"""
@@ -93,7 +100,9 @@ async def get_system_status():
             version="1.0.0",
             uptime=uptime,
             total_requests=request_count,
-            success_rate=100.0 if request_count == 0 else (successful_requests / request_count) * 100,
+            success_rate=100.0
+            if request_count == 0
+            else (successful_requests / request_count) * 100,
             avg_latency_ms=0.0 if request_count == 0 else total_latency / request_count,
             timestamp=datetime.now().isoformat(),
         )
@@ -119,7 +128,9 @@ async def get_system_metrics():
             total_requests=request_count,
             successful_requests=successful_requests,
             failed_requests=failed_requests,
-            success_rate=100.0 if request_count == 0 else (successful_requests / request_count) * 100,
+            success_rate=100.0
+            if request_count == 0
+            else (successful_requests / request_count) * 100,
             avg_latency_ms=0.0 if request_count == 0 else total_latency / request_count,
             total_tasks=total_tasks,
             completed_tasks=completed_tasks,
@@ -220,6 +231,7 @@ async def get_version():
 # Helper Functions
 # ============================================================
 
+
 def increment_request_count():
     """Increment request count"""
     global request_count
@@ -243,6 +255,7 @@ def record_request_failure():
 async def get_cache_stats():
     """Get cache statistics"""
     from app.tools.cache import get_cache_stats
+
     return get_cache_stats()
 
 
@@ -250,6 +263,7 @@ async def get_cache_stats():
 async def clear_cache():
     """Clear all cache entries"""
     from app.tools.cache import get_cache
+
     cache = get_cache()
     cleared = cache.clear()
     return {"message": f"Cleared {cleared} cache entries"}
@@ -259,6 +273,7 @@ async def clear_cache():
 async def auth_health():
     """JWT secret health check - returns hash for multi-instance comparison"""
     import os
+
     secret = os.getenv("JWT_SECRET_KEY", "")
     secret_hash = hashlib.sha256(secret.encode()).hexdigest() if secret else "NOT_SET"
     return {

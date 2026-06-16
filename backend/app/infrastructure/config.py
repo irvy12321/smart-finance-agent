@@ -40,7 +40,9 @@ def get_provider_config() -> dict:
     """Get configuration for active provider"""
     provider = get_active_provider()
     if provider not in PROVIDER_CONFIGS:
-        raise ValueError(f"Unknown provider: {provider}. Available: {list(PROVIDER_CONFIGS.keys())}")
+        raise ValueError(
+            f"Unknown provider: {provider}. Available: {list(PROVIDER_CONFIGS.keys())}"
+        )
     return PROVIDER_CONFIGS[provider]
 
 
@@ -71,6 +73,7 @@ class LLMConfig(BaseSettings):
 
 class AgentModelConfig(BaseSettings):
     """每个 Agent 的模型分配配置"""
+
     planner_model: str = ""
     planner_temperature: float = 0.3
     executor_model: str = ""
@@ -87,13 +90,20 @@ class AgentModelConfig(BaseSettings):
         # Auto-fill from provider config if empty
         provider_config = get_provider_config()
         default_model = provider_config["model"]
-        for field in ["planner_model", "executor_model", "reasoner_model", "report_model", "chart_model"]:
+        for field in [
+            "planner_model",
+            "executor_model",
+            "reasoner_model",
+            "report_model",
+            "chart_model",
+        ]:
             if not getattr(self, field):
                 setattr(self, field, default_model)
 
 
 class EmbeddingConfig(BaseSettings):
     """Embedding 配置: dev=hash mock, prod=bge-m3"""
+
     mode: str = "dev"  # "dev" or "prod"
     model_name: str = "BAAI/bge-m3"
     dim: int = 1024  # bge-m3 default dimension
@@ -109,17 +119,22 @@ class CrawlerConfig(BaseSettings):
 
 class SmartRouterConfig(BaseSettings):
     """智能路由配置"""
-    complexity_thresholds: dict = Field(default_factory=lambda: {"high": 0.7, "medium": 0.3})
+
+    complexity_thresholds: dict = Field(
+        default_factory=lambda: {"high": 0.7, "medium": 0.3}
+    )
     lightweight_model: str = ""
     standard_model: str = ""
     high_quality_model: str = ""
     fallback_models: list[str] = Field(default_factory=list)
-    tool_reliability: dict = Field(default_factory=lambda: {
-        "news_search": 0.9,
-        "rag_retrieve": 0.85,
-        "crawler": 0.7,
-        "llm_synthesize": 0.95,
-    })
+    tool_reliability: dict = Field(
+        default_factory=lambda: {
+            "news_search": 0.9,
+            "rag_retrieve": 0.85,
+            "crawler": 0.7,
+            "llm_synthesize": 0.95,
+        }
+    )
     reliability_alpha: float = 0.3
 
     def __init__(self, **kwargs):
@@ -164,14 +179,18 @@ def get_agent_model_config() -> AgentModelConfig:
     overrides = _load_yaml("config_llm.yaml")
     agent_overrides = overrides.get("agent_models", {})
     valid_fields = set(AgentModelConfig.model_fields.keys())
-    return AgentModelConfig(**{k: v for k, v in agent_overrides.items() if k in valid_fields})
+    return AgentModelConfig(
+        **{k: v for k, v in agent_overrides.items() if k in valid_fields}
+    )
 
 
 def get_embedding_config() -> EmbeddingConfig:
     overrides = _load_yaml("config_rag.yaml")
     embedding_overrides = overrides.get("embedding", {})
     valid_fields = set(EmbeddingConfig.model_fields.keys())
-    return EmbeddingConfig(**{k: v for k, v in embedding_overrides.items() if k in valid_fields})
+    return EmbeddingConfig(
+        **{k: v for k, v in embedding_overrides.items() if k in valid_fields}
+    )
 
 
 def get_crawler_config() -> CrawlerConfig:
@@ -183,7 +202,9 @@ def get_crawler_config() -> CrawlerConfig:
 def get_rag_config() -> RAGConfig:
     overrides = _load_yaml("config_rag.yaml")
     valid_fields = set(RAGConfig.model_fields.keys())
-    rag_overrides = {k: v for k, v in overrides.items() if k != "embedding" and k in valid_fields}
+    rag_overrides = {
+        k: v for k, v in overrides.items() if k != "embedding" and k in valid_fields
+    }
     return RAGConfig(**rag_overrides)
 
 
@@ -191,4 +212,6 @@ def get_smart_router_config() -> SmartRouterConfig:
     overrides = _load_yaml("config_llm.yaml")
     sr_overrides = overrides.get("smart_router", {})
     valid_fields = set(SmartRouterConfig.model_fields.keys())
-    return SmartRouterConfig(**{k: v for k, v in sr_overrides.items() if k in valid_fields})
+    return SmartRouterConfig(
+        **{k: v for k, v in sr_overrides.items() if k in valid_fields}
+    )

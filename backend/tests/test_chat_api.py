@@ -8,6 +8,7 @@ from httpx import AsyncClient
 def mock_storage():
     with patch("app.api.chat.storage") as mock:
         mock.get_conversation.return_value = None
+        mock.get_conversation_owner.return_value = None
         mock.create_conversation.return_value = None
         mock.add_message.return_value = None
         mock.list_conversations.return_value = []
@@ -33,13 +34,11 @@ async def test_create_conversation(client: AsyncClient, mock_storage):
 
 @pytest.mark.asyncio
 async def test_send_message(client: AsyncClient, mock_storage, mock_llm):
-    mock_storage.get_conversation.return_value = {
-        "messages": []
-    }
+    mock_storage.get_conversation.return_value = {"messages": []}
 
     response = await client.post(
         "/api/chat/conversations/test-conv/messages",
-        json={"message": "Hello, how are you?"}
+        json={"message": "Hello, how are you?"},
     )
     assert response.status_code == 200
     data = response.json()
@@ -49,9 +48,7 @@ async def test_send_message(client: AsyncClient, mock_storage, mock_llm):
 
 @pytest.mark.asyncio
 async def test_send_financial_message(client: AsyncClient, mock_storage):
-    mock_storage.get_conversation.return_value = {
-        "messages": []
-    }
+    mock_storage.get_conversation.return_value = {"messages": []}
 
     mock_orchestrator = AsyncMock()
     mock_result = MagicMock()
@@ -68,7 +65,7 @@ async def test_send_financial_message(client: AsyncClient, mock_storage):
     with patch("app.api.chat._get_orchestrator", return_value=mock_orchestrator):
         response = await client.post(
             "/api/chat/conversations/test-conv/messages",
-            json={"message": "What is the stock price of AAPL?"}
+            json={"message": "What is the stock price of AAPL?"},
         )
 
     assert response.status_code == 200

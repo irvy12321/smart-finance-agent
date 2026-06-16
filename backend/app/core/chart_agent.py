@@ -3,6 +3,7 @@ Chart Agent - 财务数据可视化
 基于研究数据生成图表配置，支持 matplotlib/plotly
 通过 EventBus 与其他 Agent 解耦通信
 """
+
 import json
 from dataclasses import dataclass
 
@@ -16,6 +17,7 @@ logger = get_logger("chart_agent")
 @dataclass
 class ChartSpec:
     """图表规格"""
+
     chart_type: str  # "bar", "line", "pie", "scatter"
     title: str
     x_label: str
@@ -37,6 +39,7 @@ class ChartSpec:
 @dataclass
 class ChartResult:
     """图表生成结果"""
+
     charts: list[ChartSpec]
     summary: str
 
@@ -66,7 +69,9 @@ class ChartAgent:
     - 生成图表规格 (可被前端渲染)
     """
 
-    def __init__(self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None):
+    def __init__(
+        self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None
+    ):
         self.router = router
         self.llm = llm_client or LLMClient.get_instance()
         self.event_bus = EventBus.get_instance()
@@ -83,11 +88,13 @@ class ChartAgent:
         """生成财务图表"""
         logger.info(f"Generating charts for: {query[:60]}...")
 
-        await self.event_bus.emit(AgentEvent(
-            event_type="chart_start",
-            agent_name="chart",
-            data={"query": query[:100]},
-        ))
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="chart_start",
+                agent_name="chart",
+                data={"query": query[:100]},
+            )
+        )
 
         prompt = (
             f"## Research Question\n{query}\n\n"
@@ -98,24 +105,34 @@ class ChartAgent:
         try:
             if self.router:
                 response = await self.router.complete(
-                    "chart", prompt=prompt, system=CHART_SYSTEM, max_tokens=3000,
+                    "chart",
+                    prompt=prompt,
+                    system=CHART_SYSTEM,
+                    max_tokens=3000,
                 )
             else:
                 response = await self.llm.complete(
-                    prompt=prompt, system=CHART_SYSTEM, temperature=0.3, max_tokens=3000,
+                    prompt=prompt,
+                    system=CHART_SYSTEM,
+                    temperature=0.3,
+                    max_tokens=3000,
                 )
 
             # 调试日志
-            logger.debug(f"Chart LLM response ({len(response)} chars): {response[:300]}")
+            logger.debug(
+                f"Chart LLM response ({len(response)} chars): {response[:300]}"
+            )
 
             result = self._parse_response(response)
             self._last_result = result
 
-            await self.event_bus.emit(AgentEvent(
-                event_type="chart_complete",
-                agent_name="chart",
-                data={"charts_count": len(result.charts)},
-            ))
+            await self.event_bus.emit(
+                AgentEvent(
+                    event_type="chart_complete",
+                    agent_name="chart",
+                    data={"charts_count": len(result.charts)},
+                )
+            )
 
             logger.info(f"Generated {len(result.charts)} charts")
             return result
@@ -126,6 +143,7 @@ class ChartAgent:
 
     def _parse_response(self, response: str) -> ChartResult:
         import re
+
         text = response.strip()
 
         # 移除 markdown 代码块
@@ -166,7 +184,7 @@ class ChartAgent:
         except json.JSONDecodeError:
             # 二次清理: 尝试修复常见 LLM 输出问题
             json_str2 = json_str.replace("'", '"')  # 单引号替换
-            json_str2 = re.sub(r',\s*([}\]])', r'\1', json_str2)  # 再次去尾逗号
+            json_str2 = re.sub(r",\s*([}\]])", r"\1", json_str2)  # 再次去尾逗号
             try:
                 data = json.loads(json_str2)
             except json.JSONDecodeError as e:
@@ -181,23 +199,27 @@ class ChartAgent:
             raw_data = chart_data.get("data", [])
             # 过滤无效数据点
             valid_data = [
-                d for d in raw_data
+                d
+                for d in raw_data
                 if isinstance(d, dict) and "label" in d and "value" in d
             ]
-            charts.append(ChartSpec(
-                chart_type=str(chart_data.get("chart_type", "bar")),
-                title=str(chart_data.get("title", "")),
-                x_label=str(chart_data.get("x_label", "")),
-                y_label=str(chart_data.get("y_label", "")),
-                data=valid_data,
-                description=str(chart_data.get("description", "")),
-            ))
+            charts.append(
+                ChartSpec(
+                    chart_type=str(chart_data.get("chart_type", "bar")),
+                    title=str(chart_data.get("title", "")),
+                    x_label=str(chart_data.get("x_label", "")),
+                    y_label=str(chart_data.get("y_label", "")),
+                    data=valid_data,
+                    description=str(chart_data.get("description", "")),
+                )
+            )
 
         return ChartResult(charts=charts, summary=str(data.get("summary", "")))
 
     def _fallback_parse(self, text: str) -> ChartResult:
         """降级解析: 尝试从文本中提取图表信息"""
         import re
+
         charts = []
 
         # 尝试匹配 chart_type 和 title
@@ -210,16 +232,21 @@ class ChartAgent:
             data_matches = re.findall(data_pattern, text, re.DOTALL)
             chart_data = []
             if i < len(data_matches):
-                items = re.findall(r'"label"\s*:\s*"([^"]+)".*?"value"\s*:\s*([\d.]+)', data_matches[i])
+                items = re.findall(
+                    r'"label"\s*:\s*"([^"]+)".*?"value"\s*:\s*([\d.]+)', data_matches[i]
+                )
                 chart_data = [{"label": label, "value": float(v)} for label, v in items]
 
-            charts.append(ChartSpec(
-                chart_type=ctype,
-                title=title,
-                x_label="", y_label="",
-                data=chart_data,
-                description="",
-            ))
+            charts.append(
+                ChartSpec(
+                    chart_type=ctype,
+                    title=title,
+                    x_label="",
+                    y_label="",
+                    data=chart_data,
+                    description="",
+                )
+            )
 
         if charts:
             logger.info(f"Fallback parsed {len(charts)} charts")
@@ -232,6 +259,7 @@ class ChartAgent:
         """使用 matplotlib 渲染图表"""
         try:
             import matplotlib
+
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
 

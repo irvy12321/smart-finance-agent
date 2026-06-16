@@ -171,7 +171,7 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
       const newEvents = [...prev.events, event]
       const newTaskResults = new Map(prev.taskResults)
 
-      let newState: Partial<WorkflowState> = {
+      const newState: Partial<WorkflowState> = {
         events: newEvents,
         traceId: event.trace_id ?? prev.traceId,
       }
@@ -232,7 +232,7 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
           }
           break
 
-        case 'stage_change':
+        case 'stage_change': {
           // Update planner/synthesizer/report status based on data.stage
           const currentStage = (event as any).data?.stage || event.stage
           if (currentStage === 'planning') {
@@ -243,18 +243,20 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
             updateNodeStatus('synthesizer', 'running')
           }
           break
+        }
 
         case 'reasoning':
           updateNodeStatus('planner', 'success')
           break
 
-        case 'reporting':
+        case 'reporting': {
           // Find synthesizer node and update
           const synthNode = prev.nodes.find(n => n.type === 'synthesizerNode')
           if (synthNode) {
             updateNodeStatus(synthNode.id, 'success')
           }
           break
+        }
 
         case 'complete':
           newState.status = 'completed'

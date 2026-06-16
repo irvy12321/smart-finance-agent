@@ -1,13 +1,12 @@
 """
 登录安全模块单元测试
 """
+
 import pytest
-from datetime import datetime, timedelta, timezone
 
 from app.auth.login_security import (
-    MAX_FAILED_ATTEMPTS,
     LOCKOUT_DURATION_MINUTES,
-    _clear_lockout,
+    MAX_FAILED_ATTEMPTS,
     get_login_attempt,
     get_remaining_attempts,
     is_account_locked,
@@ -28,6 +27,7 @@ def cleanup(test_username):
     yield
     # 清理测试数据
     from app import storage
+
     conn = storage._get_connection()
     try:
         conn.execute("DELETE FROM login_attempts WHERE username = ?", (test_username,))

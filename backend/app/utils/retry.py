@@ -20,6 +20,7 @@ def async_retry(
     bad-request errors, where retrying only wastes calls); they are re-raised
     immediately.
     """
+
     def decorator(func: Callable):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):

@@ -10,9 +10,10 @@ Usage:
     async def execute(self, **params):
         ...
 """
+
 import functools
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from app.monitoring.prometheus import (
     agent_calls_total,

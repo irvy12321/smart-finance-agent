@@ -1,12 +1,14 @@
 """
 股票价格查询工具 - 支持实时股价查询和历史数据
 """
+
+import os
 from datetime import datetime, timedelta
 
 import aiohttp
 
 from app.tools.base_tool import MOCK_WARNING, BaseTool, ToolResult, mock_enabled
-from app.tools.cache import get_cache, make_cache_key
+from app.tools.cache import get_cache
 from app.utils.logger import get_logger
 
 logger = get_logger("stock_price_tool")
@@ -99,16 +101,20 @@ MOCK_STOCK_DATA = {
 
 class StockPriceTool(BaseTool):
     name = "stock_price"
-    description = "Queries real-time stock price and market data for a given stock symbol"
+    description = (
+        "Queries real-time stock price and market data for a given stock symbol"
+    )
 
     def __init__(self, api_key: str = ""):
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("ALPHA_VANTAGE_API_KEY", "")
         self._cache = get_cache()
 
     async def execute(self, **kwargs) -> ToolResult:
         symbol = kwargs.get("symbol", "").upper()
         if not symbol:
-            return ToolResult(success=False, error="No stock symbol provided", tool_name=self.name)
+            return ToolResult(
+                success=False, error="No stock symbol provided", tool_name=self.name
+            )
 
         # 检查缓存
         cache_key = f"stock_price:{symbol}"
@@ -144,6 +150,7 @@ class StockPriceTool(BaseTool):
     async def _fetch_real_price(self, symbol: str) -> ToolResult:
         """从真实API获取股价（使用Alpha Vantage）"""
         import os
+
         url = "https://www.alphavantage.co/query"
         params = {
             "function": "GLOBAL_QUOTE",
@@ -152,35 +159,40 @@ class StockPriceTool(BaseTool):
         }
 
         proxy = os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
-        
+
         timeout = aiohttp.ClientTimeout(total=20)
         try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url, params=params, proxy=proxy) as resp:
-                    data = await resp.json()
-                    quote = data.get("Global Quote", {})
+            async with (
+                aiohttp.ClientSession(timeout=timeout) as session,
+                session.get(url, params=params, proxy=proxy) as resp,
+            ):
+                data = await resp.json()
+                quote = data.get("Global Quote", {})
 
-                    if not quote:
-                        raise ValueError("Alpha Vantage returned an empty quote")
+                if not quote:
+                    raise ValueError("Alpha Vantage returned an empty quote")
 
-                    result = {
-                        "symbol": symbol,
-                        "price": float(quote.get("05. price", 0)),
-                        "change": float(quote.get("09. change", 0)),
-                        "change_percent": quote.get("10. change percent", "0%"),
-                        "volume": int(quote.get("06. volume", 0)),
-                        "latest_trading_day": quote.get("07. latest trading day", ""),
-                        "previous_close": float(quote.get("08. previous close", 0)),
-                        "open": float(quote.get("02. open", 0)),
-                        "high": float(quote.get("03. high", 0)),
-                        "low": float(quote.get("04. low", 0)),
-                        "source": "alpha_vantage",
-                    }
+                result = {
+                    "symbol": symbol,
+                    "price": float(quote.get("05. price", 0)),
+                    "change": float(quote.get("09. change", 0)),
+                    "change_percent": quote.get("10. change percent", "0%"),
+                    "volume": int(quote.get("06. volume", 0)),
+                    "latest_trading_day": quote.get("07. latest trading day", ""),
+                    "previous_close": float(quote.get("08. previous close", 0)),
+                    "open": float(quote.get("02. open", 0)),
+                    "high": float(quote.get("03. high", 0)),
+                    "low": float(quote.get("04. low", 0)),
+                    "source": "alpha_vantage",
+                }
 
-                    return ToolResult(
-                        success=True, data=result, tool_name=self.name,
-                        source="alpha_vantage", is_mock=False,
-                    )
+                return ToolResult(
+                    success=True,
+                    data=result,
+                    tool_name=self.name,
+                    source="alpha_vantage",
+                    is_mock=False,
+                )
         except Exception as e:
             logger.error(f"Alpha Vantage API error for {symbol}: {e}")
             raise
@@ -208,8 +220,12 @@ class StockPriceTool(BaseTool):
         data["is_mock"] = True
         data["warning"] = MOCK_WARNING
         return ToolResult(
-            success=True, data=data, tool_name=self.name,
-            source="mock", is_mock=True, warning=MOCK_WARNING,
+            success=True,
+            data=data,
+            tool_name=self.name,
+            source="mock",
+            is_mock=True,
+            warning=MOCK_WARNING,
         )
 
     async def fallback_execute(self, **kwargs) -> ToolResult:
@@ -220,20 +236,26 @@ class StockPriceTool(BaseTool):
 
 class StockHistoryTool(BaseTool):
     name = "stock_history"
-    description = "Retrieves historical stock price data for a given symbol and time period"
+    description = (
+        "Retrieves historical stock price data for a given symbol and time period"
+    )
 
     def __init__(self, api_key: str = ""):
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("ALPHA_VANTAGE_API_KEY", "")
 
     async def execute(self, **kwargs) -> ToolResult:
         symbol = kwargs.get("symbol", "").upper()
         period = kwargs.get("period", "1m")  # 1d, 1w, 1m, 3m, 6m, 1y
 
         if not symbol:
-            return ToolResult(success=False, error="No stock symbol provided", tool_name=self.name)
+            return ToolResult(
+                success=False, error="No stock symbol provided", tool_name=self.name
+            )
 
         if not self.api_key:
-            return self._unavailable(symbol, period, "ALPHA_VANTAGE_API_KEY not configured")
+            return self._unavailable(
+                symbol, period, "ALPHA_VANTAGE_API_KEY not configured"
+            )
 
         try:
             return await self._fetch_real_history(symbol, period)
@@ -263,39 +285,46 @@ class StockHistoryTool(BaseTool):
         }
 
         timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, params=params) as resp:
-                data = await resp.json()
-                time_series = data.get("Time Series (Daily)", {})
+        async with (
+            aiohttp.ClientSession(timeout=timeout) as session,
+            session.get(url, params=params) as resp,
+        ):
+            data = await resp.json()
+            time_series = data.get("Time Series (Daily)", {})
 
-                if not time_series:
-                    raise ValueError("Alpha Vantage returned an empty time series")
+            if not time_series:
+                raise ValueError("Alpha Vantage returned an empty time series")
 
-                # 转换数据格式
-                history = []
-                for date, values in list(time_series.items())[:30]:  # 最近30天
-                    history.append({
+            # 转换数据格式
+            history = []
+            for date, values in list(time_series.items())[:30]:  # 最近30天
+                history.append(
+                    {
                         "date": date,
                         "open": float(values.get("1. open", 0)),
                         "high": float(values.get("2. high", 0)),
                         "low": float(values.get("3. low", 0)),
                         "close": float(values.get("4. close", 0)),
                         "volume": int(values.get("5. volume", 0)),
-                    })
-
-                return ToolResult(
-                    success=True,
-                    data={"symbol": symbol, "period": period, "history": history},
-                    tool_name=self.name,
-                    source="alpha_vantage", is_mock=False,
+                    }
                 )
+
+            return ToolResult(
+                success=True,
+                data={"symbol": symbol, "period": period, "history": history},
+                tool_name=self.name,
+                source="alpha_vantage",
+                is_mock=False,
+            )
 
     def _mock_history_sync(self, symbol: str, period: str) -> ToolResult:
         """Clearly-labelled simulated history (only when ALLOW_MOCK_DATA=true)."""
         import random
 
         base_price = MOCK_STOCK_DATA.get(symbol, {}).get("price", 150.00)
-        days = {"1d": 1, "1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365}.get(period, 30)
+        days = {"1d": 1, "1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365}.get(
+            period, 30
+        )
 
         history = []
         current_date = datetime.now()
@@ -306,14 +335,16 @@ class StockHistoryTool(BaseTool):
             change = random.uniform(-0.03, 0.03) * price
             price = max(price + change, base_price * 0.5)
 
-            history.append({
-                "date": date.strftime("%Y-%m-%d"),
-                "open": round(price * random.uniform(0.99, 1.01), 2),
-                "high": round(price * random.uniform(1.00, 1.03), 2),
-                "low": round(price * random.uniform(0.97, 1.00), 2),
-                "close": round(price, 2),
-                "volume": random.randint(5000000, 100000000),
-            })
+            history.append(
+                {
+                    "date": date.strftime("%Y-%m-%d"),
+                    "open": round(price * random.uniform(0.99, 1.01), 2),
+                    "high": round(price * random.uniform(1.00, 1.03), 2),
+                    "low": round(price * random.uniform(0.97, 1.00), 2),
+                    "close": round(price, 2),
+                    "volume": random.randint(5000000, 100000000),
+                }
+            )
 
         return ToolResult(
             success=True,
@@ -326,7 +357,9 @@ class StockHistoryTool(BaseTool):
                 "warning": MOCK_WARNING,
             },
             tool_name=self.name,
-            source="mock", is_mock=True, warning=MOCK_WARNING,
+            source="mock",
+            is_mock=True,
+            warning=MOCK_WARNING,
         )
 
     async def fallback_execute(self, **kwargs) -> ToolResult:

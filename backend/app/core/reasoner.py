@@ -2,6 +2,7 @@
 Reasoner - 多步推理 + 可解释分析 + 图表规格输出
 整合了原 ChartAgent 的 LLM 推理能力
 """
+
 import json
 import re
 from dataclasses import dataclass, field
@@ -16,6 +17,7 @@ logger = get_logger("reasoner")
 @dataclass
 class ChartSpec:
     """图表规格"""
+
     chart_type: str  # "bar", "line", "pie", "scatter"
     title: str
     x_label: str
@@ -96,19 +98,25 @@ CRITICAL RULES:
 
 
 class Reasoner:
-    def __init__(self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None):
+    def __init__(
+        self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None
+    ):
         self.router = router
         self.llm = llm_client or LLMClient.get_instance()
         self.event_bus = EventBus.get_instance()
 
-    async def reason(self, context: str, question: str, language: str = "en") -> ReasoningResult:
+    async def reason(
+        self, context: str, question: str, language: str = "en"
+    ) -> ReasoningResult:
         """多步推理 + 图表规格生成"""
         logger.info(f"Reasoning for: {question[:60]}... (language={language})")
-        await self.event_bus.emit(AgentEvent(
-            event_type="reasoning_start",
-            agent_name="reasoner",
-            data={"question": question[:100]},
-        ))
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="reasoning_start",
+                agent_name="reasoner",
+                data={"question": question[:100]},
+            )
+        )
 
         prompt = (
             f"## Context\n{context}\n\n"
@@ -117,19 +125,22 @@ class Reasoner:
         )
 
         # Select system prompt based on language
-        if language == "zh":
-            system_prompt = REASONER_SYSTEM_ZH
-        else:
-            system_prompt = REASONER_SYSTEM_EN
+        system_prompt = REASONER_SYSTEM_ZH if language == "zh" else REASONER_SYSTEM_EN
 
         try:
             if self.router:
                 response = await self.router.complete(
-                    "reasoner", prompt=prompt, system=system_prompt, max_tokens=1500,
+                    "reasoner",
+                    prompt=prompt,
+                    system=system_prompt,
+                    max_tokens=1500,
                 )
             else:
                 response = await self.llm.complete(
-                    prompt=prompt, system=system_prompt, temperature=0.4, max_tokens=1500,
+                    prompt=prompt,
+                    system=system_prompt,
+                    temperature=0.4,
+                    max_tokens=1500,
                 )
 
             # MiMo reasoning_content fallback
@@ -144,15 +155,17 @@ class Reasoner:
 
             result = self._parse_response(response)
 
-            await self.event_bus.emit(AgentEvent(
-                event_type="reasoning_complete",
-                agent_name="reasoner",
-                data={
-                    "confidence": result.confidence,
-                    "insights_count": len(result.key_insights),
-                    "charts_count": len(result.chart_specs),
-                },
-            ))
+            await self.event_bus.emit(
+                AgentEvent(
+                    event_type="reasoning_complete",
+                    agent_name="reasoner",
+                    data={
+                        "confidence": result.confidence,
+                        "insights_count": len(result.key_insights),
+                        "charts_count": len(result.chart_specs),
+                    },
+                )
+            )
 
             logger.info(
                 f"Reasoning done: confidence={result.confidence:.1%}, "
@@ -199,23 +212,33 @@ class Reasoner:
         chart_specs = []
         charts_data = data.get("charts", [])
         logger.info(f"Found {len(charts_data)} charts in response")
-        
+
         for c in charts_data:
             if isinstance(c, dict):
                 raw_data = c.get("data", [])
-                valid_data = [d for d in raw_data if isinstance(d, dict) and "label" in d and "value" in d]
+                valid_data = [
+                    d
+                    for d in raw_data
+                    if isinstance(d, dict) and "label" in d and "value" in d
+                ]
                 if valid_data:  # Only add chart if it has valid data
-                    chart_specs.append(ChartSpec(
-                        chart_type=str(c.get("chart_type", "bar")),
-                        title=str(c.get("title", "")),
-                        x_label=str(c.get("x_label", "")),
-                        y_label=str(c.get("y_label", "")),
-                        data=valid_data,
-                        description=str(c.get("description", "")),
-                    ))
-                    logger.info(f"Added chart: {c.get('title', 'untitled')} with {len(valid_data)} data points")
+                    chart_specs.append(
+                        ChartSpec(
+                            chart_type=str(c.get("chart_type", "bar")),
+                            title=str(c.get("title", "")),
+                            x_label=str(c.get("x_label", "")),
+                            y_label=str(c.get("y_label", "")),
+                            data=valid_data,
+                            description=str(c.get("description", "")),
+                        )
+                    )
+                    logger.info(
+                        f"Added chart: {c.get('title', 'untitled')} with {len(valid_data)} data points"
+                    )
                 else:
-                    logger.warning(f"Skipping chart with no valid data: {c.get('title', 'untitled')}")
+                    logger.warning(
+                        f"Skipping chart with no valid data: {c.get('title', 'untitled')}"
+                    )
 
         return ReasoningResult(
             reasoning=data.get("reasoning", ""),
@@ -232,6 +255,10 @@ class Reasoner:
             "Critique this answer. Strengths? Weaknesses? How to improve?"
         )
         if self.router:
-            return await self.router.complete("reasoner", prompt=prompt, max_tokens=1024)
+            return await self.router.complete(
+                "reasoner", prompt=prompt, max_tokens=1024
+            )
         else:
-            return await self.llm.complete(prompt=prompt, temperature=0.3, max_tokens=1024)
+            return await self.llm.complete(
+                prompt=prompt, temperature=0.3, max_tokens=1024
+            )

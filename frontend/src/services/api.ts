@@ -181,15 +181,15 @@ api.interceptors.response.use(
     })
 
     if (error.response?.status === 404) {
-      ;(error as any).userMessage = 'Resource not found.'
+      (error as any).userMessage = 'Resource not found.'
     } else if (error.response?.status === 500) {
-      ;(error as any).userMessage = `Server error: ${message}`
+      (error as any).userMessage = `Server error: ${message}`
     } else if (error.code === 'ECONNABORTED') {
-      ;(error as any).userMessage = 'Request timed out. Please try again.'
+      (error as any).userMessage = 'Request timed out. Please try again.'
     } else if (!error.response) {
-      ;(error as any).userMessage = 'Cannot connect to server. Please check if backend is running.'
+      (error as any).userMessage = 'Cannot connect to server. Please check if backend is running.'
     } else {
-      ;(error as any).userMessage = message
+      (error as any).userMessage = message
     }
 
     return Promise.reject(error)

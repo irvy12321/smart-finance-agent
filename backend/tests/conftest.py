@@ -1,3 +1,13 @@
+import os
+
+# Safe defaults so the test suite is self-contained (these must be set before
+# `app` is imported, since auth config validates them at import time).
+os.environ.setdefault(
+    "JWT_SECRET_KEY", "test-jwt-secret-key-at-least-32-chars-long-aaaa"
+)
+os.environ.setdefault("DEFAULT_ADMIN_PASSWORD", "test-admin-password-123")
+os.environ.setdefault("ALLOW_MOCK_DATA", "false")
+
 import asyncio
 from collections.abc import AsyncGenerator
 
@@ -20,6 +30,32 @@ def event_loop():
 def test_app() -> FastAPI:
     """Get the FastAPI application for testing."""
     return app
+
+
+@pytest.fixture(autouse=True)
+def _override_auth():
+    """Authenticate every request as an admin user by default.
+
+    Most endpoints now require `require_role(ADMIN/ANALYST)` (which depends on
+    `get_current_user`). These behaviour tests predate RBAC, so we override the
+    auth dependency with an admin user instead of minting real JWTs. Individual
+    tests can still override `get_current_user` themselves (e.g. to test other
+    roles); the teardown below restores a clean state.
+    """
+    from app.auth.dependencies import get_current_user
+    from app.auth.models import UserResponse
+
+    admin = UserResponse(
+        id=1,
+        username="admin",
+        email="admin@test.local",
+        role="admin",
+        is_active=True,
+        created_at="2026-01-01T00:00:00",
+    )
+    app.dependency_overrides[get_current_user] = lambda: admin
+    yield
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -55,7 +91,9 @@ def mock_llm_client(monkeypatch):
     mock.chat = AsyncMock(return_value=MagicMock(content="Test response"))
     mock.get_instance = MagicMock(return_value=mock)
 
-    with patch("app.infrastructure.llm_client.LLMClient.get_instance", return_value=mock):
+    with patch(
+        "app.infrastructure.llm_client.LLMClient.get_instance", return_value=mock
+    ):
         yield mock
 
 

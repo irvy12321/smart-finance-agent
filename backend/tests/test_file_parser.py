@@ -1,7 +1,9 @@
 """
 文件解析器单元测试
 """
+
 import pytest
+
 from app.rag.file_parser import (
     FileParserError,
     get_supported_extensions,
@@ -16,7 +18,7 @@ class TestParseTextFile:
 
     def test_utf8_text(self):
         """测试 UTF-8 文本"""
-        content = "Hello World\n你好世界".encode("utf-8")
+        content = "Hello World\n你好世界".encode()
         result = parse_text_file(content, "test.txt")
         assert result == "Hello World\n你好世界"
 
@@ -41,6 +43,7 @@ class TestParsePdfFile:
         # 这个测试在 PyPDF2 已安装时会跳过
         try:
             import PyPDF2
+
             pytest.skip("PyPDF2 is installed")
         except ImportError:
             with pytest.raises(FileParserError, match="PyPDF2 未安装"):
@@ -58,19 +61,19 @@ class TestParseFile:
 
     def test_md_file(self):
         """测试 Markdown 文件"""
-        content = "# Title\n\nContent".encode("utf-8")
+        content = b"# Title\n\nContent"
         result = parse_file(content, "test.md")
         assert result == "# Title\n\nContent"
 
     def test_csv_file(self):
         """测试 CSV 文件"""
-        content = "name,age\nAlice,30\nBob,25".encode("utf-8")
+        content = b"name,age\nAlice,30\nBob,25"
         result = parse_file(content, "test.csv")
         assert "Alice" in result
 
     def test_json_file(self):
         """测试 JSON 文件"""
-        content = '{"key": "value"}'.encode("utf-8")
+        content = b'{"key": "value"}'
         result = parse_file(content, "test.json")
         assert '"key"' in result
 
@@ -83,6 +86,7 @@ class TestParseFile:
         """测试 python-docx 未安装的情况"""
         try:
             import docx
+
             pytest.skip("python-docx is installed")
         except ImportError:
             with pytest.raises(FileParserError, match="python-docx 未安装"):

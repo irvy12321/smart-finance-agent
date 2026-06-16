@@ -11,7 +11,6 @@ from app.infrastructure.config import (
     get_agent_model_config,
     get_llm_config,
 )
-from app.monitoring.collectors import LLMMetricsCollector
 from app.monitoring.prometheus import (
     llm_errors_total,
     llm_in_progress,
@@ -43,6 +42,7 @@ class LLMResponse:
 
 class LLMClient:
     """基础 LLM 客户端 (向后兼容)"""
+
     _instance: "LLMClient | None" = None
 
     def __init__(self, config: LLMConfig | None = None):
@@ -114,7 +114,9 @@ class LLMClient:
             if not content:
                 msg = response.choices[0].message
                 if hasattr(msg, "reasoning_content") and msg.reasoning_content:
-                    logger.info(f"[trace:{trace_id}] content empty, falling back to reasoning_content")
+                    logger.info(
+                        f"[trace:{trace_id}] content empty, falling back to reasoning_content"
+                    )
                     content = msg.reasoning_content
             usage = {
                 "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
@@ -142,7 +144,11 @@ class LLMClient:
             error_msg = str(e)
 
             # Provide user-friendly error messages
-            if "401" in error_msg or "Unauthorized" in error_msg or "invalid api key" in error_msg.lower():
+            if (
+                "401" in error_msg
+                or "Unauthorized" in error_msg
+                or "invalid api key" in error_msg.lower()
+            ):
                 user_msg = "LLM authentication failed. Please check MIMO_API_KEY in backend/.env"
             elif "429" in error_msg or "rate limit" in error_msg.lower():
                 user_msg = "LLM rate limit exceeded. Please wait and try again"
@@ -177,9 +183,14 @@ class LiteLLMRouter:
     多模型路由器 - 根据 Agent 名称路由到不同的模型/参数配置
     支持: planner, executor, reasoner, report 四个 Agent 的独立模型配置
     """
+
     _instance: "LiteLLMRouter | None" = None
 
-    def __init__(self, llm_config: LLMConfig | None = None, agent_config: AgentModelConfig | None = None):
+    def __init__(
+        self,
+        llm_config: LLMConfig | None = None,
+        agent_config: AgentModelConfig | None = None,
+    ):
         self.llm_config = llm_config or get_llm_config()
         self.agent_config = agent_config or get_agent_model_config()
         self._call_count = 0
@@ -188,8 +199,11 @@ class LiteLLMRouter:
         self._model_overrides: dict[str, str] = {}
         # Token 预算管理
         from app.core.token_budget import TokenBudgetManager
+
         self.token_budget = TokenBudgetManager()
-        logger.info("LiteLLMRouter initialized with multi-agent model routing + token budget")
+        logger.info(
+            "LiteLLMRouter initialized with multi-agent model routing + token budget"
+        )
 
     @classmethod
     def get_instance(cls) -> "LiteLLMRouter":
@@ -200,13 +214,30 @@ class LiteLLMRouter:
     def _get_agent_params(self, agent_name: str) -> dict:
         """获取指定 Agent 的模型参数 (支持 override)"""
         model_map = {
-            "planner": (self.agent_config.planner_model, self.agent_config.planner_temperature),
-            "executor": (self.agent_config.executor_model, self.agent_config.executor_temperature),
-            "reasoner": (self.agent_config.reasoner_model, self.agent_config.reasoner_temperature),
-            "report": (self.agent_config.report_model, self.agent_config.report_temperature),
-            "chart": (self.agent_config.chart_model, self.agent_config.chart_temperature),
+            "planner": (
+                self.agent_config.planner_model,
+                self.agent_config.planner_temperature,
+            ),
+            "executor": (
+                self.agent_config.executor_model,
+                self.agent_config.executor_temperature,
+            ),
+            "reasoner": (
+                self.agent_config.reasoner_model,
+                self.agent_config.reasoner_temperature,
+            ),
+            "report": (
+                self.agent_config.report_model,
+                self.agent_config.report_temperature,
+            ),
+            "chart": (
+                self.agent_config.chart_model,
+                self.agent_config.chart_temperature,
+            ),
         }
-        model, temp = model_map.get(agent_name, (self.llm_config.model, self.llm_config.temperature))
+        model, temp = model_map.get(
+            agent_name, (self.llm_config.model, self.llm_config.temperature)
+        )
         # 检查 override
         if agent_name in self._model_overrides:
             model = self._model_overrides[agent_name]
@@ -297,8 +328,14 @@ class LiteLLMRouter:
             msg = response.choices[0].message
             content = msg.content or ""
             # MiMo 推理模型: content 为空时检查 reasoning_content
-            if not content and hasattr(msg, "reasoning_content") and msg.reasoning_content:
-                logger.info(f"[trace:{trace_id}] content empty, falling back to reasoning_content")
+            if (
+                not content
+                and hasattr(msg, "reasoning_content")
+                and msg.reasoning_content
+            ):
+                logger.info(
+                    f"[trace:{trace_id}] content empty, falling back to reasoning_content"
+                )
                 content = msg.reasoning_content
 
             usage = {
@@ -319,7 +356,11 @@ class LiteLLMRouter:
 
             # per-agent 统计
             if agent_name not in self._agent_stats:
-                self._agent_stats[agent_name] = {"calls": 0, "tokens": 0, "latency_total_ms": 0}
+                self._agent_stats[agent_name] = {
+                    "calls": 0,
+                    "tokens": 0,
+                    "latency_total_ms": 0,
+                }
             self._agent_stats[agent_name]["calls"] += 1
             self._agent_stats[agent_name]["tokens"] += usage["total_tokens"]
             self._agent_stats[agent_name]["latency_total_ms"] += latency_ms
@@ -328,13 +369,20 @@ class LiteLLMRouter:
             self.token_budget.record_usage(agent_name, usage["total_tokens"])
 
             # Record Prometheus token metrics
-            llm_tokens_total.labels(model=model, type="prompt").inc(usage["prompt_tokens"])
-            llm_tokens_total.labels(model=model, type="completion").inc(usage["completion_tokens"])
-            llm_tokens_total.labels(model=model, type="total").inc(usage["total_tokens"])
+            llm_tokens_total.labels(model=model, type="prompt").inc(
+                usage["prompt_tokens"]
+            )
+            llm_tokens_total.labels(model=model, type="completion").inc(
+                usage["completion_tokens"]
+            )
+            llm_tokens_total.labels(model=model, type="total").inc(
+                usage["total_tokens"]
+            )
             llm_in_progress.labels(model=model).dec()
 
             # 记录 metrics
             from app.core.observability.metrics import record_agent_call
+
             record_agent_call(
                 agent_name=agent_name,
                 tokens=usage["total_tokens"],
@@ -364,7 +412,11 @@ class LiteLLMRouter:
             llm_errors_total.labels(model=model, error_type=error_type).inc()
 
             # Provide user-friendly error messages
-            if "401" in error_msg or "Unauthorized" in error_msg or "invalid api key" in error_msg.lower():
+            if (
+                "401" in error_msg
+                or "Unauthorized" in error_msg
+                or "invalid api key" in error_msg.lower()
+            ):
                 user_msg = f"Agent '{agent_name}' authentication failed. Please check MIMO_API_KEY in backend/.env"
             elif "429" in error_msg or "rate limit" in error_msg.lower():
                 user_msg = f"Agent '{agent_name}' rate limit exceeded. Please wait and try again"
@@ -375,6 +427,7 @@ class LiteLLMRouter:
 
             # 记录错误 metrics
             from app.core.observability.metrics import record_agent_error
+
             record_agent_error(agent_name, error_msg, trace_id=trace_id)
 
             logger.error(
@@ -408,7 +461,9 @@ class LiteLLMRouter:
         """带 fallback 模型链的 Agent 调用"""
         agent_params = self._get_agent_params(agent_name)
         primary_model = agent_params["model"]
-        all_models = [primary_model] + [m for m in fallback_models if m != primary_model]
+        all_models = [primary_model] + [
+            m for m in fallback_models if m != primary_model
+        ]
 
         last_error = None
         for model in all_models:
@@ -417,7 +472,9 @@ class LiteLLMRouter:
                 old_override = self._model_overrides.get(agent_name)
                 self._model_overrides[agent_name] = model
 
-                result = await self.call_agent(agent_name, messages, max_tokens=max_tokens, trace_id=trace_id)
+                result = await self.call_agent(
+                    agent_name, messages, max_tokens=max_tokens, trace_id=trace_id
+                )
 
                 # 恢复原 override
                 if old_override is not None:

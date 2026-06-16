@@ -9,6 +9,7 @@ This is intentionally honest naming: there is no bge-m3 / sentence-transformers
 model loaded. If true semantic search is required, swap BM25Embedder for a real
 sentence-transformers backend and update the configured ``dim`` accordingly.
 """
+
 import hashlib
 from abc import ABC, abstractmethod
 
@@ -82,32 +83,142 @@ class BM25Embedder(BaseEmbedder):
     def _tokenize(self, text: str) -> list[str]:
         """分词 + 字符 n-gram"""
         import re
+
         text = text.lower()
         # 单词分词
-        words = re.findall(r'\b[a-z0-9]+\b', text)
+        words = re.findall(r"\b[a-z0-9]+\b", text)
         # 过滤停用词
-        stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-                      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-                      'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
-                      'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into',
-                      'through', 'during', 'before', 'after', 'above', 'below', 'between',
-                      'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once',
-                      'and', 'but', 'or', 'nor', 'not', 'so', 'yet', 'both', 'either',
-                      'neither', 'each', 'every', 'all', 'any', 'few', 'more', 'most',
-                      'other', 'some', 'such', 'no', 'only', 'own', 'same', 'than',
-                      'too', 'very', 'just', 'because', 'if', 'when', 'where', 'how',
-                      'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those',
-                      'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves',
-                      'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him',
-                      'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its',
-                      'itself', 'they', 'them', 'their', 'theirs', 'themselves'}
+        stop_words = {
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "can",
+            "need",
+            "dare",
+            "of",
+            "in",
+            "for",
+            "on",
+            "with",
+            "at",
+            "by",
+            "from",
+            "as",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "out",
+            "off",
+            "over",
+            "under",
+            "again",
+            "further",
+            "then",
+            "once",
+            "and",
+            "but",
+            "or",
+            "nor",
+            "not",
+            "so",
+            "yet",
+            "both",
+            "either",
+            "neither",
+            "each",
+            "every",
+            "all",
+            "any",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "only",
+            "own",
+            "same",
+            "than",
+            "too",
+            "very",
+            "just",
+            "because",
+            "if",
+            "when",
+            "where",
+            "how",
+            "what",
+            "which",
+            "who",
+            "whom",
+            "this",
+            "that",
+            "these",
+            "those",
+            "i",
+            "me",
+            "my",
+            "myself",
+            "we",
+            "our",
+            "ours",
+            "ourselves",
+            "you",
+            "your",
+            "yours",
+            "yourself",
+            "yourselves",
+            "he",
+            "him",
+            "his",
+            "himself",
+            "she",
+            "her",
+            "hers",
+            "herself",
+            "it",
+            "its",
+            "itself",
+            "they",
+            "them",
+            "their",
+            "theirs",
+            "themselves",
+        }
         words = [w for w in words if w not in stop_words and len(w) > 2]
 
         # 添加字符 n-gram (3-gram)
         ngrams = []
         for word in words:
             for i in range(len(word) - 2):
-                ngrams.append(word[i:i+3])
+                ngrams.append(word[i : i + 3])
 
         return words + ngrams
 
@@ -128,6 +239,7 @@ class BM25Embedder(BaseEmbedder):
 
         # 计算 IDF
         import math
+
         idf = np.zeros(len(vocab), dtype=np.float32)
         for token, idx in vocab.items():
             df = doc_freq.get(token, 0)
@@ -162,7 +274,7 @@ class BM25Embedder(BaseEmbedder):
         elif len(vec) < self._dim_value:
             return np.pad(vec, (0, self._dim_value - len(vec)))
         else:
-            return vec[:self._dim_value]
+            return vec[: self._dim_value]
 
     def embed_text(self, text: str) -> np.ndarray:
         if self._idf is None:
@@ -201,7 +313,9 @@ def create_embedder() -> BaseEmbedder:
     rag_config = get_rag_config()
 
     if embed_config.mode == "prod":
-        logger.info("Creating BM25Embedder (mode=prod, lexical BM25 retrieval - not semantic)")
+        logger.info(
+            "Creating BM25Embedder (mode=prod, lexical BM25 retrieval - not semantic)"
+        )
         return BM25Embedder(
             model_name=embed_config.model_name,
             device=embed_config.device,

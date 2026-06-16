@@ -1,6 +1,8 @@
 """
 新闻摘要工具 - 支持新闻搜索和摘要生成
 """
+
+import os
 from datetime import datetime
 
 import aiohttp
@@ -147,10 +149,12 @@ MOCK_NEWS_DATA = {
 
 class NewsSummaryTool(BaseTool):
     name = "news_summary"
-    description = "Searches for recent news and generates summaries for a given topic or company"
+    description = (
+        "Searches for recent news and generates summaries for a given topic or company"
+    )
 
     def __init__(self, api_key: str = ""):
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("NEWS_API_KEY", "")
 
     async def execute(self, **kwargs) -> ToolResult:
         query = kwargs.get("query", "")
@@ -158,7 +162,9 @@ class NewsSummaryTool(BaseTool):
         kwargs.get("topic", "")  # 可选：指定主题
 
         if not query:
-            return ToolResult(success=False, error="No query provided", tool_name=self.name)
+            return ToolResult(
+                success=False, error="No query provided", tool_name=self.name
+            )
 
         if not self.api_key:
             return self._unavailable(query, max_results, "NEWS_API_KEY not configured")
@@ -183,6 +189,7 @@ class NewsSummaryTool(BaseTool):
     async def _search_real_news(self, query: str, max_results: int) -> ToolResult:
         """从真实API搜索新闻（使用NewsAPI）"""
         import os
+
         url = "https://newsapi.org/v2/everything"
         params = {
             "q": query,
@@ -194,13 +201,13 @@ class NewsSummaryTool(BaseTool):
 
         # Check for proxy settings
         proxy = os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
-        
+
         timeout = aiohttp.ClientTimeout(total=30)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url, params=params, proxy=proxy) as resp:
                     data = await resp.json()
-                    
+
                     if data.get("status") != "ok":
                         error_msg = data.get("message", "Unknown error")
                         raise RuntimeError(f"NewsAPI error: {error_msg}")
@@ -209,14 +216,20 @@ class NewsSummaryTool(BaseTool):
 
                 results = []
                 for article in articles:
-                    results.append({
-                        "title": article.get("title", ""),
-                        "description": article.get("description", ""),
-                        "source": article.get("source", {}).get("name", ""),
-                        "date": article.get("publishedAt", "")[:10],
-                        "url": article.get("url", ""),
-                        "sentiment": self._analyze_sentiment(article.get("title", "") + " " + article.get("description", "")),
-                    })
+                    results.append(
+                        {
+                            "title": article.get("title", ""),
+                            "description": article.get("description", ""),
+                            "source": article.get("source", {}).get("name", ""),
+                            "date": article.get("publishedAt", "")[:10],
+                            "url": article.get("url", ""),
+                            "sentiment": self._analyze_sentiment(
+                                article.get("title", "")
+                                + " "
+                                + article.get("description", "")
+                            ),
+                        }
+                    )
 
                 summary = self._generate_summary(results, query)
 
@@ -230,7 +243,8 @@ class NewsSummaryTool(BaseTool):
                         "timestamp": datetime.now().isoformat(),
                     },
                     tool_name=self.name,
-                    source="newsapi", is_mock=False,
+                    source="newsapi",
+                    is_mock=False,
                 )
         except Exception as e:
             logger.error(f"News API request failed: {e}")
@@ -276,13 +290,37 @@ class NewsSummaryTool(BaseTool):
                 "warning": MOCK_WARNING,
             },
             tool_name=self.name,
-            source="mock", is_mock=True, warning=MOCK_WARNING,
+            source="mock",
+            is_mock=True,
+            warning=MOCK_WARNING,
         )
 
     def _analyze_sentiment(self, text: str) -> str:
         """分析文本情感（简单实现）"""
-        positive_words = ["strong", "growth", "increase", "surge", "record", "positive", "gain", "up", "high", "success"]
-        negative_words = ["weak", "decline", "decrease", "drop", "loss", "negative", "down", "low", "fail", "struggle"]
+        positive_words = [
+            "strong",
+            "growth",
+            "increase",
+            "surge",
+            "record",
+            "positive",
+            "gain",
+            "up",
+            "high",
+            "success",
+        ]
+        negative_words = [
+            "weak",
+            "decline",
+            "decrease",
+            "drop",
+            "loss",
+            "negative",
+            "down",
+            "low",
+            "fail",
+            "struggle",
+        ]
 
         text_lower = text.lower()
         positive_count = sum(1 for word in positive_words if word in text_lower)
@@ -345,7 +383,9 @@ class NewsAnalysisTool(BaseTool):
         period = kwargs.get("period", "7d")  # 1d, 7d, 30d
 
         if not query:
-            return ToolResult(success=False, error="No query provided", tool_name=self.name)
+            return ToolResult(
+                success=False, error="No query provided", tool_name=self.name
+            )
 
         try:
             # 获取新闻数据
@@ -353,7 +393,9 @@ class NewsAnalysisTool(BaseTool):
             news_result = await news_tool.execute(query=query, max_results=10)
 
             if not news_result.success:
-                return ToolResult(success=False, error="Failed to fetch news", tool_name=self.name)
+                return ToolResult(
+                    success=False, error="Failed to fetch news", tool_name=self.name
+                )
 
             data = news_result.data
             analysis = self._analyze_news(data, query, period)
@@ -423,7 +465,9 @@ class NewsAnalysisTool(BaseTool):
             "sentiment_distribution": sentiments,
             "trend": trend,
             "trend_description": trend_description,
-            "top_sources": dict(sorted(sources.items(), key=lambda x: x[1], reverse=True)[:5]),
+            "top_sources": dict(
+                sorted(sources.items(), key=lambda x: x[1], reverse=True)[:5]
+            ),
             "key_themes": key_themes,
             "total_articles": len(articles),
             "period": period,
@@ -438,23 +482,143 @@ class NewsAnalysisTool(BaseTool):
             common_words.update(words)
 
         # 过滤停用词
-        stop_words = {"the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-                      "have", "has", "had", "do", "does", "did", "will", "would", "could",
-                      "should", "may", "might", "must", "shall", "can", "need", "dare",
-                      "ought", "used", "to", "of", "in", "for", "on", "with", "at", "by",
-                      "from", "as", "into", "through", "during", "before", "after", "above",
-                      "below", "between", "out", "off", "over", "under", "again", "further",
-                      "then", "once", "and", "but", "or", "nor", "not", "so", "yet", "both",
-                      "either", "neither", "each", "every", "all", "any", "few", "more",
-                      "most", "other", "some", "such", "no", "only", "own", "same", "than",
-                      "too", "very", "just", "because", "if", "when", "where", "how", "what",
-                      "which", "who", "whom", "this", "that", "these", "those", "i", "me",
-                      "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours",
-                      "yourself", "yourselves", "he", "him", "his", "himself", "she", "her",
-                      "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs",
-                      "themselves", "about", "up", "down", "news", "latest", "report"}
+        stop_words = {
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "can",
+            "need",
+            "dare",
+            "ought",
+            "used",
+            "to",
+            "of",
+            "in",
+            "for",
+            "on",
+            "with",
+            "at",
+            "by",
+            "from",
+            "as",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "out",
+            "off",
+            "over",
+            "under",
+            "again",
+            "further",
+            "then",
+            "once",
+            "and",
+            "but",
+            "or",
+            "nor",
+            "not",
+            "so",
+            "yet",
+            "both",
+            "either",
+            "neither",
+            "each",
+            "every",
+            "all",
+            "any",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "only",
+            "own",
+            "same",
+            "than",
+            "too",
+            "very",
+            "just",
+            "because",
+            "if",
+            "when",
+            "where",
+            "how",
+            "what",
+            "which",
+            "who",
+            "whom",
+            "this",
+            "that",
+            "these",
+            "those",
+            "i",
+            "me",
+            "my",
+            "myself",
+            "we",
+            "our",
+            "ours",
+            "ourselves",
+            "you",
+            "your",
+            "yours",
+            "yourself",
+            "yourselves",
+            "he",
+            "him",
+            "his",
+            "himself",
+            "she",
+            "her",
+            "hers",
+            "herself",
+            "it",
+            "its",
+            "itself",
+            "they",
+            "them",
+            "their",
+            "theirs",
+            "themselves",
+            "about",
+            "up",
+            "down",
+            "news",
+            "latest",
+            "report",
+        }
 
-        themes = [word for word in common_words if word not in stop_words and len(word) > 3]
+        themes = [
+            word for word in common_words if word not in stop_words and len(word) > 3
+        ]
         return themes[:10]
 
     async def fallback_execute(self, **kwargs) -> ToolResult:
@@ -468,7 +632,11 @@ class NewsAnalysisTool(BaseTool):
                 "period": "7d",
                 "analysis": {
                     "sentiment_score": 0,
-                    "sentiment_distribution": {"positive": 0, "negative": 0, "neutral": 0},
+                    "sentiment_distribution": {
+                        "positive": 0,
+                        "negative": 0,
+                        "neutral": 0,
+                    },
                     "trend": "neutral",
                     "trend_description": f"Unable to analyze news trends for {query}.",
                     "top_sources": {},

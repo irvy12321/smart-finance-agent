@@ -3,6 +3,7 @@ Metrics Dashboard - 轻量级指标聚合器
 从现有数据源聚合指标，不修改主流程
 数据源: MetricsCollector / EventBus / TaskStateTracker
 """
+
 import threading
 import time
 from collections import defaultdict
@@ -17,6 +18,7 @@ logger = get_logger("metrics_dashboard")
 @dataclass
 class PipelineRun:
     """单次 pipeline 运行记录"""
+
     trace_id: str
     query: str
     start_time: float
@@ -36,6 +38,7 @@ class MetricsDashboard:
     指标聚合器 - 从现有系统收集指标
     线程安全，不影响主流程
     """
+
     _instance: "MetricsDashboard | None" = None
     _lock = threading.Lock()
 
@@ -74,25 +77,37 @@ class MetricsDashboard:
             if self._current_run:
                 self._current_run.agent_latencies[agent_name] = latency_ms
 
-    def record_tool_call(self, tool_name: str, success: bool, duration_ms: float, task_id: str = ""):
+    def record_tool_call(
+        self, tool_name: str, success: bool, duration_ms: float, task_id: str = ""
+    ):
         """记录 tool 调用"""
         with self._lock:
             if self._current_run:
-                self._current_run.tool_calls.append({
-                    "tool": tool_name,
-                    "success": success,
-                    "duration_ms": duration_ms,
-                    "task_id": task_id,
-                    "timestamp": time.time(),
-                })
+                self._current_run.tool_calls.append(
+                    {
+                        "tool": tool_name,
+                        "success": success,
+                        "duration_ms": duration_ms,
+                        "task_id": task_id,
+                        "timestamp": time.time(),
+                    }
+                )
 
-    def end_run(self, trace_id: str, subtask_count: int = 0, success_count: int = 0,
-                failed_count: int = 0, dag_size: int = 0):
+    def end_run(
+        self,
+        trace_id: str,
+        subtask_count: int = 0,
+        success_count: int = 0,
+        failed_count: int = 0,
+        dag_size: int = 0,
+    ):
         """记录 pipeline 结束"""
         with self._lock:
             if self._current_run and self._current_run.trace_id == trace_id:
                 self._current_run.end_time = time.time()
-                self._current_run.total_ms = (self._current_run.end_time - self._current_run.start_time) * 1000
+                self._current_run.total_ms = (
+                    self._current_run.end_time - self._current_run.start_time
+                ) * 1000
                 self._current_run.subtask_count = subtask_count
                 self._current_run.success_count = success_count
                 self._current_run.failed_count = failed_count
@@ -101,7 +116,7 @@ class MetricsDashboard:
 
                 self._runs.append(self._current_run)
                 if len(self._runs) > self._max_runs:
-                    self._runs = self._runs[-self._max_runs:]
+                    self._runs = self._runs[-self._max_runs :]
                 self._current_run = None
 
     def ingest_from_metrics_collector(self):
@@ -133,7 +148,9 @@ class MetricsDashboard:
 
     def get_tool_stats(self) -> dict[str, dict]:
         """获取各 tool 调用统计"""
-        tool_data = defaultdict(lambda: {"calls": 0, "success": 0, "failure": 0, "total_ms": 0})
+        tool_data = defaultdict(
+            lambda: {"calls": 0, "success": 0, "failure": 0, "total_ms": 0}
+        )
 
         for run in self._runs:
             for tc in run.tool_calls:
@@ -190,28 +207,32 @@ class MetricsDashboard:
         trend = []
         for run in self._runs[-20:]:
             errors = sum(1 for tc in run.tool_calls if not tc["success"])
-            trend.append({
-                "trace_id": run.trace_id[:8],
-                "errors": errors,
-                "total": len(run.tool_calls),
-                "timestamp": run.start_time,
-            })
+            trend.append(
+                {
+                    "trace_id": run.trace_id[:8],
+                    "errors": errors,
+                    "total": len(run.tool_calls),
+                    "timestamp": run.start_time,
+                }
+            )
         return trend
 
     def get_recent_runs(self, limit: int = 10) -> list[dict]:
         """获取最近的运行记录"""
         result = []
         for run in self._runs[-limit:]:
-            result.append({
-                "trace_id": run.trace_id[:8],
-                "query": run.query[:50],
-                "total_ms": run.total_ms,
-                "subtask_count": run.subtask_count,
-                "success_count": run.success_count,
-                "failed_count": run.failed_count,
-                "status": run.status,
-                "tool_calls": len(run.tool_calls),
-            })
+            result.append(
+                {
+                    "trace_id": run.trace_id[:8],
+                    "query": run.query[:50],
+                    "total_ms": run.total_ms,
+                    "subtask_count": run.subtask_count,
+                    "success_count": run.success_count,
+                    "failed_count": run.failed_count,
+                    "status": run.status,
+                    "tool_calls": len(run.tool_calls),
+                }
+            )
         return result
 
     def get_full_dashboard_data(self) -> dict:

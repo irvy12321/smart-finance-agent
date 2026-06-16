@@ -1,6 +1,7 @@
 """
 增强指标收集器 - 并发安全 + Agent 集成 + 实时统计
 """
+
 import threading
 import time
 from collections import defaultdict
@@ -22,6 +23,7 @@ class MetricPoint:
 
 class MetricsCollector:
     """并发安全的指标收集器"""
+
     _instance: "MetricsCollector | None" = None
     _lock = threading.Lock()
 
@@ -39,9 +41,14 @@ class MetricsCollector:
     def record(self, name: str, value: float, trace_id: str = "", **tags):
         """记录指标点"""
         with self._lock:
-            self._metrics.append(MetricPoint(
-                name=name, value=value, tags=tags, trace_id=trace_id,
-            ))
+            self._metrics.append(
+                MetricPoint(
+                    name=name,
+                    value=value,
+                    tags=tags,
+                    trace_id=trace_id,
+                )
+            )
             self._counters[name] += value
 
     def gauge(self, name: str, value: float, **tags):
@@ -74,13 +81,17 @@ class MetricsCollector:
                 "max": max(values),
                 "avg": sum(values) / len(values),
                 "p50": sorted(values)[len(values) // 2],
-                "p99": sorted(values)[int(len(values) * 0.99)] if len(values) > 1 else values[0],
+                "p99": sorted(values)[int(len(values) * 0.99)]
+                if len(values) > 1
+                else values[0],
             }
 
     def get_agent_summary(self) -> dict[str, dict]:
         """获取各 Agent 的指标摘要"""
         with self._lock:
-            agent_stats = defaultdict(lambda: {"calls": 0, "tokens": 0, "errors": 0, "total_ms": 0})
+            agent_stats = defaultdict(
+                lambda: {"calls": 0, "tokens": 0, "errors": 0, "total_ms": 0}
+            )
             for m in self._metrics:
                 agent = m.tags.get("agent", "unknown")
                 if m.name == "agent_call":
@@ -99,8 +110,7 @@ class MetricsCollector:
             "counters": dict(self._counters),
             "gauges": dict(self._gauges),
             "histograms": {
-                name: self.get_histogram_stats(name)
-                for name in self._histograms
+                name: self.get_histogram_stats(name) for name in self._histograms
             },
             "agent_summary": self.get_agent_summary(),
         }
@@ -121,7 +131,9 @@ def record_metric(name: str, value: float, trace_id: str = "", **tags):
     _metrics.record(name, value, trace_id=trace_id, **tags)
 
 
-def record_agent_call(agent_name: str, tokens: int, latency_ms: float, trace_id: str = ""):
+def record_agent_call(
+    agent_name: str, tokens: int, latency_ms: float, trace_id: str = ""
+):
     """记录 Agent 调用指标"""
     _metrics.record("agent_call", 1, trace_id=trace_id, agent=agent_name)
     _metrics.record("agent_tokens", tokens, trace_id=trace_id, agent=agent_name)
@@ -135,10 +147,14 @@ def record_agent_error(agent_name: str, error: str, trace_id: str = ""):
     _metrics.record("agent_error", 1, trace_id=trace_id, agent=agent_name, error=error)
 
 
-def record_task_result(task_id: str, tool: str, success: bool, duration_ms: float, trace_id: str = ""):
+def record_task_result(
+    task_id: str, tool: str, success: bool, duration_ms: float, trace_id: str = ""
+):
     """记录任务结果"""
     status = "success" if success else "failed"
-    _metrics.record("task_result", 1, trace_id=trace_id, task_id=task_id, tool=tool, status=status)
+    _metrics.record(
+        "task_result", 1, trace_id=trace_id, task_id=task_id, tool=tool, status=status
+    )
     _metrics.histogram(f"task.{tool}.latency", duration_ms)
 
 

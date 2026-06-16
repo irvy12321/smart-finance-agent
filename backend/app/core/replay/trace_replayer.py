@@ -2,6 +2,7 @@
 Trace Replayer - 从保存的 trace 文件回放执行过程
 不调用 LLM，纯日志回放
 """
+
 import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -19,6 +20,7 @@ logger = get_logger("trace_replayer")
 @dataclass
 class ReplayState:
     """回放状态"""
+
     current_task: str = ""
     completed_tasks: list[str] = field(default_factory=list)
     task_states: dict[str, dict] = field(default_factory=dict)
@@ -51,7 +53,9 @@ class TraceReplayer:
         self._ordered_tasks = session.get_ordered_tasks()
         self._state = ReplayState()
         self._step_index = 0
-        logger.info(f"Loaded trace: {session.trace_id} ({len(self._ordered_tasks)} tasks)")
+        logger.info(
+            f"Loaded trace: {session.trace_id} ({len(self._ordered_tasks)} tasks)"
+        )
 
     def load_from_file(self, filepath: str):
         """从文件加载 trace"""
@@ -145,7 +149,9 @@ class TraceReplayer:
                     "tool": end_event.tool,
                     "success": end_event.success,
                     "latency_ms": end_event.latency_ms,
-                    "output": str(end_event.output_data)[:300] if end_event.output_data else "",
+                    "output": str(end_event.output_data)[:300]
+                    if end_event.output_data
+                    else "",
                     "error": end_event.error,
                 }
 
@@ -206,7 +212,9 @@ class TraceReplayer:
                 "tool": end_event.tool,
                 "success": end_event.success,
                 "latency_ms": end_event.latency_ms,
-                "output": str(end_event.output_data)[:300] if end_event.output_data else "",
+                "output": str(end_event.output_data)[:300]
+                if end_event.output_data
+                else "",
                 "error": end_event.error,
             }
             self._state.task_states[task_id] = {
@@ -254,13 +262,15 @@ class TraceReplayer:
             state = self._state.task_states.get(task_id, {})
             status = state.get("status", "pending")
 
-            nodes.append({
-                "id": task_id,
-                "tool": tool,
-                "desc": st.get("desc", ""),
-                "status": status,
-                "latency_ms": state.get("latency_ms", 0),
-            })
+            nodes.append(
+                {
+                    "id": task_id,
+                    "tool": tool,
+                    "desc": st.get("desc", ""),
+                    "status": status,
+                    "latency_ms": state.get("latency_ms", 0),
+                }
+            )
 
             for dep in st.get("depends_on", []):
                 edges.append({"from": dep, "to": task_id})
