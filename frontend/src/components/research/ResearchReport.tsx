@@ -37,8 +37,8 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
         summary: data.summary || '',
         keyFindings: data.key_findings || [],
         riskFactors: (data.risk_factors || []).map((r: any) => ({
-          text: r.text || r,
-          severity: r.severity || 'medium'
+          text: typeof r === 'string' ? r : (r.factor ?? r.text ?? r.description ?? ''),
+          severity: (typeof r === 'object' && r?.severity) ? r.severity : 'medium'
         })),
         recommendations: data.recommendations || [],
         confidence: data.confidence || 0,
