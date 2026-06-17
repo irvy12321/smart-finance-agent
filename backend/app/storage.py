@@ -161,8 +161,16 @@ def _create_default_admin(conn: sqlite3.Connection) -> None:
     import bcrypt
 
     # Check if admin user exists
-    cursor = conn.execute("SELECT id FROM users WHERE username = 'admin'")
-    if cursor.fetchone():
+    cursor = conn.execute("SELECT id, role FROM users WHERE username = 'admin'")
+    existing = cursor.fetchone()
+    if existing:
+        # Self-heal: an admin row created before the RBAC migration gets the
+        # column default ('viewer') and would otherwise stay non-admin forever.
+        if existing[1] != "admin":
+            conn.execute(
+                "UPDATE users SET role = 'admin', updated_at = ? WHERE username = 'admin'",
+                (datetime.now().isoformat(),),
+            )
         return
 
     # Create default admin user

@@ -37,8 +37,8 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
         summary: data.summary || '',
         keyFindings: data.key_findings || [],
         riskFactors: (data.risk_factors || []).map((r: any) => ({
-          text: r.text || r,
-          severity: r.severity || 'medium'
+          text: typeof r === 'string' ? r : (r.factor ?? r.text ?? r.description ?? ''),
+          severity: (typeof r === 'object' && r?.severity) ? r.severity : 'medium'
         })),
         recommendations: data.recommendations || [],
         confidence: data.confidence || 0,
@@ -51,8 +51,13 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
   }, [taskId, symbol])
 
   useEffect(() => {
-    fetchReport()
-  }, [fetchReport])
+    // Only fetch once the task has finished running; fetching while the task is
+    // still in progress returns 400 ("Task is not completed"). When isLoading
+    // flips false on completion this re-runs and pulls the finished report.
+    if (taskId && !isLoading) {
+      fetchReport()
+    }
+  }, [taskId, isLoading, fetchReport])
 
   if (!taskId && !symbol) {
     return (
