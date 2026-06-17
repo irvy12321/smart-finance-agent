@@ -51,8 +51,13 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
   }, [taskId, symbol])
 
   useEffect(() => {
-    fetchReport()
-  }, [fetchReport])
+    // Only fetch once the task has finished running; fetching while the task is
+    // still in progress returns 400 ("Task is not completed"). When isLoading
+    // flips false on completion this re-runs and pulls the finished report.
+    if (taskId && !isLoading) {
+      fetchReport()
+    }
+  }, [taskId, isLoading, fetchReport])
 
   if (!taskId && !symbol) {
     return (
