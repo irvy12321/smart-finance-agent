@@ -3,7 +3,7 @@
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import aiohttp
 
@@ -155,6 +155,10 @@ class NewsSummaryTool(BaseTool):
 
     def __init__(self, api_key: str = ""):
         self.api_key = api_key or os.getenv("NEWS_API_KEY", "")
+        # Finnhub is the primary provider: its company-news endpoint is symbol
+        # keyed (matching how the research pipeline calls this tool) and is
+        # reachable from the production host where newsapi.org is not.
+        self.finnhub_key = os.getenv("FINNHUB_API_KEY", "")
 
     async def execute(self, **kwargs) -> ToolResult:
         query = kwargs.get("query", "")
@@ -166,8 +170,17 @@ class NewsSummaryTool(BaseTool):
                 success=False, error="No query provided", tool_name=self.name
             )
 
+        if self.finnhub_key:
+            try:
+                return await self._search_finnhub_news(query, max_results)
+            except Exception as e:
+                logger.error(f"Finnhub news search failed for {query}: {e}")
+                return self._unavailable(
+                    query, max_results, f"real data unavailable: {e}"
+                )
+
         if not self.api_key:
-            return self._unavailable(query, max_results, "NEWS_API_KEY not configured")
+            return self._unavailable(query, max_results, "no news API key configured")
 
         try:
             return await self._search_real_news(query, max_results)
@@ -185,6 +198,68 @@ class NewsSummaryTool(BaseTool):
                 source="newsapi",
             )
         return self._mock_news_sync(query, max_results)
+
+    async def _search_finnhub_news(self, query: str, max_results: int) -> ToolResult:
+        """Fetch real company news from Finnhub (symbol-keyed company-news)."""
+        symbol = query.strip().upper()
+        to_date = datetime.now()
+        from_date = to_date - timedelta(days=14)
+        url = "https://finnhub.io/api/v1/company-news"
+        params = {
+            "symbol": symbol,
+            "from": from_date.strftime("%Y-%m-%d"),
+            "to": to_date.strftime("%Y-%m-%d"),
+            "token": self.finnhub_key,
+        }
+
+        proxy = os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with (
+            aiohttp.ClientSession(timeout=timeout) as session,
+            session.get(url, params=params, proxy=proxy) as resp,
+        ):
+            if resp.status != 200:
+                text = await resp.text()
+                raise RuntimeError(f"Finnhub error: HTTP {resp.status} {text[:120]}")
+            data = await resp.json()
+
+        if not isinstance(data, list):
+            raise RuntimeError(f"Finnhub unexpected response: {str(data)[:120]}")
+
+        results = []
+        for article in data[:max_results]:
+            epoch = article.get("datetime", 0)
+            date_str = (
+                datetime.fromtimestamp(epoch).strftime("%Y-%m-%d") if epoch else ""
+            )
+            headline = article.get("headline", "")
+            description = article.get("summary", "")
+            results.append(
+                {
+                    "title": headline,
+                    "description": description,
+                    "source": article.get("source", ""),
+                    "date": date_str,
+                    "url": article.get("url", ""),
+                    "sentiment": self._analyze_sentiment(f"{headline} {description}"),
+                }
+            )
+
+        summary = self._generate_summary(results, query)
+
+        return ToolResult(
+            success=True,
+            data={
+                "query": query,
+                "results": results,
+                "summary": summary,
+                "total_results": len(results),
+                "timestamp": datetime.now().isoformat(),
+            },
+            tool_name=self.name,
+            source="finnhub",
+            is_mock=False,
+        )
 
     async def _search_real_news(self, query: str, max_results: int) -> ToolResult:
         """从真实API搜索新闻（使用NewsAPI）"""
