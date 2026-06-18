@@ -12,8 +12,9 @@ from app.utils.logger import get_logger
 
 logger = get_logger("financial_report_tool")
 
-# Financial Modeling Prep API
-FMP_BASE_URL = "https://financialmodelingprep.com/api/v3"
+# Financial Modeling Prep API (stable endpoints; the legacy /api/v3 paths were
+# retired on 2025-08-31 and now return HTTP 403 "Legacy Endpoint").
+FMP_BASE_URL = "https://financialmodelingprep.com/stable"
 
 # 模拟财务数据（API 不可用时的降级方案）
 MOCK_FINANCIAL_DATA = {
@@ -130,7 +131,7 @@ class FinancialReportTool(BaseTool):
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             # 获取公司概况
-            profile_url = f"{FMP_BASE_URL}/profile/{symbol}?apikey={self.api_key}"
+            profile_url = f"{FMP_BASE_URL}/profile?symbol={symbol}&apikey={self.api_key}"
             async with session.get(profile_url) as resp:
                 profile_data = await resp.json()
 
@@ -144,18 +145,18 @@ class FinancialReportTool(BaseTool):
             profile = profile_data[0]
 
             # 获取财务报表
-            income_url = f"{FMP_BASE_URL}/income-statement/{symbol}?limit=3&apikey={self.api_key}"
+            income_url = f"{FMP_BASE_URL}/income-statement?symbol={symbol}&limit=3&apikey={self.api_key}"
             async with session.get(income_url) as resp:
                 income_data = await resp.json()
 
             # 获取资产负债表
-            balance_url = f"{FMP_BASE_URL}/balance-sheet-statement/{symbol}?limit=3&apikey={self.api_key}"
+            balance_url = f"{FMP_BASE_URL}/balance-sheet-statement?symbol={symbol}&limit=3&apikey={self.api_key}"
             async with session.get(balance_url) as resp:
                 balance_data = await resp.json()
 
             # 获取关键指标
             metrics_url = (
-                f"{FMP_BASE_URL}/key-metrics/{symbol}?limit=3&apikey={self.api_key}"
+                f"{FMP_BASE_URL}/key-metrics?symbol={symbol}&limit=3&apikey={self.api_key}"
             )
             async with session.get(metrics_url) as resp:
                 metrics_data = await resp.json()
@@ -169,7 +170,7 @@ class FinancialReportTool(BaseTool):
                 "sector": profile.get("sector", "Unknown"),
                 "industry": profile.get("industry", "Unknown"),
                 "current_price": profile.get("price", 0),
-                "market_cap": profile.get("mktCap", 0),
+                "market_cap": profile.get("marketCap", 0),
                 "beta": profile.get("beta", 0),
                 "description": profile.get("description", ""),
                 "financials": financials,
@@ -179,7 +180,7 @@ class FinancialReportTool(BaseTool):
 
             if report_type == "quarterly":
                 # 获取季度数据
-                quarterly_url = f"{FMP_BASE_URL}/income-statement/{symbol}?limit=4&period=quarter&apikey={self.api_key}"
+                quarterly_url = f"{FMP_BASE_URL}/income-statement?symbol={symbol}&period=quarter&limit=4&apikey={self.api_key}"
                 async with session.get(quarterly_url) as resp:
                     quarterly_data = await resp.json()
                 result["quarterly"] = self._parse_quarterly(quarterly_data)
@@ -206,37 +207,38 @@ class FinancialReportTool(BaseTool):
             "return_on_equity": {},
         }
 
+        # stable endpoints key statements by `fiscalYear` (the legacy
+        # `calendarYear` field no longer exists).
         for item in income_data:
-            year = item.get("calendarYear", "")
+            year = str(item.get("fiscalYear") or "")
             if year:
                 financials["revenue"][year] = item.get("revenue", 0)
                 financials["net_income"][year] = item.get("netIncome", 0)
                 financials["eps"][year] = item.get("eps", 0)
 
+        # stable key-metrics exposes returnOnEquity and earningsYield directly
+        # (the legacy peRatio/dividendYield fields were removed).
         for item in metrics_data:
-            year = item.get("calendarYear", "")
+            year = str(item.get("fiscalYear") or "")
             if year:
-                financials["pe_ratio"][year] = item.get("peRatio", 0)
-                financials["dividend_yield"][year] = item.get("dividendYield", 0)
+                financials["return_on_equity"][year] = item.get("returnOnEquity", 0)
+                earnings_yield = item.get("earningsYield") or 0
+                financials["pe_ratio"][year] = (
+                    1 / earnings_yield if earnings_yield else 0
+                )
 
         for item in balance_data:
-            year = item.get("calendarYear", "")
+            year = str(item.get("fiscalYear") or "")
             if year:
-                total_equity = item.get("totalStockholdersEquity", 1)
+                total_equity = (
+                    item.get("totalStockholdersEquity")
+                    or item.get("totalEquity")
+                    or 0
+                )
                 total_debt = item.get("totalDebt", 0)
                 financials["debt_to_equity"][year] = (
                     total_debt / total_equity if total_equity else 0
                 )
-
-        # 计算 ROE
-        for year in financials["net_income"]:
-            for balance in balance_data:
-                if balance.get("calendarYear") == year:
-                    equity = balance.get("totalStockholdersEquity", 1)
-                    net_income = financials["net_income"].get(year, 0)
-                    financials["return_on_equity"][year] = (
-                        net_income / equity if equity else 0
-                    )
 
         return financials
 
@@ -244,7 +246,7 @@ class FinancialReportTool(BaseTool):
         """解析季度数据"""
         quarterly = {}
         for item in quarterly_data:
-            period = f"{item.get('period', '')} {item.get('calendarYear', '')}"
+            period = f"{item.get('period', '')} {item.get('fiscalYear', '')}"
             quarterly[period] = {
                 "revenue": item.get("revenue", 0),
                 "net_income": item.get("netIncome", 0),
