@@ -15,16 +15,30 @@ DB_DIR = Path(__file__).parent.parent / "data"
 DB_PATH = DB_DIR / "chat.db"
 
 
+_db_dir_checked = False
+
+
 def _ensure_db_dir() -> Path:
-    """Ensure database directory exists and is writable"""
-    global DB_DIR, DB_PATH
+    """Ensure database directory exists and is writable.
+
+    The writability probe uses a per-process unique filename and runs only
+    once. A shared probe filename races across uvicorn workers: one worker's
+    unlink removes the file another worker just created, raising a spurious
+    FileNotFoundError. That made a worker fall back to an empty temp DB and
+    return 500 ("no such table: users") on every authenticated request.
+    """
+    global DB_DIR, DB_PATH, _db_dir_checked
+
+    if _db_dir_checked:
+        return DB_DIR
 
     try:
         DB_DIR.mkdir(parents=True, exist_ok=True)
-        # Test write permission
-        test_file = DB_DIR / ".write_test"
+        # Per-process probe name avoids cross-worker races on a shared file
+        test_file = DB_DIR / f".write_test_{os.getpid()}"
         test_file.touch()
-        test_file.unlink()
+        test_file.unlink(missing_ok=True)
+        _db_dir_checked = True
         return DB_DIR
     except (PermissionError, OSError) as e:
         # Fallback to temp directory
@@ -39,6 +53,7 @@ def _ensure_db_dir() -> Path:
         )
         DB_DIR = temp_dir
         DB_PATH = DB_DIR / "chat.db"
+        _db_dir_checked = True
         return DB_DIR
 
 
