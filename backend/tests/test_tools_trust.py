@@ -98,6 +98,7 @@ async def test_financial_mock_revenue_not_duplicated(monkeypatch):
 @pytest.mark.asyncio
 async def test_news_no_key_no_mock_fails(monkeypatch):
     monkeypatch.setenv("ALLOW_MOCK_DATA", "false")
+    monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
     res = await NewsSummaryTool(api_key="").execute(query="Apple")
     assert res.success is False
     assert "ALLOW_MOCK_DATA" in res.error
@@ -106,6 +107,7 @@ async def test_news_no_key_no_mock_fails(monkeypatch):
 @pytest.mark.asyncio
 async def test_news_mock_is_labelled(monkeypatch):
     monkeypatch.setenv("ALLOW_MOCK_DATA", "true")
+    monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
     res = await NewsSummaryTool(api_key="").execute(query="Apple")
     assert res.success is True
     assert res.is_mock is True

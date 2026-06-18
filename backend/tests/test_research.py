@@ -13,6 +13,7 @@ def _mock_env(monkeypatch):
     for key in (
         "ALPHA_VANTAGE_API_KEY",
         "NEWS_API_KEY",
+        "FINNHUB_API_KEY",
         "FMP_API_KEY",
         "MIMO_API_KEY",
         "DEEPSEEK_API_KEY",
@@ -27,6 +28,7 @@ def _no_data_env(monkeypatch):
     for key in (
         "ALPHA_VANTAGE_API_KEY",
         "NEWS_API_KEY",
+        "FINNHUB_API_KEY",
         "FMP_API_KEY",
         "MIMO_API_KEY",
         "DEEPSEEK_API_KEY",
