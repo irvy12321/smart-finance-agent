@@ -131,7 +131,9 @@ class FinancialReportTool(BaseTool):
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             # 获取公司概况
-            profile_url = f"{FMP_BASE_URL}/profile?symbol={symbol}&apikey={self.api_key}"
+            profile_url = (
+                f"{FMP_BASE_URL}/profile?symbol={symbol}&apikey={self.api_key}"
+            )
             async with session.get(profile_url) as resp:
                 profile_data = await resp.json()
 
@@ -155,9 +157,7 @@ class FinancialReportTool(BaseTool):
                 balance_data = await resp.json()
 
             # 获取关键指标
-            metrics_url = (
-                f"{FMP_BASE_URL}/key-metrics?symbol={symbol}&limit=3&apikey={self.api_key}"
-            )
+            metrics_url = f"{FMP_BASE_URL}/key-metrics?symbol={symbol}&limit=3&apikey={self.api_key}"
             async with session.get(metrics_url) as resp:
                 metrics_data = await resp.json()
 
@@ -231,9 +231,7 @@ class FinancialReportTool(BaseTool):
             year = str(item.get("fiscalYear") or "")
             if year:
                 total_equity = (
-                    item.get("totalStockholdersEquity")
-                    or item.get("totalEquity")
-                    or 0
+                    item.get("totalStockholdersEquity") or item.get("totalEquity") or 0
                 )
                 total_debt = item.get("totalDebt", 0)
                 financials["debt_to_equity"][year] = (
