@@ -9,7 +9,13 @@ import os
 from dataclasses import dataclass
 from typing import ClassVar
 
-from app.core.agent_status import AgentEvent, AgentStage, EventBus, TaskStateTracker
+from app.core.agent_status import (
+    AgentEvent,
+    AgentStage,
+    EventBus,
+    TaskStateTracker,
+    set_current_trace_id,
+)
 from app.core.chart_renderer import ChartRenderer
 from app.core.executor import ExecutionResult, ExecutorAgent
 from app.core.fallback_manager import FallbackManager
@@ -126,6 +132,7 @@ class Orchestrator:
     async def run(self, query: str) -> RunResult:
         """3-Layer 流水线: SmartRoute → Plan → Execute → Synthesize"""
         trace = TraceContext()
+        set_current_trace_id(trace.trace_id)
         tracker = PipelineTracker(trace.trace_id, query)
         LogContext.set(trace_id=trace.trace_id, agent_name="orchestrator")
 
@@ -336,6 +343,7 @@ class Orchestrator:
     async def run_with_streaming(self, query: str, language: str = "en"):
         """流式输出 (供 UI 使用) - 带容错"""
         trace = TraceContext()
+        set_current_trace_id(trace.trace_id)
         self._current_language = language  # Store language for later use
 
         self.memory.add_user_message(query)
@@ -403,6 +411,8 @@ class Orchestrator:
         _task_events: list[dict] = []
 
         async def _on_task_start(event: AgentEvent):
+            if event.trace_id and event.trace_id != trace.trace_id:
+                return  # event belongs to another concurrent run
             if event.event_type == "task_start":
                 _task_events.append(
                     {
@@ -414,6 +424,8 @@ class Orchestrator:
                 )
 
         async def _on_task_complete(event: AgentEvent):
+            if event.trace_id and event.trace_id != trace.trace_id:
+                return  # event belongs to another concurrent run
             if event.event_type == "task_complete":
                 _task_events.append(
                     {
