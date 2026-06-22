@@ -49,7 +49,7 @@ def test_prompt_exposes_all_planner_tools():
 
 def test_prompt_tools_are_all_in_validation_allowlist():
     for name in _prompt_tool_names():
-        assert name in PlannerAgent._VALID_TOOLS
+        assert name in PlannerAgent._DEFAULT_VALID_TOOLS
 
 
 def test_newly_exposed_tools_are_registry_resolvable():

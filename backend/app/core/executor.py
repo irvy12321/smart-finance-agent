@@ -1,4 +1,5 @@
 import asyncio
+import os
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
@@ -29,6 +30,10 @@ logger = get_logger("executor")
 
 # 状态回调类型
 StatusCallback = Callable[[str, TaskStatus, dict], Coroutine[Any, Any, None]]
+
+# 单个工具调用的超时上限 (秒)。超时即记为失败并走降级链，
+# 避免某个 hang 住的工具阻塞整轮 asyncio.gather。
+DEFAULT_TOOL_TIMEOUT = 30.0
 
 
 @dataclass
@@ -68,8 +73,14 @@ class ExecutorAgent:
         tool_registry: ToolRegistry | None = None,
         llm_client: LLMClient | None = None,
         router: LiteLLMRouter | None = None,
+        tool_timeout: float | None = None,
     ):
         self.registry = tool_registry or ToolRegistry()
+        self.tool_timeout = (
+            tool_timeout
+            if tool_timeout is not None
+            else float(os.getenv("TOOL_EXEC_TIMEOUT", str(DEFAULT_TOOL_TIMEOUT)))
+        )
         self.router = router
         self.llm = llm_client or LLMClient.get_instance()
         self.state_tracker = TaskStateTracker.get_instance()
@@ -304,10 +315,28 @@ class ExecutorAgent:
                 try:
                     tool_calls_total.labels(tool_name=task.tool_name).inc()
                     tool_start = time.perf_counter()
-                    tool_result = await tool.execute(**params)
+                    tool_result = await asyncio.wait_for(
+                        tool.execute(**params), timeout=self.tool_timeout
+                    )
                     tool_duration = time.perf_counter() - tool_start
                     tool_call_duration_seconds.labels(tool_name=task.tool_name).observe(
                         tool_duration
+                    )
+                except (TimeoutError, asyncio.TimeoutError):
+                    logger.error(
+                        f"[trace:{trace.trace_id}] Tool {task.tool_name} timed out "
+                        f"after {self.tool_timeout:.0f}s"
+                    )
+                    tool_errors_total.labels(
+                        tool_name=task.tool_name, error_type="TimeoutError"
+                    ).inc()
+                    tool_result = ToolResult(
+                        success=False,
+                        error=(
+                            f"Tool '{task.tool_name}' timed out after "
+                            f"{self.tool_timeout:.0f}s"
+                        ),
+                        tool_name=task.tool_name,
                     )
                 except Exception as e:
                     logger.error(

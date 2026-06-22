@@ -86,8 +86,11 @@ class Orchestrator:
         # Smart Router (查询复杂度评估 + 工具选择)
         self.smart_router = SmartRouter()
 
-        # Layer 1: Planner
-        self.planner = PlannerAgent(self.llm, self.router)
+        # Layer 1: Planner — valid tool set derived from the registry so the
+        # planner can never drift out of sync with the registered tools.
+        self.planner = PlannerAgent(
+            self.llm, self.router, valid_tools=set(self.registry.get_all().keys())
+        )
         # Layer 2: Executor
         self.executor = ExecutorAgent(self.registry, self.llm, self.router)
         # Layer 3: Synthesizer (Reasoner + Report + Chart)

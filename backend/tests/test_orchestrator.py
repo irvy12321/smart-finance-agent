@@ -270,6 +270,81 @@ async def test_executor_agent():
         assert len(result.task_results) > 0
 
 
+@pytest.mark.asyncio
+async def test_executor_tool_timeout_routes_to_fallback():
+    """A hanging tool is timed out and routed to the fallback chain instead of
+    blocking the whole execution round."""
+    import asyncio
+
+    from app.tools.base_tool import ToolResult
+
+    event_bus = _make_event_bus()
+    state_tracker = _make_state_tracker()
+
+    async def _slow_execute(**kwargs):
+        await asyncio.sleep(5.0)
+        return MagicMock(success=True, data="late", error="")
+
+    with (
+        patch("app.core.executor.EventBus") as mock_eb_cls,
+        patch("app.core.executor.TaskStateTracker") as mock_st_cls,
+        patch("app.core.executor.FallbackManager") as mock_fb_cls,
+        patch("app.core.executor.CircuitBreakerManager"),
+    ):
+        mock_tool = MagicMock()
+        mock_tool.execute = _slow_execute
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = mock_tool
+
+        mock_fb = MagicMock()
+        mock_fb.execute_with_fallback = AsyncMock(
+            return_value=(
+                ToolResult(success=False, error="exhausted", tool_name="stock_price"),
+                "stock_price",
+            )
+        )
+        mock_fb_cls.return_value = mock_fb
+
+        mock_eb_cls.get_instance.return_value = event_bus
+        mock_st_cls.get_instance.return_value = state_tracker
+
+        from app.core.executor import ExecutorAgent
+        from app.core.planner import Plan, SubTask
+
+        mock_llm = MagicMock()
+        mock_llm.complete = AsyncMock(return_value="synth")
+        executor = ExecutorAgent(mock_registry, mock_llm, None, tool_timeout=0.05)
+
+        subtask = SubTask(
+            task_id="t1",
+            tool_name="stock_price",
+            params={"symbol": "AAPL"},
+            description="Get price",
+            priority=1,
+        )
+        plan = Plan(original_query="Test", subtasks=[subtask])
+
+        result = await executor.execute(plan)
+
+        t1 = next(r for r in result.task_results if r.task_id == "t1")
+        assert t1.success is False
+        mock_fb.execute_with_fallback.assert_awaited()
+
+
+def test_planner_valid_tools_derived_from_registry():
+    """Valid tool set is taken from the registry-derived names plus the always
+    available llm_synthesize; unsupplied falls back to the static default."""
+    from app.core.planner import PlannerAgent
+
+    planner = PlannerAgent(
+        llm_client=MagicMock(), router=None, valid_tools={"stock_price"}
+    )
+    assert planner.valid_tools == {"stock_price", "llm_synthesize"}
+
+    default_planner = PlannerAgent(llm_client=MagicMock(), router=None)
+    assert default_planner.valid_tools == PlannerAgent._DEFAULT_VALID_TOOLS
+
+
 def test_tool_registry():
     from app.tools.registry import ToolRegistry
 
