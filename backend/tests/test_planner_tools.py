@@ -14,11 +14,13 @@ from app.core.planner import PLANNER_SYSTEM, PlannerAgent
 from app.tools.financial_report_tool import FinancialAnalysisTool, FinancialReportTool
 from app.tools.news_summary_tool import NewsSummaryTool
 from app.tools.registry import ToolRegistry
+from app.tools.research_tool import StockResearchTool
 from app.tools.stock_price_tool import StockHistoryTool, StockPriceTool
 
 # Tools the Planner emits that are backed by a registered tool instance
 # (``llm_synthesize`` is handled specially by the executor, not via the registry).
 _REGISTERED_PLANNER_TOOLS = {
+    "stock_research",
     "stock_price",
     "stock_history",
     "financial_report",
@@ -39,7 +41,7 @@ def _prompt_tool_names() -> set[str]:
     return set(re.findall(r'-\s+"([a-z_]+)":', PLANNER_SYSTEM))
 
 
-def test_prompt_exposes_all_nine_tools():
+def test_prompt_exposes_all_planner_tools():
     names = _prompt_tool_names()
     expected = _REGISTERED_PLANNER_TOOLS | {"llm_synthesize"}
     assert expected <= names, f"prompt missing tools: {expected - names}"
@@ -60,6 +62,7 @@ def test_newly_exposed_tools_are_registry_resolvable():
         FinancialReportTool(api_key=""),
         FinancialAnalysisTool(api_key=""),
         NewsSummaryTool(api_key=""),
+        StockResearchTool(),
     ]:
         registry.register(tool)
 
@@ -69,6 +72,7 @@ def test_newly_exposed_tools_are_registry_resolvable():
         "financial_report",
         "financial_analysis",
         "news_summary",
+        "stock_research",
     ):
         assert registry.get(name) is not None
 

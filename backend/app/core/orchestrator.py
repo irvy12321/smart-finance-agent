@@ -34,6 +34,7 @@ from app.tools.news_summary_tool import NewsAnalysisTool, NewsSummaryTool
 from app.tools.news_tool import NewsTool
 from app.tools.rag_tool import RAGTool
 from app.tools.registry import ToolRegistry
+from app.tools.research_tool import StockResearchTool
 from app.tools.stock_price_tool import StockHistoryTool, StockPriceTool
 from app.utils.logger import LogContext, get_logger
 from app.utils.tracing import PipelineTracker, TraceContext
@@ -117,6 +118,7 @@ class Orchestrator:
             FinancialAnalysisTool(api_key=fmp_api_key),
             NewsSummaryTool(api_key=news_api_key),
             NewsAnalysisTool(),  # NewsAnalysisTool uses NewsSummaryTool internally
+            StockResearchTool(),  # full grounded single-stock pipeline as one DAG node
         ]
         for tool in tools:
             self.registry.register(tool)
