@@ -163,9 +163,11 @@ class Orchestrator:
             f"hint={route.plan_hint} model={route.selected_model} ({routing_ms:.0f}ms)"
         )
 
-        # 临时覆盖 planner 模型 (根据复杂度)
+        # 复杂度路由: 本次运行的所有 LLM 阶段统一使用选中的模型
+        # (contextvar, 按 asyncio task 隔离, 并发运行互不串台)
+        route_model_token = None
         if self.router:
-            self.router.set_agent_model_override("planner", route.selected_model)
+            route_model_token = self.router.set_route_model(route.selected_model)
 
         # Layer 1: Planning (带容错)
         t0 = time.perf_counter()
@@ -185,10 +187,6 @@ class Orchestrator:
         planning_ms = (time.perf_counter() - t0) * 1000
         agent_stage_duration_seconds.labels(stage="planner").observe(planning_ms / 1000)
         tracker.record_stage("planning", "planner", planning_ms, status="ok")
-
-        # 清除 planner 模型 override
-        if self.router:
-            self.router.clear_model_overrides()
 
         # Layer 2: Execution (带容错)
         t0 = time.perf_counter()
@@ -324,6 +322,9 @@ class Orchestrator:
         # 打印流水线摘要
         tracker.print_summary()
 
+        if self.router:
+            self.router.reset_route_model(route_model_token)
+
         return RunResult(
             query=query,
             answer=exec_result.final_answer,
@@ -359,9 +360,11 @@ class Orchestrator:
         }
         route = self.smart_router.assess(query)
 
-        # 临时覆盖 planner 模型
+        # 复杂度路由: 本次运行的所有 LLM 阶段统一使用选中的模型
+        # (contextvar, 按 asyncio task 隔离, 并发运行互不串台)
+        route_model_token = None
         if self.router:
-            self.router.set_agent_model_override("planner", route.selected_model)
+            route_model_token = self.router.set_route_model(route.selected_model)
 
         # Layer 1: Planning (带容错)
         with trace.span("planning"):
@@ -374,10 +377,6 @@ class Orchestrator:
                     "stage": "plan_fallback",
                     "message": f"Planning failed: {e}, using fallback plan",
                 }
-
-        # 清除 override
-        if self.router:
-            self.router.clear_model_overrides()
 
         yield {
             "stage": "plan_ready",
@@ -560,6 +559,9 @@ class Orchestrator:
                 f"Q: {query}\n\n{report.summary}",
                 {"source": "report"},
             )
+
+        if self.router:
+            self.router.reset_route_model(route_model_token)
 
         yield {
             "stage": "complete",

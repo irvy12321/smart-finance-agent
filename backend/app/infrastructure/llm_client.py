@@ -1,3 +1,5 @@
+import contextlib
+import contextvars
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -10,6 +12,7 @@ from app.infrastructure.config import (
     get_active_provider,
     get_agent_model_config,
     get_llm_config,
+    get_model_credentials,
 )
 from app.monitoring.prometheus import (
     llm_errors_total,
@@ -29,6 +32,13 @@ litellm.suppress_debug_info = True
 # Log active provider on module load
 _active_provider = get_active_provider()
 logger.info(f"LLM Provider: {_active_provider}")
+
+# Per-run model selected by SmartRouter (complexity-based tier). Stored in a
+# ContextVar so concurrent runs (each its own asyncio task) stay isolated and
+# never overwrite each other's model choice. None => use per-agent defaults.
+_ROUTE_MODEL: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "route_model", default=None
+)
 
 
 @dataclass
@@ -238,10 +248,29 @@ class LiteLLMRouter:
         model, temp = model_map.get(
             agent_name, (self.llm_config.model, self.llm_config.temperature)
         )
-        # 检查 override
+        # SmartRouter 复杂度路由: 本次运行选中的模型作用于所有 Agent 阶段
+        route_model = _ROUTE_MODEL.get()
+        if route_model:
+            model = route_model
+        # 显式 override (如 fallback 链) 优先级最高
         if agent_name in self._model_overrides:
             model = self._model_overrides[agent_name]
         return {"model": model, "temperature": temp}
+
+    def set_route_model(self, model: str) -> contextvars.Token:
+        """绑定本次运行 (当前 asyncio task) 由复杂度选中的模型。
+
+        返回的 token 用于 reset_route_model 还原, 避免跨运行串台。
+        """
+        logger.info(f"Route model bound for this run: {model}")
+        return _ROUTE_MODEL.set(model or None)
+
+    def reset_route_model(self, token: contextvars.Token | None) -> None:
+        """还原 set_route_model 设置的运行级模型。"""
+        if token is None:
+            return
+        with contextlib.suppress(ValueError, LookupError):
+            _ROUTE_MODEL.reset(token)
 
     def set_agent_model_override(self, agent_name: str, model: str):
         """临时覆盖某个 Agent 的模型 (用于 SmartRouter 决策)"""
@@ -265,16 +294,22 @@ class LiteLLMRouter:
         ),
     )
     async def _call_litellm(self, messages: list[dict], **kwargs) -> dict:
+        model = kwargs["model"]
+        # Resolve per-model credentials so different complexity tiers can target
+        # different providers. Falls back to the active provider defaults when
+        # the model is not in the endpoint registry (single-model setups).
+        model_api_base, model_api_key = get_model_credentials(model)
         call_params = {
-            "model": kwargs["model"],
+            "model": model,
             "messages": messages,
             "temperature": kwargs.get("temperature", self.llm_config.temperature),
             "max_tokens": kwargs.get("max_tokens", self.llm_config.max_tokens),
             "timeout": kwargs.get("timeout", self.llm_config.timeout),
-            "api_key": self.llm_config.api_key,
+            "api_key": model_api_key or self.llm_config.api_key,
         }
-        if self.llm_config.api_base:
-            call_params["api_base"] = self.llm_config.api_base
+        api_base = model_api_base or self.llm_config.api_base
+        if api_base:
+            call_params["api_base"] = api_base
 
         response = await litellm.acompletion(**call_params)
         return response

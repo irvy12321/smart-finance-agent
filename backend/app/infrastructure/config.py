@@ -31,6 +31,59 @@ PROVIDER_CONFIGS = {
 }
 
 
+# Per-model endpoint registry: maps a bare model name to its OpenAI-compatible
+# base URL and the env var holding its API key. This lets SmartRouter route
+# different complexity tiers to models from different providers (cost control):
+# cheap/free models for simple queries, stronger models only for complex ones.
+MODEL_ENDPOINTS = {
+    # Lightweight tier — Zhipu GLM (OpenAI-compatible)
+    "glm-4-flash": {
+        "api_base": "https://open.bigmodel.cn/api/paas/v4",
+        "api_key_env": "ZHIPU_API_KEY",
+    },
+    "glm-4-air": {
+        "api_base": "https://open.bigmodel.cn/api/paas/v4",
+        "api_key_env": "ZHIPU_API_KEY",
+    },
+    "glm-4-plus": {
+        "api_base": "https://open.bigmodel.cn/api/paas/v4",
+        "api_key_env": "ZHIPU_API_KEY",
+    },
+    # Standard tier — DeepSeek (OpenAI-compatible)
+    "deepseek-chat": {
+        "api_base": "https://api.deepseek.com/v1",
+        "api_key_env": "DEEPSEEK_API_KEY",
+    },
+    "deepseek-reasoner": {
+        "api_base": "https://api.deepseek.com/v1",
+        "api_key_env": "DEEPSEEK_API_KEY",
+    },
+    # High-quality tier — Xiaomi MiMo (OpenAI-compatible)
+    "mimo-v2.5-pro": {
+        "api_base": "https://api.xiaomimimo.com/v1",
+        "api_key_env": "MIMO_API_KEY",
+    },
+}
+
+
+def _strip_model_prefix(model: str) -> str:
+    """'openai/glm-4-flash' -> 'glm-4-flash'; bare names pass through."""
+    return model.split("/", 1)[1] if "/" in model else model
+
+
+def get_model_credentials(model: str) -> tuple[str | None, str | None]:
+    """Resolve (api_base, api_key) for a specific model name.
+
+    Returns (None, None) when the model is not in the registry so callers
+    fall back to the active provider's default credentials. This keeps
+    behaviour unchanged for the default single-model setup.
+    """
+    entry = MODEL_ENDPOINTS.get(_strip_model_prefix(model))
+    if not entry:
+        return None, None
+    return entry["api_base"], os.getenv(entry["api_key_env"], "")
+
+
 def get_active_provider() -> str:
     """Get active LLM provider from environment"""
     return os.getenv("LLM_PROVIDER", "mimo").lower()
@@ -141,12 +194,22 @@ class SmartRouterConfig(BaseSettings):
         super().__init__(**kwargs)
         provider_config = get_provider_config()
         default_model = provider_config["model"]
-        if not self.lightweight_model:
-            self.lightweight_model = default_model
-        if not self.standard_model:
-            self.standard_model = default_model
-        if not self.high_quality_model:
-            self.high_quality_model = default_model
+        # Precedence per tier: explicit config (yaml) > env var > provider default.
+        # Defaulting to the provider model keeps single-model setups working when
+        # no tier models / keys are configured.
+        self.lightweight_model = (
+            self.lightweight_model
+            or os.getenv("LLM_LIGHTWEIGHT_MODEL", "")
+            or default_model
+        )
+        self.standard_model = (
+            self.standard_model or os.getenv("LLM_STANDARD_MODEL", "") or default_model
+        )
+        self.high_quality_model = (
+            self.high_quality_model
+            or os.getenv("LLM_HIGH_QUALITY_MODEL", "")
+            or default_model
+        )
         if not self.fallback_models:
             self.fallback_models = [default_model]
 
