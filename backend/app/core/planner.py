@@ -126,10 +126,15 @@ class PlannerAgent:
         "bypass",
     ]
 
-    # Tool names the executor can actually resolve. The LLM occasionally
-    # hallucinates tool names; anything outside this set is coerced to the
-    # always-available ``llm_synthesize`` tool.
-    _VALID_TOOLS: ClassVar[set[str]] = {
+    # ``llm_synthesize`` is always available (handled by the executor itself, not
+    # the registry) so it is added regardless of which tools are registered.
+    _ALWAYS_AVAILABLE_TOOLS: ClassVar[set[str]] = {"llm_synthesize"}
+
+    # Fallback set used only when no registry-derived tool names are supplied
+    # (e.g. standalone/unit-test construction). In normal operation the valid
+    # tool set is derived from the ToolRegistry (single source of truth) so the
+    # planner can never drift out of sync with the actually-registered tools.
+    _DEFAULT_VALID_TOOLS: ClassVar[set[str]] = {
         "crawler",
         "news_search",
         "news_summary",
@@ -147,10 +152,19 @@ class PlannerAgent:
     _MAX_PLAN_ATTEMPTS: ClassVar[int] = 2
 
     def __init__(
-        self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None
+        self,
+        llm_client: LLMClient | None = None,
+        router: LiteLLMRouter | None = None,
+        valid_tools: set[str] | None = None,
     ):
         self.router = router
         self.llm = llm_client or LLMClient.get_instance()
+        # Single source of truth: when the orchestrator passes the registered
+        # tool names we use those; otherwise fall back to the static default.
+        if valid_tools:
+            self.valid_tools = set(valid_tools) | self._ALWAYS_AVAILABLE_TOOLS
+        else:
+            self.valid_tools = set(self._DEFAULT_VALID_TOOLS)
 
     @classmethod
     def _sanitize_query(cls, query: str) -> str:
@@ -290,7 +304,7 @@ class PlannerAgent:
                 logger.warning(f"Skipping malformed subtask entry: {item!r}")
                 continue
             tool_name = item.get("tool_name", "llm_synthesize")
-            if tool_name not in self._VALID_TOOLS:
+            if tool_name not in self.valid_tools:
                 logger.warning(
                     f"Unknown tool '{tool_name}' from planner; "
                     f"coercing to 'llm_synthesize'"
