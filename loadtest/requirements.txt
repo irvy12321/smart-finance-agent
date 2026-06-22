@@ -1,0 +1,2 @@
+# Load-test tooling (kept separate from the app's runtime deps).
+locust>=2.20.0
