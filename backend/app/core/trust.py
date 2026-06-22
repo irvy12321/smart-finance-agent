@@ -22,6 +22,19 @@ SOURCE_RELIABILITY: dict[str, str] = {
     "unknown": "low",
 }
 
+# Numeric weight applied to each reliability tier when computing the
+# reliability-weighted confidence.
+RELIABILITY_WEIGHT: dict[str, float] = {
+    "high": 1.0,
+    "medium": 0.7,
+    "low": 0.3,
+}
+
+
+def source_reliability_tier(source: str) -> str:
+    """Return the reliability tier ('high'/'medium'/'low') for a data source."""
+    return SOURCE_RELIABILITY.get(source, "low")
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -69,10 +82,27 @@ def aggregate_confidence(envelopes: list[DataEnvelope]) -> dict[str, Any]:
     else:
         reliability = "low"
 
+    # Reliability-weighted confidence: a report backed by 'high' sources
+    # scores higher than one backed by 'medium' sources, and mock data
+    # contributes zero. This makes SOURCE_RELIABILITY actually drive the score
+    # rather than relying on the mock ratio alone.
+    source_weights = [
+        0.0 if e.is_mock else RELIABILITY_WEIGHT[source_reliability_tier(e.source)]
+        for e in envelopes
+    ]
+    weighted_confidence = round(sum(source_weights) / len(envelopes), 2)
+
+    source_breakdown = {
+        e.source: ("mock" if e.is_mock else source_reliability_tier(e.source))
+        for e in envelopes
+    }
+
     sources = sorted({e.source for e in envelopes})
     return {
         "data_confidence": data_confidence,
         "source_reliability": reliability,
+        "weighted_confidence": weighted_confidence,
+        "source_breakdown": source_breakdown,
         "mock_ratio": round(mock_ratio, 2),
         "sources": sources,
     }

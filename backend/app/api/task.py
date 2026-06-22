@@ -9,8 +9,17 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from app import storage
@@ -22,6 +31,27 @@ from app.utils.logger import get_logger
 logger = get_logger("api.task")
 
 router = APIRouter(prefix="/task", tags=["task"])
+
+# Native browser EventSource cannot attach an Authorization header, so the SSE
+# endpoint also accepts the access token via the `token` query parameter.
+_optional_bearer = HTTPBearer(auto_error=False)
+
+
+async def get_user_for_stream(
+    token: str | None = Query(default=None),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> UserResponse:
+    """Authenticate an SSE request via Authorization header or `token` query."""
+    if credentials is None and token:
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return await get_current_user(credentials)
+
 
 # Keep strong references to fire-and-forget background tasks so they are not
 # garbage-collected mid-execution.
@@ -485,6 +515,8 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
     reasoning_confidence = 0.0
     reasoning_insights = []
     chart_specs_raw = []
+    chart_paths: list[str] = []
+    elapsed = 0.0
 
     for event in events:
         stage = event.get("stage", "")
@@ -516,6 +548,9 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
             answer = event.get("answer", "")
             report_md = event.get("report_markdown", "")
             chart_specs_raw = event.get("chart_specs", [])
+            chart_paths = event.get("chart_paths", []) or []
+            # Orchestrator reports total pipeline time in milliseconds.
+            elapsed = round(event.get("total_duration_ms", 0.0) / 1000.0, 2)
 
     # Extract structured data from report
     summary = ""
@@ -638,12 +673,12 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
         "market_trends": market_trends,
         "recommendations": recommendations,
         "confidence": reasoning_confidence,
-        "chart_paths": [],  # TODO: Implement chart rendering
+        "chart_paths": chart_paths,
         "chart_specs": chart_specs_raw,
         "sources": sources,
         "dag_subtasks": dag_subtasks,
         "task_states": task_states,
-        "elapsed": 0.0,  # TODO: Calculate elapsed time
+        "elapsed": elapsed,
         "total_tasks": total_tasks,
         "success_tasks": success_tasks,
         "failed_tasks": failed_tasks,
@@ -662,7 +697,7 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
 @router.get("/{task_id}/stream")
 async def stream_task_events(
     task_id: str,
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_user_for_stream),
 ):
     """
     SSE endpoint for real-time task execution updates.

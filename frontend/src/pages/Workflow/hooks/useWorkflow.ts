@@ -293,7 +293,13 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
       status: 'connecting',
     }))
 
-    const eventSource = new EventSource(`/api/task/${taskId}/stream`)
+    // Native EventSource cannot set an Authorization header, so the access
+    // token is passed as a query parameter (the backend accepts both).
+    const authToken = localStorage.getItem('auth_token')
+    const streamUrl = authToken
+      ? `/api/task/${taskId}/stream?token=${encodeURIComponent(authToken)}`
+      : `/api/task/${taskId}/stream`
+    const eventSource = new EventSource(streamUrl)
     eventSourceRef.current = eventSource
     reconnectAttemptsRef.current = 0
 

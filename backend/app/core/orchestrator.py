@@ -7,6 +7,7 @@ Layer 3: Synthesizer (Reasoner → Report → Chart)
 
 import os
 from dataclasses import dataclass
+from typing import ClassVar
 
 from app.core.agent_status import AgentEvent, AgentStage, EventBus, TaskStateTracker
 from app.core.chart_renderer import ChartRenderer
@@ -290,6 +291,9 @@ class Orchestrator:
                         f"[trace:{trace.trace_id}] Chart rendering failed: {e}"
                     )
                     chart_paths = []
+
+            # No-external-data fallback: cap confidence + prepend disclaimer
+            self._apply_fallback_disclaimer(plan, report, reasoning_result)
         synthesizer_ms = (time.perf_counter() - t0) * 1000
         tracker.record_stage(
             "synthesizer", "reasoner+report", synthesizer_ms, status="ok"
@@ -469,6 +473,10 @@ class Orchestrator:
                     question=query,
                     language=getattr(self, "_current_language", "en"),
                 )
+                if plan.is_fallback:
+                    reasoning_result.confidence = min(
+                        reasoning_result.confidence, self._FALLBACK_MAX_CONFIDENCE
+                    )
                 yield {
                     "stage": "reasoning_done",
                     "confidence": reasoning_result.confidence,
@@ -517,6 +525,9 @@ class Orchestrator:
                 trace_id=trace.trace_id,
             )
             yield {"stage": "report_fallback", "message": f"Report failed: {e}"}
+
+        # No-external-data fallback: cap confidence + prepend disclaimer
+        self._apply_fallback_disclaimer(plan, report, reasoning_result)
 
         # Chart rendering (带容错)
         chart_paths = []
@@ -591,6 +602,21 @@ class Orchestrator:
     def get_memory_context(self, query: str) -> str:
         return self.memory.get_combined_context(query)
 
+    # Max confidence for a report produced without any external data.
+    _FALLBACK_MAX_CONFIDENCE = 0.2
+    _FALLBACK_DISCLAIMER: ClassVar[dict[str, str]] = {
+        "zh": (
+            "⚠️ 注意：本报告未能获取任何外部数据，仅基于大模型既有知识生成，"
+            "可信度低，不可作为投资依据。\n\n"
+        ),
+        "en": (
+            "WARNING: This report was generated WITHOUT any external data "
+            "(planning failed and a knowledge-only fallback was used). "
+            "Treat its confidence as low and do not rely on it for "
+            "investment decisions.\n\n"
+        ),
+    }
+
     def _create_fallback_plan(self, query: str) -> Plan:
         """创建降级计划: 单个 llm_synthesize 任务"""
         logger.warning(f"Creating fallback plan for: {query[:60]}")
@@ -605,8 +631,28 @@ class Orchestrator:
                     },
                     description="Fallback: LLM synthesis without external data",
                     priority=1,
-                    confidence=0.5,
+                    confidence=self._FALLBACK_MAX_CONFIDENCE,
                 )
             ],
             reasoning="Fallback plan: primary planning failed",
+            is_fallback=True,
         )
+
+    def _apply_fallback_disclaimer(self, plan, report, reasoning_result) -> None:
+        """Cap confidence and prepend a disclaimer when no external data exists.
+
+        Applies when planning fell back to a knowledge-only plan, or when every
+        data-gathering task failed (only ``llm_synthesize`` succeeded).
+        """
+        if not getattr(plan, "is_fallback", False):
+            return
+        language = getattr(self, "_current_language", "en")
+        disclaimer = self._FALLBACK_DISCLAIMER.get(
+            language, self._FALLBACK_DISCLAIMER["en"]
+        )
+        if reasoning_result is not None:
+            reasoning_result.confidence = min(
+                reasoning_result.confidence, self._FALLBACK_MAX_CONFIDENCE
+            )
+        if report is not None and not report.summary.startswith(("⚠️", "WARNING")):
+            report.summary = disclaimer + report.summary

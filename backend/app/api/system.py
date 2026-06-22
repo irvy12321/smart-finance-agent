@@ -191,13 +191,25 @@ async def get_agent_status():
 async def get_system_config():
     """Get system configuration"""
     try:
+        from app.infrastructure.config import (
+            get_embedding_config,
+            get_llm_config,
+        )
+
+        llm_cfg = get_llm_config()
+        embed_cfg = get_embedding_config()
+        if embed_cfg.mode == "prod":
+            embedding_label = "prod (BM25 lexical)"
+        else:
+            embedding_label = "dev (hash)"
+
         return SystemConfigResponse(
-            model="gpt-4",  # TODO: Get from actual config
-            embedding="dev (hash)",  # TODO: Get from actual config
+            model=llm_cfg.model,
+            embedding=embedding_label,
             features={
                 "dashboard": True,
                 "profiling": True,
-                "recording": True,
+                "recording": False,
                 "streaming": True,
             },
             version="1.0.0",
