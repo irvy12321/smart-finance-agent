@@ -14,12 +14,16 @@ logger = get_logger("vector_store")
 
 
 class VectorStore:
-    def __init__(self, dim: int, persist_dir: str | None = None):
+    def __init__(self, dim: int, persist_dir: str | None = None, embedder=None):
         self.dim = dim
         self.index = faiss.IndexFlatIP(dim)
         self.texts: list[str] = []
         self.metadata: list[dict] = []
         self.persist_dir = persist_dir
+        # Optional embedder whose fitted state (e.g. BM25 vocab/IDF) is persisted
+        # alongside the index so reloaded vectors and freshly embedded queries
+        # share the same lexical space.
+        self.embedder = embedder
         self._loaded = False
 
     def add(
@@ -79,6 +83,16 @@ class VectorStore:
         # 保存维度信息
         with open(os.path.join(save_dir, "config.json"), "w") as f:
             json.dump({"dim": self.dim}, f)
+        # 保存 embedder 拟合状态 (BM25 词表/IDF), 使重启后查询与索引同空间
+        if self.embedder is not None:
+            state = self.embedder.get_state()
+            if state:
+                with open(
+                    os.path.join(save_dir, "embedder_state.json"),
+                    "w",
+                    encoding="utf-8",
+                ) as f:
+                    json.dump(state, f, ensure_ascii=False)
 
         logger.info(f"VectorStore saved to {save_dir}: {self.index.ntotal} vectors")
 
@@ -113,6 +127,12 @@ class VectorStore:
                 self.texts = json.load(f)
             with open(meta_path, encoding="utf-8") as f:
                 self.metadata = json.load(f)
+
+            # 恢复 embedder 拟合状态 (若有)
+            state_path = os.path.join(load_dir, "embedder_state.json")
+            if self.embedder is not None and os.path.exists(state_path):
+                with open(state_path, encoding="utf-8") as f:
+                    self.embedder.load_state(json.load(f))
 
             self._loaded = True
             logger.info(

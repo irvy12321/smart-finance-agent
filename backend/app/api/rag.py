@@ -62,7 +62,9 @@ def _get_vector_store() -> VectorStore:
     global _vector_store
     if _vector_store is None:
         embedder = _get_embedder()
-        _vector_store = VectorStore(dim=embedder.dim, persist_dir=str(VECTOR_STORE_DIR))
+        _vector_store = VectorStore(
+            dim=embedder.dim, persist_dir=str(VECTOR_STORE_DIR), embedder=embedder
+        )
         _vector_store.load()
     return _vector_store
 
