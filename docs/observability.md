@@ -17,8 +17,6 @@ This guide explains the production observability stack for Smart Finance Agent, 
 │  Monitoring Module:                                        │
 │    ├── prometheus.py (24 metrics definitions)              │
 │    ├── middleware.py (HTTP request tracking)               │
-│    ├── decorators.py (Agent/Tool tracking)                 │
-│    ├── collectors.py (RAG/LLM tracking)                    │
 │    └── routes.py (/metrics endpoint)                      │
 └─────────────────────────────────────────────────────────────┘
          ↓

@@ -13,8 +13,6 @@ The production observability stack has been successfully implemented. This docum
 | `__init__.py` | Module initialization and exports | 50 |
 | `prometheus.py` | Prometheus metrics definitions (24 metrics) | 180 |
 | `middleware.py` | FastAPI HTTP middleware for request tracking | 95 |
-| `decorators.py` | Agent/Tool stage tracking decorators | 90 |
-| `collectors.py` | RAG/LLM metrics collectors | 100 |
 | `routes.py` | `/metrics` endpoint for Prometheus scraping | 25 |
 
 ### Docker Configuration
@@ -152,8 +150,6 @@ All modules have been tested and verified:
 ```bash
 python -c "from app.monitoring.prometheus import http_requests_total; print('OK')"
 python -c "from app.monitoring.middleware import PrometheusMiddleware; print('OK')"
-python -c "from app.monitoring.decorators import track_agent_stage; print('OK')"
-python -c "from app.monitoring.collectors import RAGMetricsCollector; print('OK')"
 python -c "from app.monitoring.routes import metrics_endpoint; print('OK')"
 ```
 
