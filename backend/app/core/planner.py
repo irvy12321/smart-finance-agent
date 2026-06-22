@@ -44,6 +44,7 @@ class Plan:
 PLANNER_SYSTEM = """You are a research planning agent. Given a user's research question, break it down into actionable sub-tasks.
 
 Available tools:
+- "stock_research": FULL grounded research for ONE stock in a single step (fetches price+history+financials+news, computes indicators SMA/RSI/EMA/PE, aggregates confidence, writes a no-fabrication summary). Params: {"symbol": "<TICKER>"}. PREFER this single node for a complete single-stock analysis instead of wiring stock_price + stock_history + financial_report + news separately.
 - "stock_price": Latest stock quote (price, change, volume). Params: {"symbol": "<TICKER>"}. Use whenever the question is about a company's current price/quote.
 - "stock_history": Historical price series. Params: {"symbol": "<TICKER>", "period": "1d|1w|1m|3m|6m|1y"}. Use for trends, performance over time, charts.
 - "financial_report": Company financial statements / fundamentals. Params: {"symbol": "<TICKER>", "report_type": "summary|detailed|quarterly"}. Use for revenue, earnings, balance sheet.
@@ -138,6 +139,7 @@ class PlannerAgent:
         "stock_history",
         "financial_report",
         "financial_analysis",
+        "stock_research",
         "llm_synthesize",
     }
 
