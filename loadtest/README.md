@@ -60,3 +60,40 @@ Notes / honesty caveats:
   *reproducible lower bound on this box*, not a universal figure.
 - `0` failures over 100k requests demonstrates the no-5xx behaviour of the
   lightweight path under sustained concurrency.
+
+## Live production run (ECS, full nginx path)
+
+Captured on the live ECS deployment (`docker-compose.prod.yml`), with locust run
+**on the ECS box** against `http://localhost:80` — i.e. the real production path
+through nginx → backend. This is intentionally different from the dedicated
+benchmark above (which hits the backend directly with 4 workers on an 8 GB box).
+
+| | |
+|---|---|
+| Host | 2 vCPU / 1.6 GB, Alibaba Cloud ECS |
+| Backend | `uvicorn --workers 2 --limit-concurrency 100 --access-log` (behind nginx) |
+| Client | locust, 200 users, 60s, ramp 50/s (co-located on the ECS box) |
+
+| Endpoint | Requests | Failures | RPS | p50 | p99 | max |
+|---|---|---|---|---|---|---|
+| `GET /ping` (nginx static) | 6,456 | 0 | 109 | 72 ms | 700 ms | 1,364 ms |
+| `GET /api/system/health` | 3,762 | 0 | 64 | 1,600 ms | 2,000 ms | 2,798 ms |
+| `GET /api/system/status` | 2,570 | 0 | 43 | 1,600 ms | 2,000 ms | 2,807 ms |
+| **Aggregated** | **12,788** | **0 (0.00%)** | **~216** | **490 ms** | **1,900 ms** | **2,807 ms** |
+
+Why this sits far below the ~1.7k RPS benchmark — all environmental, not a regression:
+
+- **Conservative prod tuning**: only 2 uvicorn workers (benchmark used 4),
+  `--limit-concurrency 100` (so at 200 VUs roughly half the requests queue,
+  ~doubling latency), and `--access-log` enabled.
+- **Smaller box**: 1.6 GB RAM (benchmark box had ~8 GB), and the API path runs
+  through the nginx reverse proxy rather than hitting uvicorn directly.
+- **Client contention**: locust ran on the same 2 vCPU as the server and hit
+  >90% CPU, so the load generator itself was a bottleneck — for a clean number,
+  drive load from a separate machine.
+- `0` failures over ~13k requests still holds under this constrained setup.
+
+> The ~1.7k RPS / p99 < 250 ms figures in the section above are a **reproducible
+> benchmark** (4 workers, dedicated run), not the throttled live-prod
+> configuration. To approach them on ECS, raise the worker count, relax
+> `--limit-concurrency`, disable `--access-log`, and give the box more RAM.
