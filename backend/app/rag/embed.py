@@ -37,6 +37,14 @@ class BaseEmbedder(ABC):
     def dim(self) -> int:
         pass
 
+    def get_state(self) -> dict:
+        """Serializable fitted state. Stateless embedders return ``{}``."""
+        return {}
+
+    def load_state(self, state: dict) -> None:
+        """Restore fitted state produced by :meth:`get_state` (no-op by default)."""
+        return None
+
 
 class HashEmbedder(BaseEmbedder):
     """开发模式: 基于 MD5 哈希的伪向量嵌入 (无语义, 仅用于测试)"""
@@ -79,6 +87,9 @@ class BM25Embedder(BaseEmbedder):
         self._idf: np.ndarray | None = None
         self._corpus_size = 0
         self._doc_freq: dict[str, int] = {}
+        # Corpus average document length (in tokens), used by BM25 length
+        # normalization. 1.0 until the vocab is fitted.
+        self._avgdl = 1.0
 
     def _tokenize(self, text: str) -> list[str]:
         """分词 + 字符 n-gram"""
@@ -226,9 +237,11 @@ class BM25Embedder(BaseEmbedder):
         """从语料构建词表"""
         vocab = {}
         doc_freq = {}
+        total_len = 0
         for text in texts:
-            tokens = set(self._tokenize(text))
-            for token in tokens:
+            token_list = self._tokenize(text)
+            total_len += len(token_list)
+            for token in set(token_list):
                 if token not in vocab:
                     vocab[token] = len(vocab)
                 doc_freq[token] = doc_freq.get(token, 0) + 1
@@ -236,6 +249,7 @@ class BM25Embedder(BaseEmbedder):
         self._vocab = vocab
         self._doc_freq = doc_freq
         self._corpus_size = len(texts)
+        self._avgdl = (total_len / len(texts)) if texts else 1.0
 
         # 计算 IDF
         import math
@@ -255,17 +269,44 @@ class BM25Embedder(BaseEmbedder):
             if token in self._vocab:
                 tf[self._vocab[token]] += 1
 
-        # BM25 TF normalization
+        # BM25 TF normalization with document-length normalization:
+        #   tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))
+        # dl = this document's token count, avgdl = corpus average doc length.
         k1 = 1.5
         b = 0.75
-        avg_dl = max(1, len(tokens))
-        tf_norm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * avg_dl / avg_dl))
+        dl = len(tokens)
+        avgdl = self._avgdl if self._avgdl > 0 else 1.0
+        tf_norm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / avgdl))
 
         return tf_norm * (self._idf if self._idf is not None else np.ones(n_terms))
 
     @property
     def dim(self) -> int:
         return self._dim_value
+
+    def get_state(self) -> dict:
+        """Serialize the fitted vocab/IDF so the same lexical space can be
+        restored after a restart (otherwise reloaded FAISS vectors and freshly
+        embedded queries would live in different, incompatible spaces)."""
+        if self._idf is None:
+            return {}
+        return {
+            "vocab": self._vocab,
+            "idf": self._idf.astype(np.float32).tolist(),
+            "doc_freq": self._doc_freq,
+            "corpus_size": self._corpus_size,
+            "avgdl": self._avgdl,
+            "dim": self._dim_value,
+        }
+
+    def load_state(self, state: dict) -> None:
+        if not state or "idf" not in state:
+            return
+        self._vocab = {str(k): int(v) for k, v in state.get("vocab", {}).items()}
+        self._idf = np.asarray(state["idf"], dtype=np.float32)
+        self._doc_freq = {str(k): int(v) for k, v in state.get("doc_freq", {}).items()}
+        self._corpus_size = int(state.get("corpus_size", 0))
+        self._avgdl = float(state.get("avgdl", 1.0)) or 1.0
 
     def _pad_or_truncate(self, vec: np.ndarray) -> np.ndarray:
         """将向量填充或截断到目标维度"""
@@ -354,6 +395,12 @@ class Embedder(BaseEmbedder):
 
     def embed_batch(self, texts: list[str]) -> np.ndarray:
         return self._inner.embed_batch(texts)
+
+    def get_state(self) -> dict:
+        return self._inner.get_state()
+
+    def load_state(self, state: dict) -> None:
+        self._inner.load_state(state)
 
 
 # Backwards-compatible alias. Historically this class was named ``BGEEmbedder``

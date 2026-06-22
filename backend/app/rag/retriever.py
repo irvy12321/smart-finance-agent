@@ -108,7 +108,9 @@ class Retriever:
         self.embedder = embedder or create_embedder()
         # 使用与 RAG API 相同的持久化目录
         persist_dir = _get_persist_dir()
-        self.store = VectorStore(dim=self.embedder.dim, persist_dir=persist_dir)
+        self.store = VectorStore(
+            dim=self.embedder.dim, persist_dir=persist_dir, embedder=self.embedder
+        )
         self.store.load()
         self.top_k = config.top_k
         logger.info(
