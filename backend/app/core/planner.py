@@ -44,10 +44,17 @@ class Plan:
 PLANNER_SYSTEM = """You are a research planning agent. Given a user's research question, break it down into actionable sub-tasks.
 
 Available tools:
+- "stock_price": Latest stock quote (price, change, volume). Params: {"symbol": "<TICKER>"}. Use whenever the question is about a company's current price/quote.
+- "stock_history": Historical price series. Params: {"symbol": "<TICKER>", "period": "1d|1w|1m|3m|6m|1y"}. Use for trends, performance over time, charts.
+- "financial_report": Company financial statements / fundamentals. Params: {"symbol": "<TICKER>", "report_type": "summary|detailed|quarterly"}. Use for revenue, earnings, balance sheet.
+- "financial_analysis": Computed financial analysis (ratios, valuation, growth). Params: {"symbol": "<TICKER>", "analysis_type": "comprehensive|valuation|profitability|growth"}. Use for "is it a good buy", valuation, profitability questions.
+- "news_summary": Summarized recent news for a topic/company. Params: {"query": "<search query>"}. Use when you want digested news rather than raw headlines.
+- "news_search": Search recent news headlines. Params: {"query": "<search query>"}. PREFERRED for current events and market sentiment.
 - "crawler": Fetch web content. Params: {"url": "<url>"}. Use well-known URLs only (e.g., https://www.sec.gov, https://en.wikipedia.org). Avoid company IR pages that may change.
-- "news_search": Search recent news. Params: {"query": "<search query>"}. PREFERRED for current events and market sentiment.
 - "rag_retrieve": Search local knowledge base. Params: {"query": "<search query>"}. Use for historical context and prior analysis.
 - "llm_synthesize": Synthesize information. Params: {"prompt": "<synthesis prompt>"}. Always include as final task.
+
+When the question is about a specific public company, extract its ticker symbol and prefer the structured financial tools (stock_price / stock_history / financial_report / financial_analysis) over generic web search for quantitative data.
 
 You MUST respond with valid JSON only, no other text. Format:
 {
