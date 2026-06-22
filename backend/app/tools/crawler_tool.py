@@ -1,5 +1,6 @@
 import re
-from urllib.parse import urlparse
+import socket
+from urllib.parse import urljoin, urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -41,7 +42,7 @@ def _ip_to_int(ip: str) -> int:
 
 
 def _is_private_ip(host: str) -> bool:
-    """Check if a hostname resolves to a private/reserved IP."""
+    """Return True if ``host`` is an IP literal in a private/reserved range."""
     import ipaddress
 
     try:
@@ -51,9 +52,20 @@ def _is_private_ip(host: str) -> bool:
             or addr.is_loopback
             or addr.is_link_local
             or addr.is_reserved
+            or addr.is_multicast
+            or addr.is_unspecified
         )
     except ValueError:
         return False
+
+
+def _resolve_hostname_ips(hostname: str) -> list[str]:
+    """Resolve a hostname to its IP addresses. Empty list on failure."""
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except (socket.gaierror, OSError, UnicodeError):
+        return []
+    return [info[4][0] for info in infos]
 
 
 def _validate_url(url: str) -> str | None:
@@ -68,6 +80,11 @@ def _validate_url(url: str) -> str | None:
         return f"Blocked host: {hostname}"
     if _is_private_ip(hostname):
         return f"Blocked private/reserved IP: {hostname}"
+    # Resolve domain names and reject any that point at internal addresses
+    # (defends against DNS records pointing to private / cloud-metadata IPs).
+    for ip in _resolve_hostname_ips(hostname):
+        if _is_private_ip(ip):
+            return f"Blocked: {hostname} resolves to private/reserved IP {ip}"
     return None
 
 
@@ -136,15 +153,34 @@ class CrawlerTool(BaseTool):
             logger.error(f"Crawler failed for {url}: {e}")
             return ToolResult(success=False, error=str(e), tool_name=self.name)
 
+    _MAX_REDIRECTS = 5
+
     async def _fetch(self, url: str) -> str:
         headers = {"User-Agent": self.config.user_agent}
         timeout = aiohttp.ClientTimeout(total=self.config.timeout)
-        async with (
-            aiohttp.ClientSession(timeout=timeout) as session,
-            session.get(url, headers=headers) as resp,
-        ):
-            resp.raise_for_status()
-            return await resp.text()
+        redirect_codes = {301, 302, 303, 307, 308}
+        current = url
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for _ in range(self._MAX_REDIRECTS + 1):
+                # Follow redirects manually so each hop is re-validated for
+                # SSRF (aiohttp's auto-redirect would skip the check).
+                async with session.get(
+                    current, headers=headers, allow_redirects=False
+                ) as resp:
+                    if resp.status in redirect_codes:
+                        location = resp.headers.get("Location")
+                        if not location:
+                            resp.raise_for_status()
+                            return await resp.text()
+                        nxt = urljoin(current, location)
+                        err = _validate_url(nxt)
+                        if err:
+                            raise ValueError(f"Blocked redirect to {nxt}: {err}")
+                        current = nxt
+                        continue
+                    resp.raise_for_status()
+                    return await resp.text()
+        raise ValueError(f"Too many redirects (>{self._MAX_REDIRECTS}) for {url}")
 
     @staticmethod
     def _clean_text(html: str) -> str:

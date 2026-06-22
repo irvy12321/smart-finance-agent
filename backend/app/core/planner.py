@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -31,6 +32,9 @@ class Plan:
     reasoning: str = ""
     # 增强字段
     route_decision: RouteDecision | None = None
+    # True when this plan is the no-external-data fallback (primary planning
+    # failed). Downstream uses this to cap confidence and add a disclaimer.
+    is_fallback: bool = False
 
     def get_sorted_subtasks(self) -> list[SubTask]:
         """按优先级排序 (priority 值小的先执行)"""
@@ -114,6 +118,25 @@ class PlannerAgent:
         "bypass",
     ]
 
+    # Tool names the executor can actually resolve. The LLM occasionally
+    # hallucinates tool names; anything outside this set is coerced to the
+    # always-available ``llm_synthesize`` tool.
+    _VALID_TOOLS: ClassVar[set[str]] = {
+        "crawler",
+        "news_search",
+        "news_summary",
+        "news_analysis",
+        "rag_retrieve",
+        "stock_price",
+        "stock_history",
+        "financial_report",
+        "financial_analysis",
+        "llm_synthesize",
+    }
+
+    # Max attempts to obtain a parseable plan from the LLM.
+    _MAX_PLAN_ATTEMPTS: ClassVar[int] = 2
+
     def __init__(
         self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None
     ):
@@ -122,17 +145,18 @@ class PlannerAgent:
 
     @classmethod
     def _sanitize_query(cls, query: str) -> str:
-        """清理用户输入，防止 prompt injection"""
+        """清理用户输入，防止 prompt injection（大小写/空白不敏感）"""
         sanitized = query.strip()
-        lower_query = sanitized.lower()
         for pattern in cls._INJECTION_PATTERNS:
-            if pattern in lower_query:
+            # Match the phrase case-insensitively and tolerant of repeated
+            # whitespace between words (e.g. "IgNoRe   previous instructions").
+            regex = re.compile(
+                r"\s*".join(re.escape(word) for word in pattern.split()),
+                re.IGNORECASE,
+            )
+            if regex.search(sanitized):
                 logger.warning(f"Potential prompt injection detected: '{pattern}'")
-                sanitized = (
-                    sanitized.replace(pattern, "")
-                    .replace(pattern.upper(), "")
-                    .replace(pattern.title(), "")
-                )
+                sanitized = regex.sub("", sanitized)
         return sanitized[:2000]
 
     async def plan(
@@ -141,45 +165,61 @@ class PlannerAgent:
         safe_query = self._sanitize_query(query)
         logger.info(f"Planning for query: {safe_query[:80]}...")
 
-        try:
-            # 构建增强 system prompt
-            enhanced_system = self._build_enhanced_system(route_decision)
+        enhanced_system = self._build_enhanced_system(route_decision)
+        last_error: Exception | None = None
 
-            if self.router:
-                response = await self.router.complete(
-                    "planner",
-                    prompt=f"User research question: {safe_query}",
-                    system=enhanced_system,
+        for attempt in range(1, self._MAX_PLAN_ATTEMPTS + 1):
+            try:
+                response = await self._call_llm(
+                    safe_query, enhanced_system, strict=attempt > 1
                 )
-            else:
-                response = await self.llm.complete(
-                    prompt=f"User research question: {safe_query}",
-                    system=enhanced_system,
-                    temperature=0.2,
+                plan_data = self._parse_response(response)
+                subtasks = self._build_subtasks(plan_data, route_decision)
+                self._validate_dag(subtasks)
+
+                plan = Plan(
+                    original_query=query,
+                    subtasks=subtasks,
+                    reasoning=plan_data.get("reasoning", ""),
+                    route_decision=route_decision,
                 )
 
-            plan_data = self._parse_response(response)
-            subtasks = self._build_subtasks(plan_data, route_decision)
+                logger.info(f"Plan created: {len(subtasks)} subtasks")
+                for st in subtasks:
+                    logger.info(
+                        f"  - {st.task_id}: {st.tool_name} (priority={st.priority}, "
+                        f"score={st.tool_priority_score:.2f}, conf={st.confidence:.2f}) "
+                        f"-> {st.description}"
+                    )
+                return plan
 
-            plan = Plan(
-                original_query=query,
-                subtasks=subtasks,
-                reasoning=plan_data.get("reasoning", ""),
-                route_decision=route_decision,
+            except PlannerError as e:
+                last_error = e
+                logger.warning(
+                    f"Plan attempt {attempt}/{self._MAX_PLAN_ATTEMPTS} failed: {e}"
+                )
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    f"Plan attempt {attempt}/{self._MAX_PLAN_ATTEMPTS} "
+                    f"raised unexpectedly: {e}"
+                )
+
+        logger.error(f"Planning failed after {self._MAX_PLAN_ATTEMPTS} attempts")
+        raise PlannerError(f"Failed to create plan: {last_error}") from last_error
+
+    async def _call_llm(self, safe_query: str, system: str, strict: bool) -> str:
+        """Invoke the planner LLM. On retry, append a stricter JSON reminder."""
+        prompt = f"User research question: {safe_query}"
+        if strict:
+            prompt += (
+                "\n\nIMPORTANT: Your previous response was not valid. "
+                "Respond with ONLY a single valid JSON object matching the "
+                "required schema. No prose, no markdown fences."
             )
-
-            logger.info(f"Plan created: {len(subtasks)} subtasks")
-            for st in subtasks:
-                logger.info(
-                    f"  - {st.task_id}: {st.tool_name} (priority={st.priority}, "
-                    f"score={st.tool_priority_score:.2f}, conf={st.confidence:.2f}) -> {st.description}"
-                )
-
-            return plan
-
-        except Exception as e:
-            logger.error(f"Planning failed: {e}")
-            raise PlannerError(f"Failed to create plan: {e}") from e
+        if self.router:
+            return await self.router.complete("planner", prompt=prompt, system=system)
+        return await self.llm.complete(prompt=prompt, system=system, temperature=0.2)
 
     def _build_enhanced_system(
         self, route_decision: RouteDecision | None = None
@@ -232,8 +272,21 @@ class PlannerAgent:
         tool_scores = route_decision.tool_scores if route_decision else {}
         subtasks = []
 
-        for item in plan_data.get("subtasks", []):
+        raw_subtasks = plan_data.get("subtasks")
+        if not isinstance(raw_subtasks, list) or not raw_subtasks:
+            raise PlannerError("Planner response has no valid 'subtasks' list")
+
+        for item in raw_subtasks:
+            if not isinstance(item, dict):
+                logger.warning(f"Skipping malformed subtask entry: {item!r}")
+                continue
             tool_name = item.get("tool_name", "llm_synthesize")
+            if tool_name not in self._VALID_TOOLS:
+                logger.warning(
+                    f"Unknown tool '{tool_name}' from planner; "
+                    f"coercing to 'llm_synthesize'"
+                )
+                tool_name = "llm_synthesize"
 
             # 解析增强字段，缺失时用 route_decision 填充默认值
             priority_score = item.get("tool_priority_score", 0.0)
@@ -262,4 +315,41 @@ class PlannerAgent:
                 )
             )
 
+        if not subtasks:
+            raise PlannerError("Planner produced no usable subtasks")
+
         return subtasks
+
+    @staticmethod
+    def _validate_dag(subtasks: list[SubTask]) -> None:
+        """Drop dangling dependencies and reject cyclic plans."""
+        ids = {st.task_id for st in subtasks}
+        for st in subtasks:
+            cleaned = [dep for dep in st.depends_on if dep in ids]
+            if len(cleaned) != len(st.depends_on):
+                dropped = set(st.depends_on) - set(cleaned)
+                logger.warning(
+                    f"Task {st.task_id} references unknown deps {dropped}; dropping"
+                )
+                st.depends_on = cleaned
+
+        # Kahn's algorithm: if not all nodes can be removed, a cycle exists.
+        indegree = {st.task_id: 0 for st in subtasks}
+        adjacency: dict[str, list[str]] = {st.task_id: [] for st in subtasks}
+        for st in subtasks:
+            for dep in st.depends_on:
+                adjacency[dep].append(st.task_id)
+                indegree[st.task_id] += 1
+
+        queue = [tid for tid, deg in indegree.items() if deg == 0]
+        visited = 0
+        while queue:
+            node = queue.pop()
+            visited += 1
+            for nxt in adjacency[node]:
+                indegree[nxt] -= 1
+                if indegree[nxt] == 0:
+                    queue.append(nxt)
+
+        if visited != len(subtasks):
+            raise PlannerError("Planner produced a cyclic task graph")
