@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/layout'
 import { StockPool, ResearchReport, AgentExecution } from '../components/research'
 import { Plus, Loader2 } from 'lucide-react'
@@ -19,11 +19,18 @@ export default function ResearchCenter() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const toast = useToast()
+  const [searchParams] = useSearchParams()
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [isResearching, setIsResearching] = useState(false)
   const [steps, setSteps] = useState<TaskStep[]>([])
   const [totalDuration, setTotalDuration] = useState<number | undefined>()
+
+  // Prefill the research symbol from the top-bar search query (?q=...).
+  useEffect(() => {
+    const q = searchParams.get('q')?.trim()
+    if (q) setSelectedSymbol(q.toUpperCase())
+  }, [searchParams])
 
   const handleNewResearch = async () => {
     if (!selectedSymbol) {
