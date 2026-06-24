@@ -54,14 +54,16 @@ def get_user_by_id(user_id: int) -> dict | None:
         conn.close()
 
 
-def create_user(username: str, email: str, hashed_password: str) -> dict:
+def create_user(
+    username: str, email: str, hashed_password: str, role: str = "viewer"
+) -> dict:
     """Create a new user in database"""
     now = datetime.now(timezone.utc).isoformat()
     conn = storage._get_connection()
     try:
         cursor = conn.execute(
-            "INSERT INTO users (username, email, hashed_password, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (username, email, hashed_password, True, now, now),
+            "INSERT INTO users (username, email, hashed_password, role, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (username, email, hashed_password, role, True, now, now),
         )
         conn.commit()
         user_id = cursor.lastrowid
@@ -69,6 +71,7 @@ def create_user(username: str, email: str, hashed_password: str) -> dict:
             "id": user_id,
             "username": username,
             "email": email,
+            "role": role,
             "is_active": True,
             "created_at": now,
             "updated_at": now,

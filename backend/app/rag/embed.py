@@ -1,13 +1,18 @@
 """
-Embedding / retrieval module - dev/prod mode switch.
+Embedding / retrieval module - mode switch.
 
-Neither mode produces true neural semantic embeddings; both are lexical:
-- dev:  HashEmbedder   (MD5 hashed pseudo-vectors, fast, no semantics)
-- prod: BM25Embedder   (BM25 / TF-IDF over word + char n-grams, lexical only)
+Three modes are available (set via ``embedding.mode`` in config_rag.yaml):
+- dev:      HashEmbedder      (MD5 hashed pseudo-vectors, fast, NO semantics)
+- prod:     BM25Embedder      (BM25 / TF-IDF over word + char n-grams, lexical only)
+- semantic: SemanticEmbedder  (real dense semantic vectors via a neural backend)
 
-This is intentionally honest naming: there is no bge-m3 / sentence-transformers
-model loaded. If true semantic search is required, swap BM25Embedder for a real
-sentence-transformers backend and update the configured ``dim`` accordingly.
+The hash and BM25 modes are lexical: similarity is token overlap, not meaning.
+The semantic mode loads an actual model (sentence-transformers, or the
+torch-free model2vec static backend) and is the only mode that captures meaning
+beyond shared words. It is an optional dependency: if neither backend is
+installed, ``SemanticEmbedder`` raises a clear error and the dev/prod lexical
+modes keep working. See ``app/rag/eval.py`` + ``scripts/rag_eval.py`` for the
+quantitative comparison between these modes.
 """
 
 import hashlib
@@ -344,15 +349,139 @@ class BM25Embedder(BaseEmbedder):
         return np.array(vecs, dtype=np.float32)
 
 
+class SemanticEmbedder(BaseEmbedder):
+    """Real dense semantic embeddings from a neural backend.
+
+    Unlike :class:`HashEmbedder` / :class:`BM25Embedder`, similarity here is
+    meaning-based: paraphrases with little word overlap still match. Two
+    backends are supported and tried in order (``backend="auto"``):
+
+    - ``sentence-transformers``: the canonical choice (needs torch).
+    - ``model2vec``: torch-free static embeddings distilled from
+      sentence-transformers; far lighter and CPU-friendly.
+
+    Both are optional dependencies. If neither import succeeds, the constructor
+    raises :class:`ImportError` with installation guidance so the lexical modes
+    remain unaffected.
+    """
+
+    _ST_DEFAULT = "sentence-transformers/all-MiniLM-L6-v2"
+    _M2V_DEFAULT = "minishlab/potion-base-8M"
+
+    def __init__(
+        self,
+        model_name: str = "",
+        backend: str = "auto",
+        device: str = "cpu",
+        batch_size: int = 32,
+    ):
+        self._batch_size = batch_size
+        self._backend = ""
+        self._model = None
+        self._dim_value = 0
+
+        order = (
+            ["sentence_transformers", "model2vec"]
+            if backend in ("auto", "sentence_transformers")
+            else ["model2vec"]
+        )
+        if backend == "model2vec":
+            order = ["model2vec"]
+
+        errors: list[str] = []
+        for name in order:
+            try:
+                if name == "sentence_transformers":
+                    from sentence_transformers import SentenceTransformer
+
+                    self._model = SentenceTransformer(
+                        model_name or self._ST_DEFAULT, device=device
+                    )
+                    self._dim_value = int(
+                        self._model.get_sentence_embedding_dimension()
+                    )
+                    self._backend = "sentence_transformers"
+                    self._encode = self._encode_st
+                    break
+                else:
+                    from model2vec import StaticModel
+
+                    m2v_name = (
+                        model_name
+                        if model_name.startswith("minishlab")
+                        else self._M2V_DEFAULT
+                    )
+                    self._model = StaticModel.from_pretrained(m2v_name)
+                    probe = self._model.encode(["dimension probe"])
+                    self._dim_value = int(np.asarray(probe).shape[1])
+                    self._backend = "model2vec"
+                    self._encode = self._encode_m2v
+                    break
+            except Exception as e:  # ImportError or model load failure
+                errors.append(f"{name}: {e}")
+
+        if self._model is None:
+            raise ImportError(
+                "SemanticEmbedder requires a neural backend but none could be "
+                "loaded. Install one of:\n"
+                "  pip install model2vec            # torch-free, recommended\n"
+                "  pip install sentence-transformers # needs torch\n"
+                f"Attempts: {'; '.join(errors)}"
+            )
+
+        logger.info(
+            f"Creating SemanticEmbedder (backend={self._backend}, dim={self._dim_value})"
+        )
+
+    @property
+    def dim(self) -> int:
+        return self._dim_value
+
+    def _encode_st(self, texts: list[str]) -> np.ndarray:
+        return np.asarray(
+            self._model.encode(
+                texts, batch_size=self._batch_size, show_progress_bar=False
+            ),
+            dtype=np.float32,
+        )
+
+    def _encode_m2v(self, texts: list[str]) -> np.ndarray:
+        return np.asarray(self._model.encode(texts), dtype=np.float32)
+
+    def embed_text(self, text: str) -> np.ndarray:
+        vec = self._encode([text])[0]
+        norm = np.linalg.norm(vec)
+        return vec / norm if norm > 0 else vec
+
+    def embed_batch(self, texts: list[str]) -> np.ndarray:
+        if not texts:
+            return np.zeros((0, self._dim_value), dtype=np.float32)
+        vecs = self._encode(list(texts))
+        norms = np.linalg.norm(vecs, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        return (vecs / norms).astype(np.float32)
+
+    def get_state(self) -> dict:
+        # Deterministic from the model name; nothing fitted to persist.
+        return {"backend": self._backend}
+
+
 def create_embedder() -> BaseEmbedder:
     """
     工厂函数: 根据配置创建对应的 Embedder
-    - embedding.mode == "dev" -> HashEmbedder
-    - embedding.mode == "prod" -> BGEEmbedder
+    - embedding.mode == "dev"      -> HashEmbedder   (lexical, hashed pseudo-vectors)
+    - embedding.mode == "prod"     -> BM25Embedder   (lexical, BM25/TF-IDF)
+    - embedding.mode == "semantic" -> SemanticEmbedder (real dense semantic vectors)
     """
     embed_config = get_embedding_config()
     rag_config = get_rag_config()
 
+    if embed_config.mode == "semantic":
+        return SemanticEmbedder(
+            model_name=embed_config.model_name,
+            device=embed_config.device,
+            batch_size=embed_config.batch_size,
+        )
     if embed_config.mode == "prod":
         logger.info(
             "Creating BM25Embedder (mode=prod, lexical BM25 retrieval - not semantic)"
