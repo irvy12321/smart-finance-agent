@@ -1,0 +1,14 @@
+# MCP 学习示例 —— 干净、固定版本的依赖清单
+# 安装： pip install -r requirements.txt
+#
+# 说明：原始文件里把 marvin / pydantic-ai / langchain / langgraph /
+# langchain-mcp-adapters / mysql-connector-python 等也列了进来，但本示例
+# （mcp_server.py + mcp_client.py）并没有用到它们，且其中存在版本冲突
+# （如 langgraph 同时写了 0.4.5 和 0.0.57）。这里只保留示例真正需要的依赖。
+
+# MCP 官方 SDK：同时包含 FastMCP 服务端与 sse 客户端
+mcp==1.6.0
+
+# MySQL 驱动 + 连接池（server.py 的 db:// 资源使用）
+PyMySQL==1.1.1
+DBUtils==3.1.0
