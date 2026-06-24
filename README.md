@@ -415,6 +415,52 @@ smart-finance-agent/
 └── run_tests.ps1                 # 测试运行脚本
 ```
 
+## RAG 检索质量评测 (RAG Retrieval Evaluation)
+
+检索层提供三种 embedder（见 `backend/app/rag/embed.py`）：
+
+| 模式 | 类 | 类型 | 说明 |
+|------|-----|------|------|
+| `dev` | `HashEmbedder` | 词法 | MD5 伪向量，无语义，仅用于本地快测 |
+| `prod` | `BM25Embedder` | 词法 | BM25 / TF-IDF（词 + 字符 n-gram），靠 token 重叠 |
+| `semantic` | `SemanticEmbedder` | **语义** | 真实稠密向量（`sentence-transformers`，或免 torch 的 `model2vec` 静态向量），按语义匹配 |
+
+`SemanticEmbedder` 是**可选依赖**：未安装任一后端时构造会抛出带安装提示的 `ImportError`，词法模式不受影响、CI 也不依赖它。
+
+### 评测集与指标
+
+- 评测语料：`backend/app/rag/eval_data/`（`corpus.json` + `queries.json`），50 篇金融知识文档 + 32 条带 gold 标注的查询；查询按 `lexical`（与文档共享词汇）/`semantic`（改写、词汇重叠低）分类，便于公平对比词法 vs 语义检索。
+- 指标实现：`backend/app/rag/eval.py` —— `Recall@k`、`Precision@k`、`MRR`、`nDCG@k`（macro 平均）。
+
+### 运行评测
+
+```bash
+cd backend
+# 仅词法（无需额外依赖）
+python scripts/rag_eval.py --no-semantic
+# 含语义后端（推荐免 torch 的 model2vec）
+pip install model2vec
+python scripts/rag_eval.py
+```
+
+### 实测结果（50 文档 / 32 查询）
+
+| Embedder | R@1 | R@3 | R@5 | P@5 | MRR | nDCG@5 |
+|----------|-----|-----|-----|-----|-----|--------|
+| hash (dev, 词法) | 0.250 | 0.500 | 0.562 | 0.113 | 0.391 | 0.420 |
+| bm25 (prod, 词法) | 0.750 | 0.906 | 0.938 | 0.188 | 0.834 | 0.854 |
+| semantic (model2vec) | **0.844** | **1.000** | **1.000** | **0.200** | **0.917** | **0.938** |
+
+按查询类型拆分（Recall@5 / MRR）——语义检索在「改写型」查询上的优势最明显：
+
+| Embedder | lexical 查询 | semantic 查询 |
+|----------|-------------|---------------|
+| hash | 0.667 / 0.481 | 0.522 / 0.356 |
+| bm25 | 0.889 / 0.849 | 0.957 / 0.829 |
+| semantic | 1.000 / 0.944 | 1.000 / 0.906 |
+
+结论：BM25 相对 hash 基线在 Recall@5 上 +0.376、MRR +0.443；语义向量再把改写型查询的 Recall@5 从 0.957 提到 1.000，验证了「词法 → 语义」升级路径的实际收益。指标计算正确性与「BM25 > hash」基线由 `backend/tests/test_rag_eval.py` 守护（确定性、不依赖 torch，纳入 CI）。
+
 ## CI/CD
 
 本项目使用 GitHub Actions 进行持续集成和持续部署。

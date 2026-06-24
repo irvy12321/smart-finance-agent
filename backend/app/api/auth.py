@@ -79,24 +79,10 @@ async def register(request: Request, user_data: UserCreate):
 
         # Create user with default role
         hashed_password = get_password_hash(user_data.password)
-        user = create_user(user_data.username, user_data.email, hashed_password)
-
-        # Set default role
         user_role = get_default_role()
-
-        # Update user role in database
-        from app import storage
-
-        conn = storage._get_connection()
-        try:
-            conn.execute(
-                "UPDATE users SET role = ? WHERE id = ?", (user_role, user["id"])
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-        user["role"] = user_role
+        user = create_user(
+            user_data.username, user_data.email, hashed_password, role=user_role
+        )
 
         logger.info(
             f"User created: id={user['id']}, username={user['username']}, role={user_role}"
@@ -344,19 +330,12 @@ async def admin_create_user(
 
         # 创建用户
         hashed_password = get_password_hash(user_data.password)
-        user = create_user(user_data.username, user_data.email, hashed_password)
-
-        # 设置角色
-        from app import storage
-
-        conn = storage._get_connection()
-        try:
-            conn.execute(
-                "UPDATE users SET role = ? WHERE id = ?", (user_data.role, user["id"])
-            )
-            conn.commit()
-        finally:
-            conn.close()
+        user = create_user(
+            user_data.username,
+            user_data.email,
+            hashed_password,
+            role=user_data.role,
+        )
 
         logger.info(
             f"Admin created user: {user_data.username} (role={user_data.role}) by {current_user.username}"
