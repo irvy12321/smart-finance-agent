@@ -1,0 +1,12 @@
+# Optional dependencies for SemanticEmbedder (app/rag/embed.py) and the RAG
+# evaluation harness (scripts/rag_eval.py). NOT required for the core app or CI:
+# the lexical dev/prod embedders work without these, and SemanticEmbedder raises
+# a clear ImportError if neither backend is installed.
+#
+#   pip install -r requirements-semantic.txt
+#
+# model2vec is the recommended backend (torch-free static embeddings, CPU-only).
+model2vec>=0.3.0
+
+# Alternatively, the canonical sentence-transformers backend (pulls in torch):
+# sentence-transformers>=2.2.0
