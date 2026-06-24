@@ -58,9 +58,9 @@ class ErrorBoundaryClass extends Component<Props, State> {
 
       return (
         <div className="flex items-center justify-center h-full p-8">
-          <div className="max-w-md w-full bg-dark-card border border-red-500/30 rounded-xl p-6 text-center">
-            <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <AlertCircle className="w-8 h-8 text-red-500" />
+          <div className="max-w-md w-full bg-dark-card border border-red-500/30 rounded-lg p-6 text-center">
+            <div className="w-14 h-14 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="w-7 h-7 text-red-500" />
             </div>
             <h2 className="text-xl font-bold text-primary-50 mb-2">
               {t('error.somethingWentWrong')}

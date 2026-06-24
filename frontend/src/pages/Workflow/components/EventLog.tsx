@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { WorkflowEvent } from '../types'
 
 interface EventLogProps {
@@ -6,6 +7,7 @@ interface EventLogProps {
 }
 
 export function EventLog({ events }: EventLogProps) {
+  const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(false)
 
   const displayEvents = isExpanded ? events : events.slice(-5)
@@ -33,18 +35,18 @@ export function EventLog({ events }: EventLogProps) {
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700">
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-        <span className="text-sm font-medium text-gray-300">Event Log</span>
+        <span className="text-sm font-medium text-gray-300">{t('workflow.eventLog')}</span>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
         >
-          {isExpanded ? 'Show Less' : `Show All (${events.length})`}
+          {isExpanded ? t('workflow.showLess') : t('workflow.showAll', { count: events.length })}
         </button>
       </div>
 
       <div className="p-2 max-h-[200px] overflow-y-auto">
         {displayEvents.length === 0 ? (
-          <p className="text-xs text-gray-500 text-center py-4">No events yet</p>
+          <p className="text-xs text-gray-500 text-center py-4">{t('workflow.noEvents')}</p>
         ) : (
           <div className="space-y-1">
             {displayEvents.map((event, index) => (

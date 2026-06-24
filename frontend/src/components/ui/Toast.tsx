@@ -64,7 +64,7 @@ export default function Toast({ type, title, message, onClose }: ToastProps) {
           : 'translate-x-full opacity-0'
       }`}
     >
-      <div className={`${config.bg} backdrop-blur-sm border ${config.border} rounded-xl p-4 shadow-2xl`}>
+      <div className={`${config.bg} border ${config.border} rounded-lg p-4 shadow-lg shadow-black/30`}>
         <div className="flex items-start gap-3">
           <div className={`flex-shrink-0 w-8 h-8 ${config.bg} rounded-lg flex items-center justify-center`}>
             <Icon className={`w-4 h-4 ${config.iconColor}`} />

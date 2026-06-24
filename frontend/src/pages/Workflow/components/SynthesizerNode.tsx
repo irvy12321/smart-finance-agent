@@ -1,9 +1,11 @@
 import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
+import { useTranslation } from 'react-i18next'
 import type { TaskNodeData } from '../types'
 import { NODE_STYLES } from '../types'
 
 function SynthesizerNodeComponent({ data, selected }: NodeProps<TaskNodeData>) {
+  const { t } = useTranslation()
   const style = NODE_STYLES[data.status]
 
   return (
@@ -23,12 +25,12 @@ function SynthesizerNodeComponent({ data, selected }: NodeProps<TaskNodeData>) {
 
       <div className="flex items-center gap-2 mb-1">
         <span className="text-lg">🔄</span>
-        <span className="font-medium text-sm text-cyan-400">Synthesizer</span>
+        <span className="font-medium text-sm text-cyan-400">{t('workflow.synthesizer')}</span>
       </div>
 
       <div className="flex items-center gap-2 text-xs text-gray-400">
         <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-cyan-500/20 text-cyan-400">
-          {data.status === 'running' ? 'Synthesizing...' : data.status === 'success' ? 'Done' : 'Waiting'}
+          {data.status === 'running' ? t('workflow.synthesizing') : data.status === 'success' ? t('workflow.done') : t('workflow.waiting')}
         </span>
         {data.duration_ms > 0 && (
           <span>{(data.duration_ms / 1000).toFixed(1)}s</span>

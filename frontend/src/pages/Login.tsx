@@ -44,8 +44,8 @@ export default function Login() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-primary-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <LogIn className="w-8 h-8 text-primary-500" />
+          <div className="w-12 h-12 rounded-lg bg-dark-card border border-dark-border flex items-center justify-center mx-auto mb-4">
+            <LogIn className="w-6 h-6 text-accent" />
           </div>
           <h1 className="text-2xl font-bold text-primary-50">{t('auth.welcomeBack')}</h1>
           <p className="text-sm text-primary-400 mt-2">{t('auth.signInTo')}</p>
@@ -109,7 +109,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading || !username.trim() || !password.trim()}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 disabled:from-primary-500/50 disabled:to-primary-600/50 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-lg shadow-primary-500/25 transition-all duration-200 hover:shadow-primary-500/40 hover:scale-[1.02] disabled:hover:scale-100"
+              className="w-full flex items-center justify-center gap-2 px-6 py-2.5 bg-accent hover:bg-[#74acff] disabled:bg-accent/40 disabled:cursor-not-allowed text-[#06121f] font-semibold rounded-lg transition-colors duration-150"
             >
               {loading ? (
                 <>

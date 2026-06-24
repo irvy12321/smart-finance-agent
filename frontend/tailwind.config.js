@@ -7,28 +7,35 @@ export default {
   theme: {
     extend: {
       colors: {
+        // `primary` is used both for neutral text (50-400) and the brand accent (500-700).
+        // Neutralised greys + a single calm-blue accent — no indigo/violet.
         primary: {
-          50: '#f0f0f5',
-          100: '#e0e0e0',
-          200: '#c0c0d0',
-          300: '#a0a0b0',
-          400: '#8888a0',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#312e81',
-          800: '#1e1e2e',
-          900: '#0a0a0f',
+          50: '#e9eaec',
+          100: '#d7dade',
+          200: '#b9bdc3',
+          300: '#9aa0a8',
+          400: '#7c828b',
+          500: '#5b9dff',
+          600: '#4f8fee',
+          700: '#3f73c0',
+          800: '#1a1c1f',
+          900: '#0c0d0e',
         },
         dark: {
-          bg: '#0a0a0f',
-          card: '#1a1a2e',
-          sub: '#12121a',
-          border: '#2a2a3e',
+          bg: '#0c0d0e',
+          card: '#141517',
+          sub: '#101113',
+          hover: '#1a1c1f',
+          border: '#26282c',
         },
+        // Data semantics — gains/losses carry the colour, not the chrome.
+        up: '#37d39b',
+        down: '#ff5f6b',
+        accent: '#5b9dff',
       },
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-        mono: ['SF Mono', 'Fira Code', 'monospace'],
+        sans: ['Geist', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['Geist Mono', 'SF Mono', 'Fira Code', 'ui-monospace', 'monospace'],
       },
     },
   },

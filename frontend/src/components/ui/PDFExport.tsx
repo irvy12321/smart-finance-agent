@@ -133,7 +133,7 @@ export default function PDFExport({ data, taskId, variant = 'button' }: PDFExpor
       padding: 8px 0;
       border-bottom: 1px solid #f3f4f6;
     }
-    .trend-dot { width: 8px; height: 8px; background: #8b5cf6; border-radius: 50%; }
+    .trend-dot { width: 8px; height: 8px; background: #5b9dff; border-radius: 50%; }
     .answer {
       background: #f9fafb;
       border: 1px solid #e5e7eb;

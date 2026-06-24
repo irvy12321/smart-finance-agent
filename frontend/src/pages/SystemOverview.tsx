@@ -134,7 +134,7 @@ export default function SystemOverview() {
 
   const taskStatusData = [
     { label: t('dashboard.completedTasks'), value: metrics?.completed_tasks || 0, color: '#10b981' },
-    { label: t('dashboard.runningTasks'), value: metrics?.running_tasks || 0, color: '#6366f1' },
+    { label: t('dashboard.runningTasks'), value: metrics?.running_tasks || 0, color: '#5b9dff' },
     { label: t('dashboard.pendingTasks'), value: metrics?.pending_tasks || 0, color: '#f59e0b' },
     { label: t('dashboard.failedTasks'), value: metrics?.failed_tasks || 0, color: '#ef4444' },
   ]
@@ -142,7 +142,7 @@ export default function SystemOverview() {
   const agentPerformanceData = agentStatus ? Object.entries(agentStatus).map(([name, status]: [string, { avg_latency_ms?: number }]) => ({
     label: name.charAt(0).toUpperCase() + name.slice(1),
     value: status.avg_latency_ms || 0,
-    color: '#6366f1',
+    color: '#5b9dff',
   })) : []
 
   return (
@@ -242,14 +242,14 @@ export default function SystemOverview() {
 
         <div className="card">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
-              <Activity className="w-5 h-5 text-purple-500" />
+            <div className="w-10 h-10 bg-dark-hover rounded-lg flex items-center justify-center">
+              <Activity className="w-5 h-5 text-primary-300" />
             </div>
             <div>
               <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider">
                 {t('system.totalRequests')}
               </p>
-              <p className="text-lg font-bold text-purple-500">
+              <p className="text-lg font-bold text-primary-50">
                 {metrics?.total_requests || 0}
               </p>
             </div>

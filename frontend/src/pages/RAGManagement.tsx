@@ -208,8 +208,8 @@ export default function RAGManagement() {
           </div>
           <div className="card">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
-                <Database className="w-5 h-5 text-purple-500" />
+              <div className="w-10 h-10 bg-dark-hover rounded-lg flex items-center justify-center">
+                <Database className="w-5 h-5 text-primary-300" />
               </div>
               <div>
                 <p className="text-xs font-semibold text-primary-400 uppercase">{t('rag.totalChunks')}</p>
@@ -266,7 +266,7 @@ export default function RAGManagement() {
               <Upload className="w-12 h-12 text-primary-400 mb-4" />
               <p className="text-primary-200 mb-2">{t('rag.dragDrop')}</p>
               <p className="text-sm text-primary-400 mb-4">{t('rag.supportedTypes')}</p>
-              <label className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white rounded-full shadow-lg shadow-primary-500/20 transition-all duration-200 hover:shadow-primary-500/30 hover:scale-[1.02] cursor-pointer">
+              <label className="flex items-center gap-2 px-5 py-2 bg-accent hover:bg-[#74acff] text-[#06121f] font-medium rounded-lg transition-colors duration-150 cursor-pointer">
                 <Upload className="w-4 h-4" />
                 <span className="font-medium">{t('rag.browseFiles')}</span>
                 <input
@@ -299,7 +299,7 @@ export default function RAGManagement() {
           <button
             onClick={handleSearch}
             disabled={searching || !searchQuery.trim()}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white rounded-full shadow-lg shadow-primary-500/20 transition-all duration-200 hover:shadow-primary-500/30 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            className="flex items-center gap-2 px-5 py-2 bg-accent hover:bg-[#74acff] text-[#06121f] font-medium rounded-lg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {searching ? (
               <Loader2 className="w-4 h-4 animate-spin" />

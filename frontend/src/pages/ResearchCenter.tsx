@@ -34,7 +34,7 @@ export default function ResearchCenter() {
     try {
       setIsResearching(true)
       setSteps([
-        { name: 'Planner', status: 'running', icon: null, color: 'text-purple-400' },
+        { name: 'Planner', status: 'running', icon: null, color: 'text-primary-300' },
         { name: 'News Search', status: 'pending', icon: null, color: 'text-blue-400' },
         { name: 'RAG Retrieve', status: 'pending', icon: null, color: 'text-cyan-400' },
         { name: 'Financial Report', status: 'pending', icon: null, color: 'text-green-400' },

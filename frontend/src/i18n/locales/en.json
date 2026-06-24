@@ -27,7 +27,8 @@
     "id": "ID",
     "comingSoon": "Coming Soon",
     "justNow": "just now",
-    "ago": "ago"
+    "ago": "ago",
+    "disclaimer": "For research and educational purposes only — not investment advice. Data may be incomplete or simulated; verify independently before making any financial decision."
   },
   "auth": {
     "login": "Sign In",
@@ -199,6 +200,58 @@
     "ready": "Ready",
     "busy": "Busy",
     "offline": "Offline"
+  },
+  "workflow": {
+    "title": "Agent Workflow",
+    "trace": "Trace",
+    "query": "Query",
+    "tasks": "Tasks",
+    "back": "Back",
+    "connecting": "Connecting to workflow...",
+    "connectFailed": "Failed to connect to workflow",
+    "retry": "Retry",
+    "goBack": "Go Back",
+    "planner": "Planner",
+    "synthesizer": "Synthesizer",
+    "report": "Report",
+    "planning": "Planning...",
+    "planReady": "Plan Ready",
+    "synthesizing": "Synthesizing...",
+    "generating": "Generating...",
+    "generated": "Generated",
+    "done": "Done",
+    "waiting": "Waiting",
+    "duration": "Duration",
+    "taskId": "Task ID",
+    "errorLabel": "Error",
+    "result": "Result",
+    "eventLog": "Event Log",
+    "showLess": "Show Less",
+    "showAll": "Show All ({{count}})",
+    "noEvents": "No events yet",
+    "metricTotalTasks": "Total Tasks",
+    "metricCompleted": "Completed",
+    "metricFailed": "Failed",
+    "metricTotalTime": "Total Time",
+    "metricAvgTime": "Avg Time",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "success": "Success",
+      "failed": "Failed",
+      "degraded": "Degraded",
+      "skipped": "Skipped",
+      "idle": "Idle",
+      "connecting": "Connecting",
+      "completed": "Completed",
+      "error": "Error"
+    }
+  },
+  "systemMonitor": {
+    "title": "System Monitor",
+    "subtitle": "Monitor system performance and health",
+    "comingSoon": "System Monitor - Coming Soon",
+    "description": "This feature is under development. You will be able to monitor real-time system metrics, agent performance, and resource utilization."
   },
   "stock": {
     "symbol": "Symbol",

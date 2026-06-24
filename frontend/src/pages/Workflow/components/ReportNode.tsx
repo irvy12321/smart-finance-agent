@@ -1,9 +1,11 @@
 import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
+import { useTranslation } from 'react-i18next'
 import type { TaskNodeData } from '../types'
 import { NODE_STYLES } from '../types'
 
 function ReportNodeComponent({ data, selected }: NodeProps<TaskNodeData>) {
+  const { t } = useTranslation()
   const style = NODE_STYLES[data.status]
 
   return (
@@ -23,12 +25,12 @@ function ReportNodeComponent({ data, selected }: NodeProps<TaskNodeData>) {
 
       <div className="flex items-center gap-2 mb-1">
         <span className="text-lg">📊</span>
-        <span className="font-medium text-sm text-emerald-400">Report</span>
+        <span className="font-medium text-sm text-emerald-400">{t('workflow.report')}</span>
       </div>
 
       <div className="flex items-center gap-2 text-xs text-gray-400">
         <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400">
-          {data.status === 'success' ? 'Generated' : data.status === 'running' ? 'Generating...' : 'Pending'}
+          {data.status === 'success' ? t('workflow.generated') : data.status === 'running' ? t('workflow.generating') : t('workflow.status.pending')}
         </span>
       </div>
     </div>

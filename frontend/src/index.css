@@ -3,18 +3,25 @@
 @tailwind utilities;
 
 :root {
-  --sfa-bg: #0a0a0f;
-  --sfa-bg-card: #1a1a2e;
-  --sfa-bg-sub: #12121a;
-  --sfa-border: #2a2a3e;
-  --sfa-primary: #6366f1;
-  --sfa-text: #f0f0f5;
-  --sfa-text-body: #e0e0e0;
-  --sfa-text-secondary: #8888a0;
-  --sfa-success: #10b981;
-  --sfa-error: #ef4444;
-  --sfa-warning: #f59e0b;
-  --sfa-running: #6366f1;
+  /* Neutral, slightly cool surfaces — no navy/purple */
+  --sfa-bg: #0c0d0e;
+  --sfa-bg-card: #141517;
+  --sfa-bg-sub: #101113;
+  --sfa-bg-hover: #1a1c1f;
+  --sfa-border: #26282c;
+  --sfa-border-soft: #1f2125;
+  /* Quiet brand accent, used sparingly */
+  --sfa-primary: #5b9dff;
+  --sfa-primary-strong: #4f8fee;
+  --sfa-text: #e9eaec;
+  --sfa-text-body: #c4c8cd;
+  --sfa-text-secondary: #8a9099;
+  --sfa-text-faint: #6c7077;
+  /* Data semantics carry the color */
+  --sfa-success: #37d39b;
+  --sfa-error: #ff5f6b;
+  --sfa-warning: #e8b84b;
+  --sfa-running: #5b9dff;
 }
 
 * {
@@ -24,112 +31,171 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--sfa-bg);
   color: var(--sfa-text-body);
-  line-height: 1.6;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular, monospaced numerals for any numeric/financial value */
+.num,
+.tnum {
+  font-family: 'Geist Mono', ui-monospace, 'SF Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--sfa-bg-sub);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--sfa-border);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a4e;
+  background: #34373c;
 }
 
-/* Card styles */
+/* Card styles — flat, hairline border, subtle elevation only */
 .card {
   background: var(--sfa-bg-card);
   border: 1px solid var(--sfa-border);
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 1.25rem;
 }
 
 /* Badge styles */
 .badge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 3px;
+  padding: 2px 7px;
+  border-radius: 5px;
   font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   line-height: 1.5;
 }
 
 .badge-success {
-  background-color: #065f46;
-  color: #10b981;
+  background-color: rgba(55, 211, 155, 0.12);
+  color: var(--sfa-success);
 }
 
 .badge-error {
-  background-color: #7f1d1d;
-  color: #ef4444;
+  background-color: rgba(255, 95, 107, 0.12);
+  color: var(--sfa-error);
 }
 
 .badge-running {
-  background-color: #312e81;
-  color: #6366f1;
+  background-color: rgba(91, 157, 255, 0.12);
+  color: var(--sfa-primary);
 }
 
 .badge-pending {
-  background-color: #78350f;
-  color: #f59e0b;
+  background-color: rgba(232, 184, 75, 0.12);
+  color: var(--sfa-warning);
 }
 
-/* Button styles */
+/* Button styles — solid, flat, no gradient/glow */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  border-radius: 7px;
   font-weight: 500;
   font-size: 0.875rem;
-  transition: all 0.2s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   cursor: pointer;
-  border: none;
+  border: 1px solid var(--sfa-border);
+  background: var(--sfa-bg-card);
+  color: var(--sfa-text);
+}
+
+.btn:hover {
+  background: var(--sfa-bg-hover);
+  border-color: #34373c;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--sfa-primary) 0%, #4f46e5 100%);
-  color: white;
+  background: var(--sfa-text);
+  color: var(--sfa-bg);
+  border-color: var(--sfa-text);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #818cf8 0%, var(--sfa-primary) 100%);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Secondary button (standalone, not composed with .btn) */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.9rem;
+  border-radius: 7px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  border: 1px solid var(--sfa-border);
+  background: var(--sfa-bg-card);
+  color: var(--sfa-text);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--sfa-bg-hover);
+  border-color: #34373c;
+}
+
+/* Accent button variant (for selective use) */
+.btn-accent {
+  background: var(--sfa-primary);
+  color: #06121f;
+  border-color: var(--sfa-primary);
+}
+
+.btn-accent:hover {
+  background: #74acff;
+  border-color: #74acff;
 }
 
 /* Input styles */
 .input {
-  background-color: var(--sfa-bg-card);
+  background-color: var(--sfa-bg-sub);
   border: 1px solid var(--sfa-border);
-  border-radius: 8px;
+  border-radius: 7px;
   color: var(--sfa-text-body);
-  font-size: 0.95rem;
-  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  padding: 0.55rem 0.8rem;
   width: 100%;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input::placeholder {
+  color: var(--sfa-text-faint);
 }
 
 .input:focus {
   outline: none;
   border-color: var(--sfa-primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 3px rgba(91, 157, 255, 0.12);
 }
 
 /* Status indicator */
@@ -168,7 +234,7 @@ body {
 
 /* Section header */
 .section-header {
-  border-bottom: 2px solid var(--sfa-primary);
+  border-bottom: 1px solid var(--sfa-border);
   padding-bottom: 0.5rem;
   margin: 2rem 0 1.5rem 0;
 }

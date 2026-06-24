@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useWorkflow } from './hooks/useWorkflow'
 import { WorkflowHeader } from './components/WorkflowHeader'
 import { DAGPanel } from './components/DAGPanel'
@@ -11,6 +12,7 @@ import { Loader2, ArrowLeft, RefreshCw } from 'lucide-react'
 export default function WorkflowVisualization() {
   const { taskId } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [state, actions] = useWorkflow()
 
   // Connect to SSE on mount
@@ -30,7 +32,7 @@ export default function WorkflowVisualization() {
       <div className="flex items-center justify-center h-screen bg-gray-900">
         <div className="text-center">
           <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Connecting to workflow...</p>
+          <p className="text-gray-400">{t('workflow.connecting')}</p>
         </div>
       </div>
     )
@@ -42,20 +44,20 @@ export default function WorkflowVisualization() {
       <div className="flex items-center justify-center h-screen bg-gray-900">
         <div className="text-center">
           <div className="text-red-500 text-4xl mb-4">⚠</div>
-          <p className="text-gray-300 mb-4">Failed to connect to workflow</p>
+          <p className="text-gray-300 mb-4">{t('workflow.connectFailed')}</p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={actions.retryConnection}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />
-              Retry
+              {t('workflow.retry')}
             </button>
             <button
               onClick={() => navigate(-1)}
               className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors"
             >
-              Go Back
+              {t('workflow.goBack')}
             </button>
           </div>
         </div>
@@ -72,7 +74,7 @@ export default function WorkflowVisualization() {
           className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span className="text-sm">Back</span>
+          <span className="text-sm">{t('workflow.back')}</span>
         </button>
 
         {/* Header */}

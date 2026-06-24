@@ -44,11 +44,11 @@ export default function SimpleChart({
   const range = maxValue - minValue || 1
 
   const defaultColors = [
-    '#6366f1', // primary
+    '#5b9dff', // primary
     '#10b981', // green
     '#f59e0b', // yellow
     '#ef4444', // red
-    '#8b5cf6', // purple
+    '#94a3b8', // slate
     '#06b6d4', // cyan
     '#f97316', // orange
     '#ec4899', // pink

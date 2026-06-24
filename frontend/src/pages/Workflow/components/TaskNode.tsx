@@ -1,9 +1,11 @@
 import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
+import { useTranslation } from 'react-i18next'
 import type { TaskNodeData } from '../types'
 import { NODE_STYLES, TOOL_DISPLAY_NAMES } from '../types'
 
 function TaskNodeComponent({ data, selected }: NodeProps<TaskNodeData>) {
+  const { t } = useTranslation()
   const style = NODE_STYLES[data.status]
   const displayName = TOOL_DISPLAY_NAMES[data.tool] || data.label
 
@@ -37,7 +39,7 @@ function TaskNodeComponent({ data, selected }: NodeProps<TaskNodeData>) {
             color: style.color,
           }}
         >
-          {data.status.charAt(0).toUpperCase() + data.status.slice(1)}
+          {t(`workflow.status.${data.status}`)}
         </span>
         {data.duration_ms > 0 && (
           <span>{(data.duration_ms / 1000).toFixed(1)}s</span>

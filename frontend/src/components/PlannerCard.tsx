@@ -49,8 +49,8 @@ export default function PlannerCard({
     <div className="card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
-            <Brain className="w-5 h-5 text-purple-500" />
+          <div className="w-10 h-10 bg-dark-hover rounded-lg flex items-center justify-center">
+            <Brain className="w-5 h-5 text-primary-300" />
           </div>
           <div>
             <h3 className="text-lg font-semibold text-primary-50">Planner</h3>

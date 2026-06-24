@@ -1,4 +1,5 @@
 import { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import TopNavBar from './TopNavBar'
 import StatusBar from './StatusBar'
 
@@ -8,6 +9,7 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children, showStatusBar = true }: MainLayoutProps) {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-col h-screen bg-dark-bg">
       <TopNavBar />
@@ -15,7 +17,7 @@ export default function MainLayout({ children, showStatusBar = true }: MainLayou
         {children}
       </main>
       <div className="px-4 py-1.5 text-xs text-center text-gray-400 bg-dark-bg border-t border-gray-700/60">
-        For research and educational purposes only — not investment advice. Data may be incomplete or simulated; verify independently before making any financial decision.
+        {t('common.disclaimer')}
       </div>
       {showStatusBar && <StatusBar />}
     </div>
