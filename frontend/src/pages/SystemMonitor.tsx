@@ -1,12 +1,14 @@
 import { PageHeader } from '../components/layout'
 import { Activity } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 export default function SystemMonitor() {
+  const { t } = useTranslation()
   return (
     <div className="p-4 lg:p-6 space-y-4">
       <PageHeader
-        title="System Monitor"
-        subtitle="Monitor system performance and health"
+        title={t('systemMonitor.title')}
+        subtitle={t('systemMonitor.subtitle')}
       />
 
       <div className="card flex flex-col items-center justify-center py-16">
@@ -14,10 +16,10 @@ export default function SystemMonitor() {
           <Activity className="w-8 h-8 text-primary-400" />
         </div>
         <h2 className="text-xl font-semibold text-primary-200 mb-2">
-          System Monitor - Coming Soon
+          {t('systemMonitor.comingSoon')}
         </h2>
         <p className="text-sm text-primary-400 text-center max-w-md">
-          This feature is under development. You will be able to monitor real-time system metrics, agent performance, and resource utilization.
+          {t('systemMonitor.description')}
         </p>
       </div>
     </div>

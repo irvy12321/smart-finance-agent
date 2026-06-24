@@ -27,7 +27,7 @@ const markdownComponents = {
       </div>
     </div>
   ),
-  thead: ({children}: { children?: React.ReactNode }) => <thead className="bg-gradient-to-r from-primary-500/20 to-primary-600/10">{children}</thead>,
+  thead: ({children}: { children?: React.ReactNode }) => <thead className="bg-dark-sub">{children}</thead>,
   tbody: ({children}: { children?: React.ReactNode }) => <tbody className="divide-y divide-dark-border">{children}</tbody>,
   tr: ({children}: { children?: React.ReactNode }) => <tr className="hover:bg-primary-500/5 transition-colors">{children}</tr>,
   th: ({children}: { children?: React.ReactNode }) => (
@@ -380,7 +380,7 @@ export default function Research() {
           <button
             onClick={startResearch}
             disabled={!query.trim() || phase === 'running' || phase === 'creating'}
-            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 disabled:from-primary-500/50 disabled:to-primary-600/50 disabled:cursor-not-allowed text-white rounded-full shadow-lg shadow-primary-500/20 transition-all duration-200 hover:shadow-primary-500/30 hover:scale-[1.02] disabled:hover:scale-100"
+            className="flex items-center gap-2 px-5 py-2 bg-accent hover:bg-[#74acff] disabled:bg-accent/40 disabled:cursor-not-allowed text-[#06121f] font-medium rounded-lg transition-colors duration-150"
           >
             <Rocket className={`w-4 h-4 ${phase === 'running' || phase === 'creating' ? 'hidden' : ''}`} />
             <Loader2 className={`w-4 h-4 animate-spin ${phase === 'running' || phase === 'creating' ? '' : 'hidden'}`} />
@@ -421,7 +421,7 @@ export default function Research() {
                 </div>
                 <div className="w-full bg-dark-border rounded-full h-3">
                   <div
-                    className="bg-gradient-to-r from-primary-500 to-blue-500 h-3 rounded-full transition-all duration-500"
+                    className="bg-accent h-3 rounded-full transition-all duration-500"
                     style={{ width: `${taskStatus.progress}%` }}
                   />
                 </div>
@@ -447,15 +447,15 @@ export default function Research() {
                 </div>
               </div>
               <div className="flex gap-3">
-                <button onClick={handleReset} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-200 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/30 rounded-lg transition-all duration-200 hover:scale-[1.02]">
+                <button onClick={handleReset} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-200 bg-dark-card hover:bg-dark-hover border border-dark-border rounded-lg transition-colors duration-150">
                   <Zap className="w-4 h-4" /> {t('research.newTask')}
                 </button>
                 {taskId && (
                   <>
-                    <button onClick={() => navigate(`/workflow/${taskId}`)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-200 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-400/40 rounded-xl transition-all duration-200 hover:scale-[1.02] shadow-lg shadow-purple-500/10">
+                    <button onClick={() => navigate(`/workflow/${taskId}`)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-accent bg-accent/10 hover:bg-accent/15 border border-accent/30 rounded-lg transition-colors duration-150">
                       <Brain className="w-4 h-4" /> Workflow
                     </button>
-                    <button onClick={() => navigate(`/report/${taskId}`)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-200 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-400/40 rounded-xl transition-all duration-200 hover:scale-[1.02] shadow-lg shadow-blue-500/10">
+                    <button onClick={() => navigate(`/report/${taskId}`)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-200 bg-dark-card hover:bg-dark-hover border border-dark-border rounded-lg transition-colors duration-150">
                       <FileText className="w-4 h-4" /> {t('report.title')}
                     </button>
                   </>
@@ -532,9 +532,9 @@ export default function Research() {
               <p className="text-2xl font-bold text-yellow-500">{result.confidence ? `${(result.confidence * 100).toFixed(0)}%` : '-'}</p>
             </div>
             <div className="card text-center">
-              <Zap className="w-5 h-5 text-purple-500 mx-auto mb-2" />
-              <p className="text-xs text-purple-400 uppercase">{t('report.keyFindings')}</p>
-              <p className="text-2xl font-bold text-purple-500">{result.reasoning_insights?.length || 0}</p>
+              <Zap className="w-5 h-5 text-primary-300 mx-auto mb-2" />
+              <p className="text-xs text-primary-400 uppercase">{t('report.keyFindings')}</p>
+              <p className="text-2xl font-bold text-primary-100">{result.reasoning_insights?.length || 0}</p>
             </div>
             <div className="card text-center">
               <Clock className="w-5 h-5 text-cyan-500 mx-auto mb-2" />

@@ -97,9 +97,9 @@ export function StreamingMessage({
 
       <div className={`max-w-[80%] ${role === 'user' ? 'order-first' : ''}`}>
         <div
-          className={`rounded-2xl px-4 py-3 ${
+          className={`rounded-xl px-4 py-3 ${
             role === 'user'
-              ? 'bg-primary-500 text-white'
+              ? 'bg-accent text-[#06121f]'
               : 'bg-dark-card border border-dark-border'
           }`}
         >
@@ -182,7 +182,7 @@ export function StreamingIndicator() {
       <div className="w-8 h-8 bg-primary-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
         <Bot className="w-4 h-4 text-primary-500" />
       </div>
-      <div className="bg-dark-card border border-dark-border rounded-2xl px-4 py-3">
+      <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-3">
         <div className="flex items-center gap-2">
           <Loader2 className="w-4 h-4 text-primary-400 animate-spin" />
           <span className="text-sm text-primary-400">Thinking...</span>

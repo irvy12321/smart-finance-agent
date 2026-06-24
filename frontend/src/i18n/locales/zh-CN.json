@@ -27,7 +27,8 @@
     "id": "ID",
     "comingSoon": "即将上线",
     "justNow": "刚刚",
-    "ago": "前"
+    "ago": "前",
+    "disclaimer": "仅供研究和教育用途 — 不构成投资建议。数据可能不完整或为模拟数据；做出任何财务决策前请自行独立核实。"
   },
   "auth": {
     "login": "登录",
@@ -199,6 +200,58 @@
     "ready": "就绪",
     "busy": "繁忙",
     "offline": "离线"
+  },
+  "workflow": {
+    "title": "智能体工作流",
+    "trace": "追踪",
+    "query": "查询",
+    "tasks": "任务",
+    "back": "返回",
+    "connecting": "正在连接工作流...",
+    "connectFailed": "连接工作流失败",
+    "retry": "重试",
+    "goBack": "返回",
+    "planner": "规划器",
+    "synthesizer": "综合器",
+    "report": "报告",
+    "planning": "规划中...",
+    "planReady": "规划完成",
+    "synthesizing": "综合中...",
+    "generating": "生成中...",
+    "generated": "已生成",
+    "done": "完成",
+    "waiting": "等待中",
+    "duration": "耗时",
+    "taskId": "任务 ID",
+    "errorLabel": "错误",
+    "result": "结果",
+    "eventLog": "事件日志",
+    "showLess": "收起",
+    "showAll": "显示全部 ({{count}})",
+    "noEvents": "暂无事件",
+    "metricTotalTasks": "总任务数",
+    "metricCompleted": "已完成",
+    "metricFailed": "失败",
+    "metricTotalTime": "总耗时",
+    "metricAvgTime": "平均耗时",
+    "status": {
+      "pending": "待处理",
+      "running": "运行中",
+      "success": "成功",
+      "failed": "失败",
+      "degraded": "降级",
+      "skipped": "已跳过",
+      "idle": "空闲",
+      "connecting": "连接中",
+      "completed": "已完成",
+      "error": "错误"
+    }
+  },
+  "systemMonitor": {
+    "title": "系统监控",
+    "subtitle": "监控系统性能与健康状况",
+    "comingSoon": "系统监控 - 即将上线",
+    "description": "此功能正在开发中。您将能够监控实时系统指标、智能体性能和资源使用情况。"
   },
   "stock": {
     "symbol": "代码",

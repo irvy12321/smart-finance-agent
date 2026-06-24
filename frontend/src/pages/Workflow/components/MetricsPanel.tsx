@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 interface MetricsPanelProps {
   totalTasks: number
   completedTasks: number
@@ -13,33 +15,34 @@ export function MetricsPanel({
   totalDuration,
   avgTaskDuration,
 }: MetricsPanelProps) {
+  const { t } = useTranslation()
   const metrics = [
     {
-      label: 'Total Tasks',
+      label: t('workflow.metricTotalTasks'),
       value: totalTasks,
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/10',
     },
     {
-      label: 'Completed',
+      label: t('workflow.metricCompleted'),
       value: completedTasks,
       color: 'text-green-400',
       bgColor: 'bg-green-500/10',
     },
     {
-      label: 'Failed',
+      label: t('workflow.metricFailed'),
       value: failedTasks,
       color: 'text-red-400',
       bgColor: 'bg-red-500/10',
     },
     {
-      label: 'Total Time',
+      label: t('workflow.metricTotalTime'),
       value: `${(totalDuration / 1000).toFixed(1)}s`,
-      color: 'text-purple-400',
-      bgColor: 'bg-purple-500/10',
+      color: 'text-primary-300',
+      bgColor: 'bg-dark-hover',
     },
     {
-      label: 'Avg Time',
+      label: t('workflow.metricAvgTime'),
       value: `${(avgTaskDuration / 1000).toFixed(1)}s`,
       color: 'text-yellow-400',
       bgColor: 'bg-yellow-500/10',

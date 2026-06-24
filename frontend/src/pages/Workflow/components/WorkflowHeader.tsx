@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 interface WorkflowHeaderProps {
   query: string | null
   traceId: string | null
@@ -7,6 +9,7 @@ interface WorkflowHeaderProps {
 }
 
 export function WorkflowHeader({ query, traceId, status, totalTasks, completedTasks }: WorkflowHeaderProps) {
+  const { t } = useTranslation()
   const statusColors: Record<string, string> = {
     idle: 'bg-gray-500/20 text-gray-400',
     connecting: 'bg-yellow-500/20 text-yellow-400',
@@ -18,14 +21,14 @@ export function WorkflowHeader({ query, traceId, status, totalTasks, completedTa
   return (
     <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold text-white">Agent Workflow</h2>
+        <h2 className="text-lg font-semibold text-white">{t('workflow.title')}</h2>
         <div className="flex items-center gap-2">
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[status] || statusColors.idle}`}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
+            {t(`workflow.status.${status}`)}
           </span>
           {traceId && (
             <span className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-400 font-mono">
-              Trace: {traceId}
+              {t('workflow.trace')}: {traceId}
             </span>
           )}
         </div>
@@ -33,14 +36,14 @@ export function WorkflowHeader({ query, traceId, status, totalTasks, completedTa
 
       {query && (
         <div className="mb-3">
-          <span className="text-xs text-gray-500 uppercase tracking-wider">Query</span>
+          <span className="text-xs text-gray-500 uppercase tracking-wider">{t('workflow.query')}</span>
           <p className="text-sm text-gray-300 mt-1">{query}</p>
         </div>
       )}
 
       <div className="flex gap-4">
         <div>
-          <span className="text-xs text-gray-500 uppercase tracking-wider">Tasks</span>
+          <span className="text-xs text-gray-500 uppercase tracking-wider">{t('workflow.tasks')}</span>
           <p className="text-sm text-gray-300">{completedTasks} / {totalTasks}</p>
         </div>
       </div>

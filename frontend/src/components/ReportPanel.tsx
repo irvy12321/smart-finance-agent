@@ -176,13 +176,13 @@ export default function ReportPanel({ report, loading }: ReportPanelProps) {
       {report.market_trends && report.market_trends.length > 0 && (
         <div className="card">
           <div className="flex items-center gap-2 mb-4">
-            <BarChart3 className="w-5 h-5 text-purple-500" />
+            <BarChart3 className="w-5 h-5 text-primary-400" />
             <h3 className="text-lg font-semibold text-primary-50">Market Trends</h3>
           </div>
           <div className="space-y-2">
             {report.market_trends.map((trend, index) => (
               <div key={index} className="flex items-center gap-2 p-2 bg-dark-bg rounded-lg border border-dark-border">
-                <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                <div className="w-2 h-2 bg-primary-500 rounded-full" />
                 <p className="text-sm text-primary-200">{trend}</p>
               </div>
             ))}

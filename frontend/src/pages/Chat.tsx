@@ -192,8 +192,8 @@ export default function Chat() {
       icon: Newspaper,
       label: t('report.sources'),
       query: t('chat.quickNews'),
-      color: 'text-purple-500',
-      bg: 'bg-purple-500/10',
+      color: 'text-primary-200',
+      bg: 'bg-dark-hover',
     },
     {
       icon: DollarSign,
@@ -288,8 +288,8 @@ export default function Chat() {
             {messages.length === 0 && !loading && (
               <div className="flex flex-col items-center justify-center h-full py-12">
                 <div className="text-center max-w-2xl">
-                  <div className="w-16 h-16 bg-primary-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                    <Bot className="w-8 h-8 text-primary-500" />
+                  <div className="w-12 h-12 rounded-lg bg-dark-card border border-dark-border flex items-center justify-center mx-auto mb-6">
+                    <Bot className="w-6 h-6 text-accent" />
                   </div>
                   <h2 className="text-2xl font-bold text-primary-50 mb-4">
                     {t('sidebar.title')}
@@ -304,7 +304,7 @@ export default function Chat() {
                       <button
                         key={index}
                         onClick={() => handleQuickAction(action.query)}
-                        className="flex items-center gap-3 p-4 bg-dark-card rounded-xl border border-dark-border hover:border-primary-500/30 transition-all text-left"
+                        className="flex items-center gap-3 p-4 bg-dark-card rounded-lg border border-dark-border hover:border-accent/40 hover:bg-dark-hover transition-colors text-left"
                       >
                         <div className={`w-10 h-10 ${action.bg} rounded-lg flex items-center justify-center`}>
                           <action.icon className={`w-5 h-5 ${action.color}`} />
@@ -334,9 +334,9 @@ export default function Chat() {
                 )}
                 
                 <div
-                  className={`max-w-[70%] rounded-2xl px-4 py-3 ${
+                  className={`max-w-[70%] rounded-xl px-4 py-3 ${
                     message.role === 'user'
-                      ? 'bg-primary-500 text-white'
+                      ? 'bg-accent text-[#06121f]'
                       : 'bg-dark-card border border-dark-border'
                   }`}
                 >
@@ -344,7 +344,7 @@ export default function Chat() {
                     {message.role === 'assistant' ? cleanAIText(message.content) : message.content}
                   </p>
                   <p className={`text-xs mt-2 ${
-                    message.role === 'user' ? 'text-white/60' : 'text-primary-400'
+                    message.role === 'user' ? 'text-[#06121f]/60' : 'text-primary-400'
                   }`}>
                     {new Date(message.timestamp).toLocaleTimeString()}
                   </p>
@@ -363,7 +363,7 @@ export default function Chat() {
                 <div className="w-8 h-8 bg-primary-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                   <Bot className="w-4 h-4 text-primary-500" />
                 </div>
-                <div className="bg-dark-card border border-dark-border rounded-2xl px-4 py-3">
+                <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 text-primary-400 animate-spin" />
                     <p className="text-sm text-primary-400">{t('chat.thinking')}</p>
