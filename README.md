@@ -415,6 +415,59 @@ smart-finance-agent/
 └── run_tests.ps1                 # 测试运行脚本
 ```
 
+## 编排可靠性 (Orchestration Reliability)
+
+编排层有三套真实的容错原语：**降级链**（`FallbackManager`：crawler → news_search → rag_retrieve → 静态兜底）、**熔断器**（`CircuitBreaker`：CLOSED/OPEN/HALF_OPEN 三态）、**死锁恢复**（`ExecutorAgent._try_resolve_deadlock`：上游失败后解锁仅被失败依赖阻塞的下游任务）。
+
+为了让这些原语「能用数据说话」，`app/core/reliability.py` 提供了一个**确定性故障注入** harness：用 seeded RNG 让工具按指定概率失败，全程无网络/LLM 调用，结果可复现、可进 CI 断言。运行评测：
+
+```bash
+cd backend
+PYTHONPATH=. python scripts/reliability_eval.py   # 打印下列曲线并导出 data/reliability_eval/results.json
+```
+
+**降级曲线 — 单点故障**（主工具按 p(fail) 失败，备选工具健康；trials=400, seed=42）：
+
+| p(fail) | served | hard_fail | real_recovery | static |
+|--------:|-------:|----------:|--------------:|-------:|
+| 0.00 | 1.000 | 0.000 | 0.000 | 0.000 |
+| 0.25 | 1.000 | 0.000 | 0.260 | 0.000 |
+| 0.50 | 1.000 | 0.000 | 0.492 | 0.000 |
+| 0.75 | 1.000 | 0.000 | 0.750 | 0.000 |
+| 1.00 | 1.000 | 0.000 | 1.000 | 0.000 |
+
+解读：主工具即使 100% 挂掉，**硬失败率始终为 0**——每一次主工具失败都被真实备选工具接住（real_recovery 随 p 线性上升至 1.0）。
+
+**降级曲线 — 级联故障**（主工具与备选工具一起按 p(fail) 退化；trials=400, seed=42）：
+
+| p(fail) | served | hard_fail | real_recovery | static |
+|--------:|-------:|----------:|--------------:|-------:|
+| 0.00 | 1.000 | 0.000 | 0.000 | 0.000 |
+| 0.25 | 1.000 | 0.000 | 0.242 | 0.020 |
+| 0.50 | 1.000 | 0.000 | 0.352 | 0.133 |
+| 0.75 | 1.000 | 0.000 | 0.270 | 0.430 |
+| 1.00 | 1.000 | 0.000 | 0.000 | 1.000 |
+
+解读：当所有工具同时退化（相关性故障），系统沿降级链逐级回落，**最终被静态兜底接住，served 仍保持 1.000**——p=1.0 时全部落到带标注的静态降级，绝不返回空结果。
+
+**熔断保护**（被测工具完全宕机，failure_threshold=5, total_calls=100）：
+
+| total_calls | failure_threshold | invoked | short_circuited | protection_rate |
+|------------:|------------------:|--------:|----------------:|----------------:|
+| 100 | 5 | 5 | 95 | **95.0%** |
+
+解读：熔断器在 5 次失败后打开，余下 95 次调用被**直接短路**，避免对已宕机工具发起无谓重试（节省 95% 的 doomed 调用）。
+
+**死锁恢复**（注入失败的上游依赖，scenarios=50, seed=42）：
+
+| scenarios | recovered | recovery_rate |
+|----------:|----------:|--------------:|
+| 50 | 50 | **100.0%** |
+
+解读：上游任务失败时，编排器不会整图跳过，而是解锁「仅被该失败依赖阻塞」的下游任务，**100% 的停滞任务图仍能继续推进**。
+
+确定性单测见 `tests/test_reliability.py`（无网络/torch 依赖，可进 CI）。
+
 ## RAG 检索质量评测 (RAG Retrieval Evaluation)
 
 检索层提供三种 embedder（见 `backend/app/rag/embed.py`）：
