@@ -79,7 +79,7 @@ export default function TopNavBar() {
         <div className="w-7 h-7 bg-primary-500 rounded flex items-center justify-center">
           <Zap className="w-4 h-4 text-white" />
         </div>
-        <span className="text-sm font-bold text-primary-50 hidden sm:block">SFA</span>
+        <span className="text-sm font-bold text-primary-50">SFA</span>
       </Link>
 
       {/* Navigation */}
@@ -97,7 +97,7 @@ export default function TopNavBar() {
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
-              <span className="hidden md:block">{t(item.label)}</span>
+              <span className="whitespace-nowrap">{t(item.label)}</span>
             </Link>
           )
         })}
@@ -137,7 +137,7 @@ export default function TopNavBar() {
           <div className="w-6 h-6 bg-primary-500/10 rounded-full flex items-center justify-center">
             <User className="w-3.5 h-3.5 text-primary-500" />
           </div>
-          <span className="text-xs font-medium hidden sm:block">{user?.username}</span>
+          <span className="text-xs font-medium">{user?.username}</span>
           <ChevronDown className="w-3 h-3" />
         </button>
 
