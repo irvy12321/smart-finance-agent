@@ -58,12 +58,35 @@ export default function TopNavBar() {
     return location.pathname.startsWith(path)
   }
 
+  // Quick-nav aliases: typing a module name (zh/en) jumps to that page.
+  const navAliases: { path: string; keywords: string[] }[] = [
+    { path: '/', keywords: ['dashboard', 'home', '仪表盘', '仪表板', '首页', '主页'] },
+    { path: '/research', keywords: ['research', '研究', '调研'] },
+    { path: '/chat', keywords: ['chat', '对话', '聊天'] },
+    { path: '/knowledge', keywords: ['knowledge', '知识库', '知识'] },
+    { path: '/rag', keywords: ['rag', '检索', '文档'] },
+    { path: '/portfolio', keywords: ['portfolio', '投资组合', '组合', '持仓'] },
+    { path: '/system', keywords: ['system', '系统', '监控'] },
+  ]
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    if (searchQuery.trim()) {
-      navigate(`/research?q=${encodeURIComponent(searchQuery.trim())}`)
-      setSearchQuery('')
+    const query = searchQuery.trim()
+    if (!query) return
+
+    const q = query.toLowerCase()
+    const match = navAliases.find(
+      (a) =>
+        visibleNavItems.some((item) => item.path === a.path) &&
+        a.keywords.some((k) => k === q || q.includes(k))
+    )
+
+    if (match) {
+      navigate(match.path)
+    } else {
+      navigate(`/research?q=${encodeURIComponent(query)}`)
     }
+    setSearchQuery('')
   }
 
   const roleColors: Record<string, string> = {
