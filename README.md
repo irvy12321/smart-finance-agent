@@ -7,6 +7,8 @@
 
 一个基于 Multi-Agent 架构的智能金融分析平台，使用 FastAPI 后端 + React 前端。
 
+> 架构总览、数据流与关键设计取舍见 [`DESIGN.md`](DESIGN.md)；可量化证据见下文「[RAG 检索质量评测](#rag-检索质量评测-rag-retrieval-evaluation)」与「[编排可靠性](#编排可靠性-orchestration-reliability)」两节。
+
 ## 功能特性
 
 - **Multi-Agent 架构**: Planner → Executor → Reasoner 协同工作
@@ -21,9 +23,9 @@
 
 ### 前置要求
 
-- **Python**: 3.8+
-- **Node.js**: 16+
-- **npm**: 8+
+- **Python**: 3.11+（CI 在 3.11 上验证）
+- **Node.js**: 20+
+- **npm**: 10+
 
 ### 一键启动（Windows）
 
