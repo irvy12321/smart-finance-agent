@@ -16,13 +16,13 @@ interface SimpleChartProps {
   showValues?: boolean
 }
 
-export default function SimpleChart({ 
-  data, 
-  type = 'bar', 
-  title, 
+export default function SimpleChart({
+  data,
+  type = 'bar',
+  title,
   height = 200,
   showLabels = true,
-  showValues = true 
+  showValues = true
 }: SimpleChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 

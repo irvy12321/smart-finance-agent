@@ -98,7 +98,7 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
  */
 export function cleanAIText(text: string): string {
   if (!text) return ''
-  
+
   return text
     // Remove markdown bold **text** → text
     .replace(/\*\*([^*]+)\*\*/g, '$1')
