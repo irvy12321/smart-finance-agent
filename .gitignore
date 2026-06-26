@@ -21,6 +21,7 @@ data/
 # Node
 node_modules/
 frontend/dist/
+frontend/coverage/
 
 # IDE
 .vscode/
