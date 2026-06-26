@@ -1,10 +1,10 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
-import { 
-  LayoutDashboard, 
-  FlaskConical, 
-  Settings, 
+import {
+  LayoutDashboard,
+  FlaskConical,
+  Settings,
   Zap,
   MessageSquare,
   Database,
@@ -36,7 +36,7 @@ export default function Sidebar() {
   ]
 
   // Filter navigation based on user role
-  const navigation = allNavigation.filter(item => 
+  const navigation = allNavigation.filter(item =>
     hasAnyRole(item.roles)
   )
 
@@ -119,7 +119,7 @@ export default function Sidebar() {
             </p>
           </div>
         </div>
-        
+
         {/* Role Badge */}
         <div className="flex items-center gap-2 px-3 mb-3">
           <Shield className="w-4 h-4 text-primary-400" />

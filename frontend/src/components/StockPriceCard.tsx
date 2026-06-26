@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Loader2, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Loader2,
   Search,
   DollarSign,
   BarChart3,

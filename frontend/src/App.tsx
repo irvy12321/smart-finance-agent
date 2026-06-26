@@ -42,7 +42,7 @@ function App() {
                           <Route path="/report/:taskId" element={<Report />} />
                           <Route path="/system" element={<SystemOverview />} />
                           <Route path="/portfolio" element={<Portfolio />} />
-                          
+
                           {/* Admin and Analyst only */}
                           <Route path="/research" element={<ResearchCenter />} />
                           <Route path="/chat" element={<Chat />} />

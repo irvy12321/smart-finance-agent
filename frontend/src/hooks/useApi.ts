@@ -51,7 +51,7 @@ export function useTask() {
     try {
       setTaskState(prev => ({ ...prev, status: 'running', error: null }))
       await taskApi.run(taskId)
-      
+
       let pollCount = 0
       const maxPolls = 180 // 3 minutes max
       let consecutiveErrors = 0

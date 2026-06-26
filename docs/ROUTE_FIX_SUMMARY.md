@@ -132,7 +132,7 @@ import { MessageSquare, FileText } from 'lucide-react'
 
 ## 注意事项
 
-1. **SystemMonitor vs SystemOverview**: 
+1. **SystemMonitor vs SystemOverview**:
    - `SystemMonitor.tsx` 是占位页面（新创建）
    - `SystemOverview.tsx` 是完整实现（原有页面）
    - 路由使用 `SystemOverview` 以保留完整功能

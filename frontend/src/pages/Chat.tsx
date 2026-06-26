@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { 
-  Send, 
-  Bot, 
-  User, 
-  Loader2, 
+import {
+  Send,
+  Bot,
+  User,
+  Loader2,
   MessageSquare,
   Plus,
   Trash2,
@@ -46,7 +46,7 @@ function clearChatState() {
 
 export default function Chat() {
   const { t } = useTranslation()
-  
+
   // Initialize from localStorage
   const saved = loadChatState()
   const [messages, setMessages] = useState<ChatMessage[]>(saved?.messages || [])
@@ -145,7 +145,7 @@ export default function Chat() {
       }
 
       const data = await chatApi.sendMessage(convId!, input)
-      
+
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: data.response,
@@ -332,7 +332,7 @@ export default function Chat() {
                     <Bot className="w-4 h-4 text-primary-500" />
                   </div>
                 )}
-                
+
                 <div
                   className={`max-w-[70%] rounded-xl px-4 py-3 ${
                     message.role === 'user'

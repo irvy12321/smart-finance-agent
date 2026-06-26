@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
-    
+
     // Try to revoke refresh token on server
     if (refreshToken) {
       try {
@@ -135,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Ignore errors - we'll clear local storage anyway
       }
     }
-    
+
     clearAuth()
   }
 
