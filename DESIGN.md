@@ -91,7 +91,7 @@ flowchart TB
 - **收益**：provider 故障转移、成本-质量分层、并发请求互不串味的模型选择。
 
 ### 3.3 为什么用 FAISS + 可切换 Embedder
-- **取舍**：`create_embedder()` 工厂支持 `hash`（无依赖基线）/ `BM25`（词法，默认）/ `semantic`（真语义，可选懒加载）。语义后端为**可选依赖**（sentence-transformers，缺失时回退到免-torch 的 model2vec），不进核心 requirements / CI。
+- **取舍**：`create_embedder()` 工厂按配置 `embedding.mode` 切换三种实现：`dev` → `HashEmbedder`（无依赖词法基线）/ `prod` → `BM25Embedder`（词法 BM25，默认）/ `semantic` → `SemanticEmbedder`（真语义，可选懒加载）。语义后端为**可选依赖**（sentence-transformers，缺失时回退到免-torch 的 model2vec），不进核心 requirements / CI。
 - **替代方案**：直接上重型向量数据库或强制语义模型 —— 部署与 CI 成本高，且本项目语料规模（数十~数百文档）用不上。
 - **代价**：语义检索需用户自行安装可选依赖。
 - **收益**：CI 轻量、零强依赖即可跑；同时用评测集量化了三种 embedder 的差距（Recall@5：hash 0.56 → BM25 0.94 → semantic 1.00），让「选哪个」有数据支撑而非拍脑袋。
