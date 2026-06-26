@@ -1,8 +1,8 @@
-import { 
-  FileText, 
-  TrendingUp, 
-  AlertTriangle, 
-  Target, 
+import {
+  FileText,
+  TrendingUp,
+  AlertTriangle,
+  Target,
   CheckCircle,
   Clock,
   BarChart3,

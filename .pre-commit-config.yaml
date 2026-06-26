@@ -1,0 +1,33 @@
+# Pre-commit hooks for Smart Finance Agent.
+# Install once with:  pre-commit install
+# Run on all files:    pre-commit run --all-files
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.svg$'
+      - id: end-of-file-fixer
+        exclude: '\.svg$'
+      - id: check-yaml
+      - id: check-json
+        # tsconfig files are JSONC (allow comments), which check-json rejects.
+        exclude: 'tsconfig.*\.json$'
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+      - id: check-case-conflict
+
+  # Backend: Ruff lint + format (mirrors the backend lint CI job).
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.3
+    hooks:
+      - id: ruff
+        name: ruff (backend lint)
+        args: ['--fix']
+        files: ^backend/
+      - id: ruff-format
+        name: ruff (backend format)
+        files: ^backend/

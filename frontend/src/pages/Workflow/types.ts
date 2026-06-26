@@ -47,11 +47,11 @@ export interface WorkflowEvent {
   stage: string
   timestamp: number
   trace_id?: string
-  
+
   // plan_ready
   subtasks?: DagSubtask[]
   route?: RouteDecision
-  
+
   // task_start / task_complete
   task_id?: string
   tool?: string
@@ -61,7 +61,7 @@ export interface WorkflowEvent {
   data?: string
   error?: string
   status?: TaskStatus
-  
+
   // complete
   answer?: string
   report_markdown?: string
@@ -96,17 +96,17 @@ export interface WorkflowState {
   traceId: string | null
   query: string | null
   status: WorkflowStatus
-  
+
   // DAG data (React Flow format)
   nodes: Node<TaskNodeData>[]
   edges: Edge[]
-  
+
   // Execution data
   subtasks: DagSubtask[]
   route: RouteDecision | null
   taskResults: Map<string, TaskResult>
   events: WorkflowEvent[]
-  
+
   // Metrics
   metrics: {
     totalTasks: number
@@ -115,7 +115,7 @@ export interface WorkflowState {
     totalDuration: number
     avgTaskDuration: number
   }
-  
+
   // Selection
   selectedTaskId: string | null
   selectedTask: TaskResult | null

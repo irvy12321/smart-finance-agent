@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { 
-  Activity, 
-  Server, 
-  Clock, 
-  CheckCircle, 
+import {
+  Activity,
+  Server,
+  Clock,
+  CheckCircle,
   AlertCircle,
   RefreshCw,
   Loader2,
@@ -16,11 +16,11 @@ import {
 import { systemApi, taskApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import SimpleChart from '../components/SimpleChart'
-import type { 
-  SystemStatusResponse, 
-  SystemMetricsResponse, 
-  AgentStatusResponse, 
-  TaskListItem 
+import type {
+  SystemStatusResponse,
+  SystemMetricsResponse,
+  AgentStatusResponse,
+  TaskListItem
 } from '../types/api'
 
 export default function SystemOverview() {
@@ -39,18 +39,18 @@ export default function SystemOverview() {
     try {
       setLoading(true)
       setError(null)
-      
+
       // Fetch system data
       const [statusRes, metricsRes, agentsRes] = await Promise.all([
         systemApi.getStatus(),
         systemApi.getMetrics(),
         systemApi.getAgentStatus(),
       ])
-      
+
       setSystemStatus(statusRes)
       setMetrics(metricsRes)
       setAgentStatus(agentsRes)
-      
+
       // Only fetch tasks if user has permission
       if (hasAnyRole(['admin', 'analyst'])) {
         try {
@@ -188,8 +188,8 @@ export default function SystemOverview() {
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
-              autoRefresh 
-                ? 'bg-green-500/10 text-green-500 border border-green-500/20' 
+              autoRefresh
+                ? 'bg-green-500/10 text-green-500 border border-green-500/20'
                 : 'text-primary-400 hover:text-primary-200 border border-dark-border'
             }`}
           >
@@ -275,16 +275,16 @@ export default function SystemOverview() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SimpleChart 
-          data={taskStatusData} 
-          type="bar" 
+        <SimpleChart
+          data={taskStatusData}
+          type="bar"
           title={t('dashboard.totalTasks')}
           height={200}
         />
 
-        <SimpleChart 
-          data={agentPerformanceData} 
-          type="bar" 
+        <SimpleChart
+          data={agentPerformanceData}
+          type="bar"
           title={t('system.avgLatency')}
           height={200}
         />

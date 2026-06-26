@@ -218,7 +218,7 @@ jobs:
         run: |
           echo "## 📊 Test Coverage Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # Backend coverage
           if [ -f coverage/backend/coverage.json ]; then
             BACKEND_COV=$(python3 -c "
@@ -232,7 +232,7 @@ jobs:
             echo "- Coverage: **${BACKEND_COV}%**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           # Frontend coverage
           if [ -f coverage/frontend/coverage-summary.json ]; then
             FRONTEND_COV=$(python3 -c "

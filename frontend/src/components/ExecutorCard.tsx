@@ -1,7 +1,7 @@
-import { 
-  Zap, 
-  CheckCircle, 
-  Clock, 
+import {
+  Zap,
+  CheckCircle,
+  Clock,
   AlertCircle,
   Loader2,
   Play
@@ -16,11 +16,11 @@ interface ExecutorCardProps {
   currentTask?: string
 }
 
-export default function ExecutorCard({ 
-  status, 
-  totalTasks = 0, 
-  completedTasks = 0, 
-  successTasks = 0, 
+export default function ExecutorCard({
+  status,
+  totalTasks = 0,
+  completedTasks = 0,
+  successTasks = 0,
   failedTasks = 0,
   currentTask
 }: ExecutorCardProps) {
@@ -119,9 +119,9 @@ export default function ExecutorCard({
             <span>{completedTasks}/{totalTasks}</span>
           </div>
           <div className="w-full bg-dark-border rounded-full h-2">
-            <div 
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
-              style={{ width: `${progress}%` }} 
+            <div
+              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
             />
           </div>
         </div>

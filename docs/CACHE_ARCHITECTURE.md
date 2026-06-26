@@ -130,16 +130,16 @@ POST /api/system/cache/clear
 class RedisTTLCache:
     def get(self, key: str) -> tuple[bool, Any]:
         ...
-    
+
     def set(self, key: str, value: Any, ttl: int = None) -> None:
         ...
-    
+
     def delete(self, key: str) -> bool:
         ...
-    
+
     def clear(self) -> int:
         ...
-    
+
     @property
     def stats(self) -> dict:
         ...

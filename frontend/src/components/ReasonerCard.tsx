@@ -1,7 +1,7 @@
-import { 
-  Lightbulb, 
-  CheckCircle, 
-  Clock, 
+import {
+  Lightbulb,
+  CheckCircle,
+  Clock,
   AlertCircle,
   Loader2,
   TrendingUp
@@ -14,11 +14,11 @@ interface ReasonerCardProps {
   reasoning?: string
 }
 
-export default function ReasonerCard({ 
-  status, 
-  confidence = 0, 
-  keyInsights = [], 
-  reasoning 
+export default function ReasonerCard({
+  status,
+  confidence = 0,
+  keyInsights = [],
+  reasoning
 }: ReasonerCardProps) {
   const getStatusIcon = () => {
     switch (status) {

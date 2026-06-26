@@ -62,7 +62,7 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
     // Add task nodes
     subtasks.forEach((subtask) => {
       const isSynthesize = subtask.tool === 'llm_synthesize'
-      
+
       nodes.push({
         id: subtask.id,
         type: isSynthesize ? 'synthesizerNode' : 'taskNode',
@@ -153,8 +153,8 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
       // Update edge style based on status
       const newEdges = prev.edges.map(edge => {
         if (edge.target === taskId || edge.source === taskId) {
-          const color = status === 'success' ? '#22c55e' : 
-                       status === 'running' ? '#3b82f6' : 
+          const color = status === 'success' ? '#22c55e' :
+                       status === 'running' ? '#3b82f6' :
                        status === 'failed' ? '#ef4444' : '#6b7280'
           return { ...edge, style: { ...edge.style, stroke: color } }
         }
@@ -205,7 +205,7 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
           if (event.task_id) {
             const status: TaskStatus = event.success ? 'success' : 'failed'
             updateNodeStatus(event.task_id, status, event.duration_ms, event.data, event.error)
-            
+
             newTaskResults.set(event.task_id, {
               task_id: event.task_id,
               tool: event.tool ?? 'unknown',
@@ -261,7 +261,7 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
         case 'complete':
           newState.status = 'completed'
           updateNodeStatus('report', 'success')
-          
+
           // Mark all remaining pending tasks as skipped
           prev.nodes.forEach(node => {
             if (node.data.status === 'pending') {
@@ -310,7 +310,7 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
 
     // Listen for specific events
     const eventTypes = ['connected', 'plan_ready', 'task_start', 'task_complete', 'stage_change', 'reasoning', 'reporting', 'complete', 'error']
-    
+
     eventTypes.forEach(eventType => {
       eventSource.addEventListener(eventType, (e: MessageEvent) => {
         try {
@@ -325,12 +325,12 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
     eventSource.onerror = (err) => {
       console.error('SSE error:', err)
       eventSource.close()
-      
+
       // Auto reconnect
       if (reconnectAttemptsRef.current < maxReconnectAttempts) {
         reconnectAttemptsRef.current++
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000)
-        
+
         reconnectTimeoutRef.current = setTimeout(() => {
           console.log(`Reconnecting SSE (attempt ${reconnectAttemptsRef.current})...`)
           connect(taskId, query)

@@ -1,7 +1,7 @@
 # Smart Finance Agent
 
 [![CI](https://github.com/irvy12321/smart-finance-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/irvy12321/smart-finance-agent/actions/workflows/ci.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Node.js 20+](https://img.shields.io/badge/node.js-20+-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -21,9 +21,9 @@
 
 ### 前置要求
 
-- **Python**: 3.8+
-- **Node.js**: 16+
-- **npm**: 8+
+- **Python**: 3.12+
+- **Node.js**: 20+
+- **npm**: 10+
 
 ### 一键启动（Windows）
 
@@ -645,13 +645,13 @@ npm run build
 
 ### 1. 后端启动失败
 
-- 检查 Python 版本 (3.8+)
+- 检查 Python 版本 (3.12+)
 - 检查依赖是否安装完整
 - 检查端口 8000 是否被占用
 
 ### 2. 前端启动失败
 
-- 检查 Node.js 版本 (16+)
+- 检查 Node.js 版本 (20+)
 - 删除 node_modules 重新安装
 - 检查端口 3000 是否被占用
 
@@ -665,9 +665,10 @@ npm run build
 
 1. Fork 项目
 2. 创建功能分支 (`git checkout -b feature/xxx`)
-3. 提交更改 (`git commit -m 'Add feature xxx'`)
-4. 推送到分支 (`git push origin feature/xxx`)
-5. 创建 Pull Request
+3. 安装 pre-commit 钩子 (`pip install pre-commit && pre-commit install`)，提交时自动运行 ruff 与基础检查
+4. 提交更改 (`git commit -m 'Add feature xxx'`)
+5. 推送到分支 (`git push origin feature/xxx`)
+6. 创建 Pull Request
 
 ## 许可证
 
@@ -675,5 +676,5 @@ MIT License
 
 ## 联系方式
 
-- 项目链接: https://github.com/yourusername/smart-finance-agent
-- 问题反馈: https://github.com/yourusername/smart-finance-agent/issues
+- 项目链接: https://github.com/irvy12321/smart-finance-agent
+- 问题反馈: https://github.com/irvy12321/smart-finance-agent/issues

@@ -1,7 +1,7 @@
-import { 
-  Brain, 
-  CheckCircle, 
-  Clock, 
+import {
+  Brain,
+  CheckCircle,
+  Clock,
   AlertCircle,
   Loader2
 } from 'lucide-react'
@@ -13,11 +13,11 @@ interface PlannerCardProps {
   confidence?: number
 }
 
-export default function PlannerCard({ 
-  status, 
-  planReasoning, 
-  subtaskCount = 0, 
-  confidence = 0 
+export default function PlannerCard({
+  status,
+  planReasoning,
+  subtaskCount = 0,
+  confidence = 0
 }: PlannerCardProps) {
   const getStatusIcon = () => {
     switch (status) {

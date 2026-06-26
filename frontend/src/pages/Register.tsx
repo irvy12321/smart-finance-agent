@@ -8,7 +8,7 @@ export default function Register() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { register } = useAuth()
-  
+
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -22,7 +22,7 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!username.trim() || !email.trim() || !password.trim()) {
       setError(t('auth.fillAllFields'))
       return
