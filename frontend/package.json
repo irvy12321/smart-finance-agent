@@ -13,7 +13,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@sentry/react": "^10.61.0",
+    "@sentry/react": "^10.62.0",
     "axios": "^1.6.0",
     "chart.js": "^4.5.1",
     "clsx": "^2.0.0",
