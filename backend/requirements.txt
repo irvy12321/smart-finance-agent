@@ -19,7 +19,7 @@ networkx>=3.6.1
 
 # Authentication dependencies
 pydantic[email]>=2.0.0
-PyJWT>=2.8.0
+PyJWT>=2.13.0
 bcrypt>=5.0.0
 
 # Testing dependencies
