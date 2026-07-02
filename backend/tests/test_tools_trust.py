@@ -12,6 +12,24 @@ from app.tools.stock_price_tool import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_real_api_keys(monkeypatch):
+    """Ensure no real API keys leak from .env into these trust/mock tests.
+
+    Tools use ``api_key = api_key or os.getenv(...)``, so passing ``api_key=""``
+    still falls back to a real key if one is set in the environment. Every test
+    in this file is about mock/fallback behaviour, so we delete the real keys
+    to make ``api_key=""`` truly mean "no key".
+    """
+    for key in (
+        "ALPHA_VANTAGE_API_KEY",
+        "FMP_API_KEY",
+        "NEWS_API_KEY",
+        "FINNHUB_API_KEY",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
 def test_parse_percent_handles_alpha_vantage_string():
     # Alpha Vantage returns change percent as e.g. "-0.4116%" (a string).
     assert _parse_percent("-0.4116%") == pytest.approx(-0.4116)

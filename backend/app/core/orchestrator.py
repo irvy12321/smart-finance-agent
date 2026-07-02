@@ -27,6 +27,7 @@ from app.core.planner import Plan, PlannerAgent, SubTask
 from app.core.reasoner import Reasoner, ReasoningResult
 from app.core.report_agent import ReportAgent, ResearchReport
 from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
+from app.infrastructure.otel import otel_span
 from app.infrastructure.smart_router import SmartRouter
 from app.monitoring.prometheus import (
     agent_calls_total,
@@ -46,6 +47,18 @@ from app.utils.logger import LogContext, get_logger
 from app.utils.tracing import PipelineTracker, TraceContext
 
 logger = get_logger("orchestrator")
+
+
+async def _persist_event(event: AgentEvent) -> None:
+    """EventBus 持久化订阅者: 所有事件写入 SQLite event_log 表"""
+    try:
+        from app import storage
+
+        storage.insert_event_log(
+            event.trace_id, event.event_type, event.agent_name, event.data
+        )
+    except Exception as e:
+        logger.warning(f"Failed to persist event {event.event_type}: {e}")
 
 
 @dataclass
@@ -73,8 +86,13 @@ class Orchestrator:
     Layer 3: Synthesizer → Reasoner → Report → Chart
     """
 
+    _event_persistence_attached: ClassVar[bool] = False
+
     def __init__(self, use_router: bool = True):
         self.event_bus = EventBus.get_instance()
+        if not Orchestrator._event_persistence_attached:
+            self.event_bus.subscribe("*", _persist_event)
+            Orchestrator._event_persistence_attached = True
         self.state_tracker = TaskStateTracker.get_instance()
 
         self.llm = LLMClient.get_instance()
@@ -174,7 +192,7 @@ class Orchestrator:
 
         # Layer 1: Planning (带容错)
         t0 = time.perf_counter()
-        with trace.span("planning"):
+        with trace.span("planning"), otel_span("orchestrator.planning"):
             await self._emit_stage(AgentStage.PLANNING)
             try:
                 plan = await self.planner.plan(query, route_decision=route)
@@ -193,7 +211,7 @@ class Orchestrator:
 
         # Layer 2: Execution (带容错)
         t0 = time.perf_counter()
-        with trace.span("execution"):
+        with trace.span("execution"), otel_span("orchestrator.execution"):
             await self._emit_stage(AgentStage.EXECUTING)
             try:
                 exec_result = await self.executor.execute(plan)
@@ -231,14 +249,17 @@ class Orchestrator:
         chart_paths = []
 
         t0 = time.perf_counter()
-        with trace.span("synthesizer"):
+        with trace.span("synthesizer"), otel_span("orchestrator.synthesizer"):
             # 3a: Reasoning (带容错)
             await self._emit_stage(AgentStage.REASONING)
             if exec_result.final_answer:
                 try:
-                    reasoning_result = await self.reasoner.reason(
-                        context=exec_result.final_answer,
+                    reasoning_result = await self.reasoner.reason_with_critique(
+                        context=self._build_reasoning_context(
+                            query, exec_result.final_answer
+                        ),
                         question=query,
+                        language=getattr(self, "_current_language", "en"),
                     )
                     agent_calls_total.labels(agent_name="reasoner").inc()
                 except Exception as e:
@@ -370,7 +391,7 @@ class Orchestrator:
             route_model_token = self.router.set_route_model(route.selected_model)
 
         # Layer 1: Planning (带容错)
-        with trace.span("planning"):
+        with trace.span("planning"), otel_span("orchestrator.planning"):
             try:
                 plan = await self.planner.plan(query, route_decision=route)
             except Exception as e:
@@ -445,7 +466,7 @@ class Orchestrator:
         # Set executor language
         self.executor._current_language = getattr(self, "_current_language", "en")
 
-        with trace.span("execution"):
+        with trace.span("execution"), otel_span("orchestrator.execution"):
             try:
                 exec_result = await self.executor.execute(plan)
             except Exception as e:
@@ -484,8 +505,10 @@ class Orchestrator:
         reasoning_result = None
         if exec_result.final_answer:
             try:
-                reasoning_result = await self.reasoner.reason(
-                    context=exec_result.final_answer,
+                reasoning_result = await self.reasoner.reason_with_critique(
+                    context=self._build_reasoning_context(
+                        query, exec_result.final_answer
+                    ),
                     question=query,
                     language=getattr(self, "_current_language", "en"),
                 )
@@ -620,6 +643,21 @@ class Orchestrator:
 
     def get_memory_context(self, query: str) -> str:
         return self.memory.get_combined_context(query)
+
+    def _build_reasoning_context(self, query: str, tool_answer: str) -> str:
+        """工具结果 + 长期记忆召回, 拼接为 Reasoner 上下文。记忆失败不影响主流程。"""
+        try:
+            recalled = self.memory.retrieve_long_term(query, top_k=3)
+            if not recalled:
+                return tool_answer
+            memory_ctx = "\n---\n".join(r["text"] for r in recalled)
+        except Exception as e:
+            logger.warning(f"Long-term memory recall failed: {e}")
+            return tool_answer
+        return (
+            f"=== Prior research memory (may be stale; prefer current data) ===\n"
+            f"{memory_ctx}\n\n=== Current tool results ===\n{tool_answer}"
+        )
 
     # Max confidence for a report produced without any external data.
     _FALLBACK_MAX_CONFIDENCE = 0.2

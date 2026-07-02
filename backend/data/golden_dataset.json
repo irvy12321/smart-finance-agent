@@ -1,0 +1,95 @@
+{
+  "_comment": "Golden dataset for end-to-end Agent evaluation. Numbers are anchored to MOCK_STOCK_DATA so groundedness checks pass under mock mode. Extend freely — EvalRunner reads this file at runtime, no code changes needed.",
+  "cases": [
+    {
+      "description": "Simple single-stock price lookup. Expects stock_price tool and the AAPL mock price 182.52 in the answer.",
+      "query": "What is Apple's current stock price?",
+      "expected_tools": ["stock_price"],
+      "expected_data_fields": ["price"],
+      "expected_answer_numbers": [182.52],
+      "forbidden_numbers": [999.99, 0.0],
+      "category": "simple"
+    },
+    {
+      "description": "Simple single-stock price lookup for Tesla.",
+      "query": "Show me Tesla's stock price.",
+      "expected_tools": ["stock_price"],
+      "expected_data_fields": ["price"],
+      "expected_answer_numbers": [248.42],
+      "forbidden_numbers": [999.99],
+      "category": "simple"
+    },
+    {
+      "description": "Simple news search — no specific numbers expected, just tool selection.",
+      "query": "Latest news about Microsoft.",
+      "expected_tools": ["news_search"],
+      "expected_data_fields": [],
+      "expected_answer_numbers": [],
+      "forbidden_numbers": [],
+      "category": "simple"
+    },
+    {
+      "description": "Standard: price + financial report for Apple. Expects both tools and AAPL PE ratio 28.5.",
+      "query": "Analyze Apple stock fundamentals and price.",
+      "expected_tools": ["stock_price", "financial_report"],
+      "expected_data_fields": ["price", "pe_ratio"],
+      "expected_answer_numbers": [182.52, 28.5],
+      "forbidden_numbers": [999.99],
+      "category": "standard"
+    },
+    {
+      "description": "Standard: Tesla price + news + sentiment. TSLA price 248.42, change_percent -1.26.",
+      "query": "Tesla stock price and recent news sentiment.",
+      "expected_tools": ["stock_price", "news_summary"],
+      "expected_data_fields": ["price", "change_percent"],
+      "expected_answer_numbers": [248.42, -1.26],
+      "forbidden_numbers": [999.99],
+      "category": "standard"
+    },
+    {
+      "description": "Standard: Google financial report. GOOGL PE 24.8.",
+      "query": "Google financial report summary.",
+      "expected_tools": ["financial_report"],
+      "expected_data_fields": ["pe_ratio"],
+      "expected_answer_numbers": [24.8],
+      "forbidden_numbers": [999.99],
+      "category": "standard"
+    },
+    {
+      "description": "Standard: single-stock research pipeline (price + history + financial + news).",
+      "query": "Give me a full research report on NVIDIA.",
+      "expected_tools": ["stock_research"],
+      "expected_data_fields": ["price"],
+      "expected_answer_numbers": [875.28],
+      "forbidden_numbers": [999.99],
+      "category": "standard"
+    },
+    {
+      "description": "Detailed: Apple price + financial + news + analysis. Multiple numbers grounded in mock data.",
+      "query": "Comprehensive Apple analysis: price, financials, news, and SWOT.",
+      "expected_tools": ["stock_price", "financial_report", "news_summary", "financial_analysis"],
+      "expected_data_fields": ["price", "pe_ratio"],
+      "expected_answer_numbers": [182.52, 28.5],
+      "forbidden_numbers": [999.99, 0.0],
+      "category": "detailed"
+    },
+    {
+      "description": "Detailed: Tesla deep dive with financial analysis. TSLA PE 62.3.",
+      "query": "Deep dive Tesla: price, financials, news sentiment, and SWOT analysis.",
+      "expected_tools": ["stock_price", "financial_report", "financial_analysis"],
+      "expected_data_fields": ["price", "pe_ratio"],
+      "expected_answer_numbers": [248.42, 62.3],
+      "forbidden_numbers": [999.99],
+      "category": "detailed"
+    },
+    {
+      "description": "Detailed: cross-stock comparison. Groundedness checks for both AAPL and MSFT prices.",
+      "query": "Compare Apple and Microsoft stock prices and fundamentals.",
+      "expected_tools": ["stock_price", "financial_report"],
+      "expected_data_fields": ["price"],
+      "expected_answer_numbers": [182.52, 378.91],
+      "forbidden_numbers": [999.99],
+      "category": "detailed"
+    }
+  ]
+}

@@ -219,6 +219,24 @@ class RAGConfig(BaseSettings):
     chunk_overlap: int = 50
     embedding_dim: int = 384
     top_k: int = 5
+    # Reranker (Cross-Encoder 精排). 默认关闭——需安装 sentence-transformers.
+    reranker_enabled: bool = False
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # Query rewrite (LLM 多路改写 + HyDE). 默认关闭——需 LLM 可用.
+    query_rewrite_enabled: bool = False
+    query_rewrite_num_variants: int = 3
+    hyde_enabled: bool = False
+
+
+class MemoryConfig(BaseSettings):
+    # 短期记忆滑动窗口 (轮数); 溢出部分折叠进滚动摘要
+    short_term_max_turns: int = 10
+    summary_max_chars: int = 1000
+    # 长期记忆 (FAISS 向量存储, 独立于 RAG 知识库)
+    long_term_enabled: bool = True
+    long_term_top_k: int = 3
+    # 用户画像 (SQLite user_profiles 表, 确定性规则提取)
+    user_profile_enabled: bool = True
 
 
 _CONFIG_DIR = Path(__file__).parent
@@ -269,6 +287,12 @@ def get_rag_config() -> RAGConfig:
         k: v for k, v in overrides.items() if k != "embedding" and k in valid_fields
     }
     return RAGConfig(**rag_overrides)
+
+
+def get_memory_config() -> MemoryConfig:
+    overrides = _load_yaml("config_memory.yaml")
+    valid_fields = set(MemoryConfig.model_fields.keys())
+    return MemoryConfig(**{k: v for k, v in overrides.items() if k in valid_fields})
 
 
 def get_smart_router_config() -> SmartRouterConfig:

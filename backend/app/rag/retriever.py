@@ -1,6 +1,7 @@
 from app.infrastructure.config import get_rag_config
 from app.rag.chunker import chunk_text
 from app.rag.embed import BaseEmbedder, create_embedder
+from app.rag.reranker import create_reranker
 from app.rag.vector_store import VectorStore
 from app.utils.logger import get_logger
 
@@ -113,8 +114,14 @@ class Retriever:
         )
         self.store.load()
         self.top_k = config.top_k
+        # Reranker (Cross-Encoder 精排). 加载失败自动降级到 NoOpReranker.
+        self.reranker = create_reranker()
+        self._query_rewrite_enabled = getattr(config, "query_rewrite_enabled", False)
+        self._hyde_enabled = getattr(config, "hyde_enabled", False)
         logger.info(
-            f"Retriever initialized: dim={self.embedder.dim}, top_k={self.top_k}, persist_dir={persist_dir}, loaded={self.store.size} vectors"
+            f"Retriever initialized: dim={self.embedder.dim}, top_k={self.top_k}, "
+            f"persist_dir={persist_dir}, loaded={self.store.size} vectors, "
+            f"reranker={type(self.reranker).__name__}"
         )
 
     def add_document(self, text: str, metadata: dict | None = None):
@@ -162,8 +169,51 @@ class Retriever:
         results.sort(key=lambda x: x.get("score", 0), reverse=True)
         results = results[:k]
 
+        # Reranker 精排（若启用且可用）. NoOpReranker 直接原样返回.
+        if results and self.reranker.is_available:
+            try:
+                results = self.reranker.rerank(query, results, top_k=k)
+            except Exception as e:
+                logger.warning(
+                    f"rerank failed ({type(e).__name__}: {e}); "
+                    f"returning score-sorted results"
+                )
+
         logger.info(f"Retrieved {len(results)} results for query: {query[:50]}...")
         return results
+
+    async def retrieve_with_rewrite(
+        self,
+        query: str,
+        top_k: int | None = None,
+        llm_client=None,
+    ) -> list[dict]:
+        """多路改写检索 + HyDE + reranker 精排.
+
+        需要传入一个有 ``async complete(prompt, system=...) -> str`` 接口的
+        LLM 客户端. 若 query_rewrite_enabled=False 或 llm_client 为 None,
+        降级为同步 retrieve().
+
+        流程见 app.rag.query_rewriter.multi_query_retrieve.
+        """
+        k = top_k or self.top_k
+
+        if not self._query_rewrite_enabled or llm_client is None:
+            return self.retrieve(query, top_k=k)
+
+        from app.rag.query_rewriter import QueryRewriter, multi_query_retrieve
+
+        config = get_rag_config()
+        num_variants = getattr(config, "query_rewrite_num_variants", 3)
+        rewriter = QueryRewriter(llm_client, num_variants=num_variants)
+        return await multi_query_retrieve(
+            query,
+            retriever=self,
+            rewriter=rewriter,
+            top_k=k,
+            use_hyde=self._hyde_enabled,
+            reranker=self.reranker,
+        )
 
     @property
     def doc_count(self) -> int:

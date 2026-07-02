@@ -11,13 +11,16 @@
 
 ## 功能特性
 
-- **Multi-Agent 架构**: Planner → Executor → Reasoner 协同工作
-- **RAG 支持**: 基于 FAISS 的向量检索增强生成
+- **Multi-Agent 架构**: Planner → Executor → Reasoner 协同工作，Reasoner 内置 Self-Critique 自我批评循环（低置信度触发 critique→refine，失败自动降级）
+- **RAG 支持**: 基于 FAISS 的向量检索增强生成，含查询多路改写 / HyDE、Cross-Encoder 精排（失败自动降级）与语义切块
+- **三层记忆**: 短期滑动窗口+滚动摘要、长期 FAISS 向量记忆（与知识库隔离）、用户画像（规则提取，不调 LLM）
+- **Prompt / Context 工程**: Agent prompt 全部 YAML 模板化（Jinja2，缺失降级内置常量）；对话历史确定性压缩；输入/输出双向 token 预算
+- **评估体系**: golden dataset + EvalRunner 端到端输出质量评估（含防幻觉数字校验），全确定性计算
 - **金融工具**: 股票价格查询、财务报告分析、新闻摘要
 - **实时聊天**: AI 金融助手对话界面
 - **报告生成**: 自动生成结构化金融分析报告
 - **数据可视化**: 图表展示和数据可视化
-- **系统监控**: 实时系统状态和性能指标
+- **系统监控**: Prometheus 指标 + LLM 调用脱敏日志/全量事件持久化 SQLite + OpenTelemetry 链路追踪（开关式，默认 no-op）
 
 ## 快速开始
 
@@ -141,15 +144,21 @@ smart-finance-agent/
 │   │   │   ├── tools.py       # 工具调用 API
 │   │   │   └── chat.py        # 聊天 API (支持 orchestrator 全流水线)
 │   │   ├── core/              # 核心业务逻辑
-│   │   │   ├── orchestrator.py # 3-Layer 编排器
-│   │   │   ├── planner.py     # 规划器 Agent
+│   │   │   ├── orchestrator.py # 3-Layer 编排器（长期记忆召回 + 事件持久化 + OTel span）
+│   │   │   ├── planner.py     # 规划器 Agent（prompt 模板化）
 │   │   │   ├── executor.py    # 执行器 Agent
-│   │   │   └── reasoner.py    # 推理器 Agent
-│   │   ├── rag/               # RAG 模块
+│   │   │   ├── reasoner.py    # 推理器 Agent（Self-Critique 循环）
+│   │   │   ├── evaluation.py  # 端到端评估（golden set + 4 指标）
+│   │   │   ├── memory.py      # 长期记忆（独立 FAISS）+ 用户画像
+│   │   │   ├── prompt_manager.py  # YAML prompt 模板加载（Jinja2 + 降级）
+│   │   │   ├── context_manager.py # 对话历史压缩
+│   │   │   └── llm_call_logger.py # LLM 调用脱敏日志 → SQLite
+│   │   ├── rag/               # RAG 模块（含 reranker / query_rewriter / 语义切块）
 │   │   ├── tools/             # 工具模块
-│   │   ├── infrastructure/    # 基础设施 (LLM 客户端、配置)
+│   │   ├── infrastructure/    # 基础设施 (LLM 客户端、配置、otel.py)
 │   │   └── utils/             # 工具函数
-│   ├── data/                  # SQLite 数据
+│   ├── prompts/               # Agent prompt 模板 (planner/reasoner/report.yaml)
+│   ├── data/                  # SQLite 数据 + golden_dataset.json + memory/（长期记忆）
 │   └── requirements.txt       # Python 依赖
 │
 ├── frontend/                   # React 前端 (唯一前端)
@@ -515,6 +524,39 @@ python scripts/rag_eval.py
 | semantic | 1.000 / 0.944 | 1.000 / 0.906 |
 
 结论：BM25 相对 hash 基线在 Recall@5 上 +0.376、MRR +0.443；语义向量再把改写型查询的 Recall@5 从 0.957 提到 1.000，验证了「词法 → 语义」升级路径的实际收益。指标计算正确性与「BM25 > hash」基线由 `backend/tests/test_rag_eval.py` 守护（确定性、不依赖 torch，纳入 CI）。
+
+### 检索管线增强（查询改写 / 精排 / 语义切块）
+
+在混合检索基础上，检索管线扩展为「**查询改写 → 混合检索 → Cross-Encoder 精排**」：
+
+- **查询改写**（`backend/app/rag/query_rewriter.py`）：LLM 生成多个查询变体做多路检索合并去重；另支持 HyDE（先生成假设文档再用其向量检索）。LLM 不可用时降级单路。
+- **精排**（`backend/app/rag/reranker.py`）：`cross-encoder/ms-marco-MiniLM-L-6-v2` 对候选文档精排；模型加载失败自动降级 `NoOpReranker`，绝不影响主流程。开关见 `RAGConfig.reranker_enabled`。
+- **语义切块**（`chunker.py` 的 `semantic_chunk`）：按相邻段落 embedding 相似度在语义跳变处断开；无 embedder 时降级 size-based 切块。
+
+## Agent 输出质量评估 (Agent Evaluation)
+
+`backend/app/core/evaluation.py` + `backend/data/golden_dataset.json`（10 个 case：simple 3 / standard 4 / detailed 3）提供端到端输出质量评估，直调 `orchestrator.run()`，对业务代码零侵入：
+
+- 指标：`task_success_rate`、`tool_accuracy`、`retrieval_recall@k`、`answer_groundedness`（回答必须包含 expected 数字、不得出现 forbidden 数字——防幻觉校验）
+- 全部为**确定性 Python 计算**，不用 LLM-as-judge，可复现、可进回归
+- 验证数据集与导入：`python -m app.core.evaluation --dry-run`
+
+## 记忆系统 (Memory)
+
+三层记忆（配置见 `MemoryConfig`，`config_memory.yaml` 可覆盖）：
+
+1. **短期**（`rag/memory.py`）：滑动窗口 + 滚动摘要——超窗旧消息折叠进摘要，不直接丢弃
+2. **长期**（`core/memory.py`）：FAISS 向量记忆，持久化到 `data/memory/vector_store`（与 RAG 知识库物理隔离）；orchestrator 推理前语义召回注入上下文，报告完成后归档
+3. **用户画像**：确定性规则提取（ticker 正则 + 主题关键词，不调 LLM），存 SQLite `user_profiles` 表，注入直接对话 system prompt
+
+所有记忆操作失败只记 warning，不影响主流水线。
+
+## 可观测性 (Observability)
+
+- **Prometheus 指标** + 内存指标（原有）
+- **LLM 调用日志**（`core/llm_call_logger.py`）：每次 LLM 调用 prompt/response 脱敏（API key / Bearer token）+ 截断后写 SQLite `llm_call_logs` 表，成功失败都记，带 trace_id；开关 `LLM_CALL_LOG_ENABLED`
+- **事件持久化**：EventBus 全量事件写 `event_log` 表，可按 trace_id 回放整条执行链
+- **OpenTelemetry**（`infrastructure/otel.py`）：LLM 调用与四个 Agent 主方法均有 span；`OTEL_ENABLED=true` 才启用，未开启或未装 SDK 时全部 no-op
 
 ## CI/CD
 

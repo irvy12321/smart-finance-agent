@@ -8,7 +8,9 @@ import re
 from dataclasses import dataclass, field
 
 from app.core.agent_status import AgentEvent, EventBus
+from app.core.prompt_manager import get_prompt
 from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
+from app.infrastructure.otel import traced
 from app.utils.logger import get_logger
 
 logger = get_logger("reasoner")
@@ -97,6 +99,96 @@ CRITICAL RULES:
 - You MUST reply in English"""
 
 
+# ── Self-Critique prompts ──────────────────────────────────────────────────
+
+CRITIQUE_SYSTEM_ZH = """你是一个批判性审查引擎。你将看到一段金融推理结果、原始上下文和问题。
+你的任务是找出推理中的缺陷。
+
+只输出有效的JSON：
+{
+  "issues": ["具体问题描述1", "具体问题描述2"],
+  "missing_angles": ["遗漏的重要分析角度1", "遗漏的重要分析角度2"],
+  "severity": "high"
+}
+
+severity 取值规则：
+- "high": 存在无数据支撑的结论，或编造了上下文中没有的数字
+- "medium": 推理有遗漏但无事实错误
+- "low": 推理质量良好，无需修正
+
+关键规则：
+- 只根据上下文判断，不要引入外部知识
+- 如果推理中出现了上下文没有的数字，severity 必须为 "high"
+- 如果没有发现问题，返回空数组和 "low"
+- 必须使用中文回复"""
+
+CRITIQUE_SYSTEM_EN = """You are a critical review engine. You will see a financial reasoning result, the original context, and the question.
+Your task is to find flaws in the reasoning.
+
+Output ONLY valid JSON:
+{
+  "issues": ["specific issue description 1", "specific issue description 2"],
+  "missing_angles": ["missing analysis angle 1", "missing analysis angle 2"],
+  "severity": "high"
+}
+
+severity rules:
+- "high": there are conclusions without data support, or numbers fabricated that don't appear in context
+- "medium": reasoning has omissions but no factual errors
+- "low": reasoning quality is good, no correction needed
+
+CRITICAL RULES:
+- Judge only based on the context, do not introduce external knowledge
+- If the reasoning contains numbers not in the context, severity MUST be "high"
+- If no issues found, return empty arrays and "low"
+- You MUST reply in English"""
+
+
+# ── Refine prompts ──────────────────────────────────────────────────────────
+
+REFINE_SYSTEM_ZH = """你是一个推理修正引擎。你将看到原始推理、批评意见、上下文和问题。
+请根据批评意见修正推理，输出修正后的完整推理结果。
+
+只输出有效的JSON：
+{
+  "reasoning": "修正后的逐步分析",
+  "key_insights": ["修正后的洞察1", "修正后的洞察2"],
+  "confidence": 0.8,
+  "critique": "已修正的问题说明",
+  "charts": [
+    {"chart_type":"bar","title":"标题","x_label":"X","y_label":"Y","data":[{"label":"A","value":100}]}
+  ]
+}
+
+关键规则：
+- 禁止编造、估算或生成任何数值。只能使用上下文中原样出现的数字。
+- 必须解决批评中指出的每一个 issue
+- 如果批评指出某个数字无来源，必须删除该数字
+- charts 字段为可选，无足够数据时返回空数组
+- 必须使用中文回复"""
+
+REFINE_SYSTEM_EN = """You are a reasoning refinement engine. You will see the original reasoning, critique, context, and question.
+Please refine the reasoning based on the critique and output the corrected full reasoning result.
+
+Output ONLY valid JSON:
+{
+  "reasoning": "refined step-by-step analysis",
+  "key_insights": ["refined insight 1", "refined insight 2"],
+  "confidence": 0.8,
+  "critique": "description of corrections made",
+  "charts": [
+    {"chart_type":"bar","title":"Title","x_label":"X","y_label":"Y","data":[{"label":"A","value":100}]}
+  ]
+}
+
+CRITICAL RULES:
+- NEVER invent, estimate, or generate numeric values. Only use numbers that appear verbatim in the provided context.
+- You MUST address every issue raised in the critique
+- If the critique flags a number as unsupported, you MUST remove that number
+- charts array is OPTIONAL, return empty array if insufficient data
+- You MUST reply in English"""
+
+
 class Reasoner:
     def __init__(
         self, llm_client: LLMClient | None = None, router: LiteLLMRouter | None = None
@@ -105,6 +197,7 @@ class Reasoner:
         self.llm = llm_client or LLMClient.get_instance()
         self.event_bus = EventBus.get_instance()
 
+    @traced("reasoner.reason")
     async def reason(
         self, context: str, question: str, language: str = "en"
     ) -> ReasoningResult:
@@ -125,7 +218,11 @@ class Reasoner:
         )
 
         # Select system prompt based on language
-        system_prompt = REASONER_SYSTEM_ZH if language == "zh" else REASONER_SYSTEM_EN
+        system_prompt = get_prompt(
+            "reasoner",
+            f"system_{language}" if language in ("zh", "en") else "system_en",
+            default=REASONER_SYSTEM_ZH if language == "zh" else REASONER_SYSTEM_EN,
+        )
 
         try:
             if self.router:
@@ -248,8 +345,224 @@ class Reasoner:
             chart_specs=chart_specs,
         )
 
+    # ── Self-Critique Loop ───────────────────────────────────────────────
+
+    _CRITIQUE_CONFIDENCE_THRESHOLD = 0.6
+
+    @traced("reasoner.reason_with_critique")
+    async def reason_with_critique(
+        self,
+        context: str,
+        question: str,
+        language: str = "en",
+        critique_rounds: int = 1,
+    ) -> ReasoningResult:
+        """reason() + self-critique loop.
+
+        1. Generate initial reasoning via ``reason()``.
+        2. If confidence < threshold, run ``_self_critique()``.
+        3. If critique severity is high/medium, run ``_refine()``.
+        4. Return refined result (or original if no issues found).
+        """
+        result = await self.reason(context, question, language)
+
+        if critique_rounds <= 0:
+            return result
+
+        # Only critique if confidence is below threshold
+        if result.confidence >= self._CRITIQUE_CONFIDENCE_THRESHOLD:
+            logger.info(
+                f"Skipping self-critique: confidence={result.confidence:.1%} "
+                f">= threshold {self._CRITIQUE_CONFIDENCE_THRESHOLD}"
+            )
+            return result
+
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="reasoning_critique_start",
+                agent_name="reasoner",
+                data={"confidence": result.confidence},
+            )
+        )
+
+        try:
+            critique_result = await self._self_critique(
+                result, context, question, language
+            )
+        except Exception as e:
+            logger.warning(f"Self-critique failed, returning original: {e}")
+            return result
+
+        severity = critique_result.get("severity", "low")
+        issues = critique_result.get("issues", [])
+
+        if severity == "low" or not issues:
+            logger.info(
+                f"Self-critique: no issues (severity={severity}), keeping original"
+            )
+            await self.event_bus.emit(
+                AgentEvent(
+                    event_type="reasoning_critique_complete",
+                    agent_name="reasoner",
+                    data={"severity": severity, "refined": False},
+                )
+            )
+            return result
+
+        logger.info(
+            f"Self-critique found {len(issues)} issues (severity={severity}), refining..."
+        )
+
+        try:
+            refined = await self._refine(
+                result, critique_result, context, question, language
+            )
+            await self.event_bus.emit(
+                AgentEvent(
+                    event_type="reasoning_critique_complete",
+                    agent_name="reasoner",
+                    data={
+                        "severity": severity,
+                        "refined": True,
+                        "issues_count": len(issues),
+                        "original_confidence": result.confidence,
+                        "refined_confidence": refined.confidence,
+                    },
+                )
+            )
+            return refined
+        except Exception as e:
+            logger.warning(f"Refine failed, returning original: {e}")
+            return result
+
+    async def _self_critique(
+        self,
+        result: ReasoningResult,
+        context: str,
+        question: str,
+        language: str = "en",
+    ) -> dict:
+        """Run LLM critique on the reasoning result. Returns structured critique dict."""
+        system_prompt = get_prompt(
+            "reasoner",
+            f"critique_{language}" if language in ("zh", "en") else "critique_en",
+            default=CRITIQUE_SYSTEM_ZH if language == "zh" else CRITIQUE_SYSTEM_EN,
+        )
+
+        prompt = (
+            f"## Context\n{context}\n\n"
+            f"## Question\n{question}\n\n"
+            f"## Reasoning Result\n"
+            f"Reasoning: {result.reasoning}\n"
+            f"Key Insights: {json.dumps(result.key_insights, ensure_ascii=False)}\n"
+            f"Confidence: {result.confidence}\n"
+            f"Critique: {result.critique}\n\n"
+            f"Review this reasoning for flaws."
+        )
+
+        if self.router:
+            response = await self.router.complete(
+                "reasoner",
+                prompt=prompt,
+                system=system_prompt,
+                max_tokens=800,
+            )
+        else:
+            response = await self.llm.complete(
+                prompt=prompt,
+                system=system_prompt,
+                temperature=0.3,
+                max_tokens=800,
+            )
+
+        if not response:
+            return {"issues": [], "missing_angles": [], "severity": "low"}
+
+        return self._parse_critique_response(response)
+
+    def _parse_critique_response(self, response: str) -> dict:
+        """Parse the critique LLM response into a structured dict."""
+        text = response.strip()
+        if "```" in text:
+            lines = text.split("\n")
+            lines = [line for line in lines if not line.strip().startswith("```")]
+            text = "\n".join(lines).strip()
+
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start >= 0 and end > start:
+            text = text[start:end]
+
+        text = re.sub(r",\s*([}\]])", r"\1", text)
+
+        try:
+            data = json.loads(text)
+            return {
+                "issues": data.get("issues", []),
+                "missing_angles": data.get("missing_angles", []),
+                "severity": data.get("severity", "low"),
+            }
+        except json.JSONDecodeError as e:
+            logger.warning(f"Critique JSON parse failed: {e}")
+            return {"issues": [], "missing_angles": [], "severity": "low"}
+
+    async def _refine(
+        self,
+        original: ReasoningResult,
+        critique: dict,
+        context: str,
+        question: str,
+        language: str = "en",
+    ) -> ReasoningResult:
+        """Refine the reasoning based on critique. Returns a new ReasoningResult."""
+        system_prompt = get_prompt(
+            "reasoner",
+            f"refine_{language}" if language in ("zh", "en") else "refine_en",
+            default=REFINE_SYSTEM_ZH if language == "zh" else REFINE_SYSTEM_EN,
+        )
+
+        critique_text = json.dumps(critique, ensure_ascii=False, indent=2)
+
+        prompt = (
+            f"## Context\n{context}\n\n"
+            f"## Question\n{question}\n\n"
+            f"## Original Reasoning\n"
+            f"Reasoning: {original.reasoning}\n"
+            f"Key Insights: {json.dumps(original.key_insights, ensure_ascii=False)}\n"
+            f"Confidence: {original.confidence}\n\n"
+            f"## Critique\n{critique_text}\n\n"
+            f"Refine the reasoning addressing all issues. Output the complete refined result."
+        )
+
+        if self.router:
+            response = await self.router.complete(
+                "reasoner",
+                prompt=prompt,
+                system=system_prompt,
+                max_tokens=1500,
+            )
+        else:
+            response = await self.llm.complete(
+                prompt=prompt,
+                system=system_prompt,
+                temperature=0.4,
+                max_tokens=1500,
+            )
+
+        if not response:
+            logger.warning("Empty response from refine, returning original")
+            return original
+
+        refined = self._parse_response(response)
+        logger.info(
+            f"Refined: confidence {original.confidence:.1%} -> {refined.confidence:.1%}"
+        )
+        return refined
+
+    # ── Legacy critique method (kept for backward compatibility) ──────────
+
     async def critique(self, answer: str, question: str) -> str:
-        """对已有答案进行批判性分析"""
+        """对已有答案进行批判性分析（legacy, returns plain string）"""
         prompt = (
             f"Question: {question}\n\nAnswer: {answer}\n\n"
             "Critique this answer. Strengths? Weaknesses? How to improve?"

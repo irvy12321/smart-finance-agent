@@ -14,6 +14,7 @@ from app.core.agent_status import (
 from app.core.fallback_manager import FallbackManager
 from app.core.planner import Plan, SubTask
 from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
+from app.infrastructure.otel import traced
 from app.monitoring.prometheus import (
     tool_call_duration_seconds,
     tool_calls_total,
@@ -93,6 +94,7 @@ class ExecutorAgent:
         )
         self._current_language = "en"
 
+    @traced("executor.execute")
     async def execute(self, plan: Plan) -> ExecutionResult:
         trace = TraceContext()
         result = ExecutionResult(plan=plan)

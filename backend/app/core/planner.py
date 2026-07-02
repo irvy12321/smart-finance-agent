@@ -3,7 +3,9 @@ import re
 from dataclasses import dataclass, field
 from typing import ClassVar
 
+from app.core.prompt_manager import get_prompt
 from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
+from app.infrastructure.otel import traced
 from app.infrastructure.smart_router import RouteDecision
 from app.utils.exceptions import PlannerError
 from app.utils.logger import get_logger
@@ -182,6 +184,7 @@ class PlannerAgent:
                 sanitized = regex.sub("", sanitized)
         return sanitized[:2000]
 
+    @traced("planner.plan")
     async def plan(
         self, query: str, route_decision: RouteDecision | None = None
     ) -> Plan:
@@ -247,8 +250,8 @@ class PlannerAgent:
     def _build_enhanced_system(
         self, route_decision: RouteDecision | None = None
     ) -> str:
-        """构建增强 system prompt (动态注入工具可用性 + plan size hint)"""
-        parts = [PLANNER_SYSTEM]
+        """构建增强 system prompt (模板加载, 动态注入工具可用性 + plan size hint)"""
+        parts = [get_prompt("planner", "system", default=PLANNER_SYSTEM)]
 
         if route_decision:
             # 注入工具可靠性信息

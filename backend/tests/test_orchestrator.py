@@ -159,6 +159,7 @@ async def test_orchestrator_run_pipeline():
 
     mock_reasoner = MagicMock()
     mock_reasoner.reason = AsyncMock(return_value=reasoning_result)
+    mock_reasoner.reason_with_critique = AsyncMock(return_value=reasoning_result)
 
     mock_report_agent = MagicMock()
     mock_report_agent.generate = AsyncMock(return_value=report)

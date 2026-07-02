@@ -141,6 +141,39 @@ def init_db() -> None:
                 UNIQUE(username)
             );
             CREATE INDEX IF NOT EXISTS idx_login_attempts_username ON login_attempts(username);
+
+            CREATE TABLE IF NOT EXISTS llm_call_logs (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_id          TEXT DEFAULT '',
+                agent_name        TEXT NOT NULL,
+                model             TEXT NOT NULL,
+                prompt            TEXT DEFAULT '',
+                response          TEXT DEFAULT '',
+                prompt_tokens     INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
+                total_tokens      INTEGER DEFAULT 0,
+                latency_ms        REAL DEFAULT 0,
+                status            TEXT DEFAULT 'ok',
+                error             TEXT DEFAULT '',
+                created_at        TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_llm_call_logs_trace ON llm_call_logs(trace_id);
+
+            CREATE TABLE IF NOT EXISTS event_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_id    TEXT DEFAULT '',
+                event_type  TEXT NOT NULL,
+                agent_name  TEXT NOT NULL,
+                data_json   TEXT DEFAULT '{}',
+                created_at  TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_event_log_trace ON event_log(trace_id);
+
+            CREATE TABLE IF NOT EXISTS user_profiles (
+                user_id      INTEGER PRIMARY KEY,
+                profile_json TEXT NOT NULL DEFAULT '{}',
+                updated_at   TEXT NOT NULL
+            );
         """)
 
         # Migrate existing tables: add user_id column if missing
@@ -492,5 +525,148 @@ def list_tasks(user_id: int | None = None) -> list[dict[str, Any]]:
                 "SELECT task_id, query, status, created_at, updated_at FROM tasks ORDER BY created_at DESC"
             ).fetchall()
         return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+# ── Memory: user profiles ──────────────────────────────
+
+
+def get_user_profile(user_id: int) -> dict[str, Any] | None:
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT profile_json FROM user_profiles WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row["profile_json"] or "{}")
+    finally:
+        conn.close()
+
+
+def upsert_user_profile(user_id: int, profile: dict[str, Any]) -> None:
+    conn = _get_connection()
+    try:
+        conn.execute(
+            """INSERT INTO user_profiles (user_id, profile_json, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(user_id) DO UPDATE SET
+                 profile_json = excluded.profile_json,
+                 updated_at = excluded.updated_at""",
+            (
+                user_id,
+                json.dumps(profile, ensure_ascii=False, default=str),
+                datetime.now().isoformat(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ── Observability: LLM call logs + event log ──────────────
+
+
+def insert_llm_call_log(
+    trace_id: str,
+    agent_name: str,
+    model: str,
+    prompt: str,
+    response: str,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    latency_ms: float = 0.0,
+    status: str = "ok",
+    error: str = "",
+) -> None:
+    conn = _get_connection()
+    try:
+        conn.execute(
+            """INSERT INTO llm_call_logs
+               (trace_id, agent_name, model, prompt, response,
+                prompt_tokens, completion_tokens, total_tokens,
+                latency_ms, status, error, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                trace_id,
+                agent_name,
+                model,
+                prompt,
+                response,
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+                latency_ms,
+                status,
+                error,
+                datetime.now().isoformat(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_llm_call_logs(
+    trace_id: str | None = None, limit: int = 100
+) -> list[dict[str, Any]]:
+    conn = _get_connection()
+    try:
+        if trace_id:
+            rows = conn.execute(
+                "SELECT * FROM llm_call_logs WHERE trace_id = ? ORDER BY id DESC LIMIT ?",
+                (trace_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM llm_call_logs ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def insert_event_log(
+    trace_id: str, event_type: str, agent_name: str, data: dict[str, Any]
+) -> None:
+    conn = _get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO event_log (trace_id, event_type, agent_name, data_json, created_at) VALUES (?, ?, ?, ?, ?)",
+            (
+                trace_id,
+                event_type,
+                agent_name,
+                json.dumps(data, ensure_ascii=False, default=str),
+                datetime.now().isoformat(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_event_logs(
+    trace_id: str | None = None, limit: int = 100
+) -> list[dict[str, Any]]:
+    conn = _get_connection()
+    try:
+        if trace_id:
+            rows = conn.execute(
+                "SELECT * FROM event_log WHERE trace_id = ? ORDER BY id DESC LIMIT ?",
+                (trace_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM event_log ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["data"] = json.loads(item.pop("data_json") or "{}")
+            result.append(item)
+        return result
     finally:
         conn.close()

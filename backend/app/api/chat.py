@@ -17,6 +17,12 @@ from app import storage
 from app.auth.dependencies import require_role
 from app.auth.models import UserResponse
 from app.auth.roles import Role
+from app.core.memory import (
+    LongTermMemory,
+    format_user_profile,
+    get_user_profile,
+    update_user_profile,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger("api.chat")
@@ -178,6 +184,11 @@ async def send_message(
         language = req.headers.get("accept-language", "en")
         language = "zh" if language.startswith("zh") else "en"
 
+        # 用户画像: 后台更新 (确定性规则提取, 不阻塞响应)
+        background_tasks.add_task(
+            update_user_profile, current_user.id, request.message, language
+        )
+
         # 判断是否为金融研究查询 → 走 orchestrator
         is_financial = bool(FINANCIAL_KEYWORDS.search(request.message))
         sources: list[dict[str, Any]] = []
@@ -192,7 +203,16 @@ async def send_message(
             )
         else:
             response_text = await generate_chat_response(
-                request.message, conversation_id, language
+                request.message,
+                conversation_id,
+                language,
+                user_profile=get_user_profile(current_user.id),
+            )
+            # 直接对话路径也归档长期记忆 (orchestrator 路径已自行归档)
+            background_tasks.add_task(
+                LongTermMemory.get_instance().store_memory,
+                f"Q: {request.message}\n\nA: {response_text}",
+                {"source": "chat", "conversation_id": conversation_id},
             )
 
         # Add assistant message
@@ -375,20 +395,28 @@ def _clean_json_response(text: str, language: str = "en") -> str:
 
 
 async def generate_chat_response(
-    message: str, conversation_id: str, language: str = "en"
+    message: str,
+    conversation_id: str,
+    language: str = "en",
+    user_profile: dict | None = None,
 ) -> str:
     """Generate a chat response using direct LLM call with RAG context"""
     from app.infrastructure.llm_client import LLMClient
 
     llm = LLMClient.get_instance()
 
-    # Build conversation context from history
+    # Build conversation context from history (compressed: summary + sliding window)
     messages = []
     if conversation_id:
         history = storage.get_conversation(conversation_id)
         if history and history.get("messages"):
-            for msg in history["messages"][-10:]:  # Last 10 messages for context
-                messages.append({"role": msg["role"], "content": msg["content"]})
+            from app.core.context_manager import ContextManager
+
+            raw = [
+                {"role": msg["role"], "content": msg["content"]}
+                for msg in history["messages"][-20:]
+            ]
+            messages = ContextManager(keep_recent=10).compress_history(raw)
 
     # Search knowledge base for relevant context
     rag_context = ""
@@ -423,6 +451,11 @@ async def generate_chat_response(
     # Append RAG context to system prompt if available
     if rag_context:
         system_content += f"\n\n{rag_context}"
+
+    # 注入用户画像 (关注标的/主题), 仅作个性化提示, 不作为事实数据
+    profile_ctx = format_user_profile(user_profile or {}, language)
+    if profile_ctx:
+        system_content += f"\n\n{profile_ctx}"
 
     system_msg = {"role": "system", "content": system_content}
     llm_messages = [system_msg, *messages, {"role": "user", "content": message}]

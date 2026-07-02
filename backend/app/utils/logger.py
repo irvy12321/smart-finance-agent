@@ -2,10 +2,10 @@
 增强日志模块 - 结构化输出 + trace_id 关联 + 并发安全
 """
 
+import contextvars
 import json
 import logging
 import sys
-import threading
 from datetime import datetime
 
 
@@ -91,27 +91,36 @@ def get_logger(name: str) -> logging.Logger:
 
 
 class LogContext:
-    """日志上下文 - 在并发环境中传递 trace_id 等信息"""
+    """日志上下文 - 在并发环境中传递 trace_id 等信息
 
-    _local = threading.local()
+    基于 contextvars：asyncio 同一事件循环上的并发请求各自隔离，
+    不会像 threading.local 那样互相覆盖。
+    """
+
+    _context: contextvars.ContextVar[dict] = contextvars.ContextVar(
+        "log_context", default=None
+    )
 
     @classmethod
     def set(cls, **kwargs):
-        for k, v in kwargs.items():
-            setattr(cls._local, k, v)
+        current = dict(cls._context.get() or {})
+        current.update(kwargs)
+        cls._context.set(current)
 
     @classmethod
     def get(cls, key: str, default=None):
-        return getattr(cls._local, key, default)
+        return (cls._context.get() or {}).get(key, default)
 
     @classmethod
     def clear(cls):
-        cls._local.__dict__.clear()
+        cls._context.set({})
 
     @classmethod
     def get_extra(cls) -> dict:
         """获取当前上下文的额外字段"""
-        return {k: v for k, v in cls._local.__dict__.items() if not k.startswith("_")}
+        return {
+            k: v for k, v in (cls._context.get() or {}).items() if not k.startswith("_")
+        }
 
 
 def log_with_context(logger_name: str, level: str, message: str, **extra):

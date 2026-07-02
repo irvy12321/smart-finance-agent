@@ -33,6 +33,26 @@ def test_app() -> FastAPI:
 
 
 @pytest.fixture(autouse=True)
+def _clear_tool_cache():
+    """Clear the global MemoryTTLCache before every test.
+
+    Tools share a process-wide ``MemoryTTLCache`` singleton. Without clearing,
+    a real API response cached by an earlier test (e.g. one that constructs an
+    Orchestrator with real keys) leaks into later tests that expect mock data,
+    making ``is_mock`` come back as ``False``. The cache is a pure perf layer,
+    so clearing it is always safe.
+    """
+    try:
+        from app.tools.cache import get_cache
+
+        get_cache().clear()
+    except Exception:
+        # Cache module not importable in some test contexts — ignore.
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _override_auth():
     """Authenticate every request as an admin user by default.
 

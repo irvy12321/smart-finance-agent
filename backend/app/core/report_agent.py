@@ -10,8 +10,10 @@ from datetime import datetime
 
 from app.core.agent_status import AgentEvent, EventBus
 from app.core.executor import ExecutionResult
+from app.core.prompt_manager import get_prompt
 from app.core.reasoner import ReasoningResult
 from app.infrastructure.llm_client import LiteLLMRouter, LLMClient
+from app.infrastructure.otel import traced
 from app.utils.logger import get_logger
 
 logger = get_logger("report_agent")
@@ -172,6 +174,7 @@ class ReportAgent:
         self.llm = llm_client or LLMClient.get_instance()
         self.event_bus = EventBus.get_instance()
 
+    @traced("report_agent.generate")
     async def generate(
         self,
         query: str,
@@ -220,7 +223,11 @@ class ReportAgent:
         )
 
         # Select system prompt based on language
-        system_prompt = REPORT_SYSTEM_ZH if language == "zh" else REPORT_SYSTEM_EN
+        system_prompt = get_prompt(
+            "report",
+            f"system_{language}" if language in ("zh", "en") else "system_en",
+            default=REPORT_SYSTEM_ZH if language == "zh" else REPORT_SYSTEM_EN,
+        )
 
         try:
             logger.info(

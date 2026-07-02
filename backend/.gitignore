@@ -16,6 +16,10 @@ build/
 # Data
 data/
 *.db
+# Allow the evaluation golden dataset while keeping the rest of data/ ignored
+!data/
+data/*
+!data/golden_dataset.json
 
 # Output
 output/

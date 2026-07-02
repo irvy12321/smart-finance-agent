@@ -15,6 +15,7 @@ class AgentBudget:
     agent_name: str
     max_tokens: int
     used_tokens: int = 0
+    max_input_tokens: int = 0  # 0 = 不限制
 
     @property
     def remaining(self) -> int:
@@ -40,13 +41,32 @@ class TokenBudgetManager:
         "synthesizer": 4000,
     }
 
+    # 输入 token 预算 (prompt+system 估算值上限, 粗略按 chars/4 估算)
+    DEFAULT_INPUT_BUDGETS: ClassVar[dict[str, int]] = {
+        "planner": 8000,
+        "executor": 12000,
+        "reasoner": 12000,
+        "report": 12000,
+        "chart": 8000,
+        "synthesizer": 12000,
+    }
+
+    @staticmethod
+    def estimate_tokens(text: str) -> int:
+        """粗略 token 估算: ~4 字符/token (中文偏低估, 作为上限检查足够)"""
+        return len(text) // 4 + 1
+
     def __init__(self, custom_budgets: dict[str, int] | None = None):
         budgets = {**self.DEFAULT_BUDGETS}
         if custom_budgets:
             budgets.update(custom_budgets)
 
         self._budgets: dict[str, AgentBudget] = {
-            name: AgentBudget(agent_name=name, max_tokens=max_tok)
+            name: AgentBudget(
+                agent_name=name,
+                max_tokens=max_tok,
+                max_input_tokens=self.DEFAULT_INPUT_BUDGETS.get(name, 0),
+            )
             for name, max_tok in budgets.items()
         }
         self._total_budget = sum(budgets.values())
@@ -71,6 +91,22 @@ class TokenBudgetManager:
                 f"[{agent_name}] used {tokens_used} tokens, "
                 f"remaining={budget.remaining}, utilization={budget.utilization:.0%}"
             )
+
+    def get_max_input_tokens(self, agent_name: str) -> int:
+        """获取输入 token 预算 (0 = 不限制)"""
+        budget = self._budgets.get(agent_name)
+        return budget.max_input_tokens if budget else 0
+
+    def check_input(self, agent_name: str, text: str) -> bool:
+        """检查输入文本是否在输入预算内"""
+        limit = self.get_max_input_tokens(agent_name)
+        if limit <= 0:
+            return True
+        est = self.estimate_tokens(text)
+        if est > limit:
+            logger.warning(f"[{agent_name}] input ~{est} tokens exceeds budget {limit}")
+            return False
+        return True
 
     def check_budget(self, agent_name: str) -> bool:
         """检查是否还有预算"""

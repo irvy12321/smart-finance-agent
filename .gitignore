@@ -40,3 +40,12 @@ output/
 # Deprecated and experimental
 _deprecated/
 backend/_experimental/
+
+# Local study notes & AI assistant files (keep local, do not publish)
+docs/notes/
+CLAUDE.md
+
+# Allow golden dataset while keeping the rest of backend/data ignored
+!backend/data/
+backend/data/*
+!backend/data/golden_dataset.json

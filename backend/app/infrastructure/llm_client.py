@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 import litellm
 
+from app.core.llm_call_logger import log_llm_call
 from app.infrastructure.config import (
     AgentModelConfig,
     LLMConfig,
@@ -14,6 +15,7 @@ from app.infrastructure.config import (
     get_llm_config,
     get_model_credentials,
 )
+from app.infrastructure.otel import traced
 from app.monitoring.prometheus import (
     llm_errors_total,
     llm_in_progress,
@@ -22,7 +24,7 @@ from app.monitoring.prometheus import (
     llm_tokens_total,
 )
 from app.utils.exceptions import LLMClientError
-from app.utils.logger import get_logger
+from app.utils.logger import LogContext, get_logger
 from app.utils.retry import async_retry
 
 logger = get_logger("llm_client")
@@ -94,6 +96,7 @@ class LLMClient:
         response = await litellm.acompletion(**call_params)
         return response
 
+    @traced("llm.chat")
     async def chat(
         self,
         messages: list[dict[str, str]],
@@ -101,7 +104,7 @@ class LLMClient:
         max_tokens: int | None = None,
         trace_id: str | None = None,
     ) -> LLMResponse:
-        trace_id = trace_id or uuid.uuid4().hex[:12]
+        trace_id = trace_id or LogContext.get("trace_id") or uuid.uuid4().hex[:12]
         start = time.perf_counter()
 
         kwargs = {}
@@ -142,6 +145,16 @@ class LLMClient:
                 f"tokens={usage['total_tokens']}"
             )
 
+            log_llm_call(
+                agent_name="llm",
+                model=self.config.model,
+                messages=messages,
+                response=content,
+                usage=usage,
+                latency_ms=latency_ms,
+                trace_id=trace_id,
+            )
+
             return LLMResponse(
                 content=content,
                 model=self.config.model,
@@ -166,6 +179,16 @@ class LLMClient:
                 user_msg = "LLM request timed out. Please try again"
             else:
                 user_msg = f"LLM call failed: {error_msg}"
+
+            log_llm_call(
+                agent_name="llm",
+                model=self.config.model,
+                messages=messages,
+                latency_ms=latency_ms,
+                trace_id=trace_id,
+                status="error",
+                error=error_msg,
+            )
 
             logger.error(
                 f"[trace:{trace_id}] LLM failed after {latency_ms:.0f}ms: {error_msg}"
@@ -314,6 +337,32 @@ class LiteLLMRouter:
         response = await litellm.acompletion(**call_params)
         return response
 
+    def _enforce_input_budget(
+        self, agent_name: str, messages: list[dict[str, str]], trace_id: str
+    ) -> list[dict[str, str]]:
+        """输入 token 预算检查: 超出预算时截断最长的消息内容 (通常是上下文)"""
+        limit = self.token_budget.get_max_input_tokens(agent_name)
+        if limit <= 0:
+            return messages
+        estimate = self.token_budget.estimate_tokens
+        total = sum(estimate(m.get("content", "")) for m in messages)
+        if total <= limit:
+            return messages
+        excess_chars = (total - limit) * 4
+        idx = max(
+            range(len(messages)), key=lambda i: len(messages[i].get("content", ""))
+        )
+        content = messages[idx].get("content", "")
+        keep = max(200, len(content) - excess_chars)
+        truncated = [dict(m) for m in messages]
+        truncated[idx]["content"] = content[:keep] + "\n...[input truncated by budget]"
+        logger.warning(
+            f"[trace:{trace_id}] Agent '{agent_name}' input ~{total} tokens exceeds "
+            f"budget {limit}; truncated message #{idx} from {len(content)} to {keep} chars"
+        )
+        return truncated
+
+    @traced("llm.call_agent")
     async def call_agent(
         self,
         agent_name: str,
@@ -325,8 +374,10 @@ class LiteLLMRouter:
         调用指定 Agent 的模型，自动应用 token 预算限制
         agent_name: "planner" | "executor" | "reasoner" | "report" | "chart"
         """
-        trace_id = trace_id or uuid.uuid4().hex[:12]
+        trace_id = trace_id or LogContext.get("trace_id") or uuid.uuid4().hex[:12]
         start = time.perf_counter()
+
+        messages = self._enforce_input_budget(agent_name, messages, trace_id)
 
         agent_params = self._get_agent_params(agent_name)
         kwargs = {
@@ -425,6 +476,16 @@ class LiteLLMRouter:
                 trace_id=trace_id,
             )
 
+            log_llm_call(
+                agent_name=agent_name,
+                model=model,
+                messages=messages,
+                response=content,
+                usage=usage,
+                latency_ms=latency_ms,
+                trace_id=trace_id,
+            )
+
             logger.info(
                 f"[trace:{trace_id}] Agent '{agent_name}' done in {latency_ms:.0f}ms "
                 f"tokens={usage['total_tokens']}"
@@ -464,6 +525,16 @@ class LiteLLMRouter:
             from app.core.observability.metrics import record_agent_error
 
             record_agent_error(agent_name, error_msg, trace_id=trace_id)
+
+            log_llm_call(
+                agent_name=agent_name,
+                model=model,
+                messages=messages,
+                latency_ms=latency_ms,
+                trace_id=trace_id,
+                status="error",
+                error=error_msg,
+            )
 
             logger.error(
                 f"[trace:{trace_id}] Agent '{agent_name}' failed after {latency_ms:.0f}ms: {error_msg}"
