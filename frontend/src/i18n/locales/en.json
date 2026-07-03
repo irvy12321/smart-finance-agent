@@ -161,7 +161,8 @@
     "quickStockPrice": "What is the current stock price of AAPL?",
     "quickAnalysis": "Provide a financial analysis for Tesla",
     "quickNews": "What are the latest news about Apple?",
-    "quickTrends": "Analyze the current market trends for tech stocks"
+    "quickTrends": "Analyze the current market trends for tech stocks",
+    "viewFullReport": "View full report"
   },
   "report": {
     "title": "Report",

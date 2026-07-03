@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   Send,
@@ -11,13 +12,22 @@ import {
   TrendingUp,
   DollarSign,
   Newspaper,
-  BarChart3
+  BarChart3,
+  FileText
 } from 'lucide-react'
 import { chatApi } from '../services/api'
 import { cleanAIText } from '../utils/utils'
 import type { ChatMessage, ConversationListItem } from '../types/api'
 
 const CHAT_STORAGE_KEY = 'chat_state'
+
+const REPORT_LINK_RE = /\n*(?:完整研究报告|Full research report):\s*\/report\/([0-9a-f-]{4,})\s*$/i
+
+function extractReportLink(content: string): { text: string; reportTaskId: string | null } {
+  const match = content.match(REPORT_LINK_RE)
+  if (!match) return { text: content, reportTaskId: null }
+  return { text: content.replace(REPORT_LINK_RE, '').trimEnd(), reportTaskId: match[1] }
+}
 
 interface SavedChatState {
   conversationId: string | null
@@ -46,6 +56,7 @@ function clearChatState() {
 
 export default function Chat() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
 
   // Initialize from localStorage
   const saved = loadChatState()
@@ -340,9 +351,25 @@ export default function Chat() {
                       : 'bg-dark-card border border-dark-border'
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">
-                    {message.role === 'assistant' ? cleanAIText(message.content) : message.content}
-                  </p>
+                  {message.role === 'assistant' ? (() => {
+                    const { text, reportTaskId } = extractReportLink(message.content)
+                    return (
+                      <>
+                        <p className="text-sm whitespace-pre-wrap">{cleanAIText(text)}</p>
+                        {reportTaskId && (
+                          <button
+                            onClick={() => navigate(`/report/${reportTaskId}`)}
+                            className="mt-3 flex items-center gap-2 px-3 py-2 text-xs font-medium text-primary-200 bg-dark-hover hover:bg-dark-border border border-dark-border rounded-lg transition-colors"
+                          >
+                            <FileText className="w-4 h-4" />
+                            {t('chat.viewFullReport')}
+                          </button>
+                        )}
+                      </>
+                    )
+                  })() : (
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  )}
                   <p className={`text-xs mt-2 ${
                     message.role === 'user' ? 'text-[#06121f]/60' : 'text-primary-400'
                   }`}>

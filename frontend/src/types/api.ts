@@ -326,6 +326,7 @@ export interface ChatResponse {
   response: string
   sources: Source[]
   confidence: number
+  report_task_id?: string | null
   timestamp: string
 }
 
