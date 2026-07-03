@@ -7,6 +7,10 @@
 
 一个基于 Multi-Agent 架构的智能金融分析平台，使用 FastAPI 后端 + React 前端。
 
+**项目规模**：后端 15k+ / 前端 10k+ 行，51 个 REST 接口，180 个单元测试（后端 135 + pytest / 前端 45 + Vitest，CI 全绿）；注册 10 个取数 / 分析工具，覆盖行情、财务、新闻、知识库（RAG）、网页爬虫 5 类数据源。
+
+**核心链路**：用户一句自然语言 → Planner 拆解为带依赖的任务 DAG（Kahn 拓扑排序 + 成环拒绝）→ Executor 按拓扑批次 asyncio 并行执行（超时隔离 / 熔断 / 四级降级 / 死锁恢复）→ Reasoner 综合推理（低置信度触发 Self-Critique）→ 输出带数据溯源与可信度标注的研究报告。
+
 > 架构总览、数据流与关键设计取舍见 [`DESIGN.md`](DESIGN.md)；可量化证据见下文「[RAG 检索质量评测](#rag-检索质量评测-rag-retrieval-evaluation)」与「[编排可靠性](#编排可靠性-orchestration-reliability)」两节。
 
 ## 功能特性
