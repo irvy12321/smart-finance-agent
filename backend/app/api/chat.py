@@ -90,6 +90,7 @@ class ChatResponse(BaseModel):
     response: str
     sources: list[dict[str, Any]] = []
     confidence: float = 0.0
+    report_task_id: str | None = None
     timestamp: str
 
 
@@ -197,9 +198,15 @@ async def send_message(
         # Get orchestrator from app.state
         orchestrator = _get_orchestrator(req)
 
+        report_task_id: str | None = None
         if is_financial and orchestrator is not None:
-            response_text, sources, confidence = await generate_orchestrator_response(
-                request.message, orchestrator, language
+            (
+                response_text,
+                sources,
+                confidence,
+                report_task_id,
+            ) = await generate_orchestrator_response(
+                request.message, orchestrator, language, user_id=current_user.id
             )
         else:
             response_text = await generate_chat_response(
@@ -228,6 +235,7 @@ async def send_message(
             response=response_text,
             sources=sources,
             confidence=confidence,
+            report_task_id=report_task_id,
             timestamp=datetime.now().isoformat(),
         )
     except HTTPException:
@@ -292,13 +300,102 @@ async def delete_conversation(
 # ============================================================
 
 
+def _persist_chat_report(
+    result, query: str, user_id: int | None, language: str = "en"
+) -> str | None:
+    """将 orchestrator RunResult 持久化为报告任务，返回 task_id。
+
+    与 task.py 的报告格式一致，使聊天中的研究结果可在报告页查看与查证。
+    持久化失败不影响聊天回复。
+    """
+    try:
+        report = result.report
+        reasoning = result.reasoning_result
+        task_results = result.exec_result.task_results if result.exec_result else []
+
+        task_states = {
+            tr.task_id: {
+                "tool": tr.tool_name,
+                "success": tr.success,
+                "duration_ms": tr.duration_ms,
+                "status": "success" if tr.success else "failed",
+            }
+            for tr in task_results
+        }
+        dag_subtasks = []
+        if result.plan:
+            dag_subtasks = [
+                {
+                    "id": st.task_id,
+                    "tool": st.tool_name,
+                    "desc": st.description,
+                    "priority": st.priority,
+                    "depends_on": list(st.depends_on),
+                }
+                for st in result.plan.get_sorted_subtasks()
+            ]
+        sources = [
+            {
+                "tool": tr.tool_name,
+                "task_id": tr.task_id,
+                "duration_ms": round(tr.duration_ms, 0),
+            }
+            for tr in task_results
+            if tr.success and tr.tool_name != "llm_synthesize"
+        ]
+        chart_specs = [
+            {
+                "chart_type": c.chart_type,
+                "title": c.title,
+                "x_label": c.x_label,
+                "y_label": c.y_label,
+                "data": c.data,
+                "description": c.description,
+            }
+            for c in (reasoning.chart_specs if reasoning else [])
+        ]
+
+        result_dict = {
+            "answer": result.answer or "",
+            "report_markdown": report.to_markdown(language=language) if report else "",
+            "report_title": report.title if report else query[:60],
+            "summary": report.summary if report else "",
+            "key_findings": report.analysis.key_findings if report else [],
+            "risk_factors": report.analysis.risk_factors if report else [],
+            "market_trends": report.analysis.market_trends if report else [],
+            "recommendations": report.analysis.recommendations if report else [],
+            "confidence": reasoning.confidence if reasoning else 0.0,
+            "chart_paths": result.chart_paths or [],
+            "chart_specs": chart_specs,
+            "sources": sources,
+            "dag_subtasks": dag_subtasks,
+            "task_states": task_states,
+            "elapsed": round(result.total_duration_ms / 1000.0, 2),
+            "total_tasks": len(dag_subtasks),
+            "success_tasks": result.successful_tasks,
+            "failed_tasks": result.failed_tasks,
+            "plan_reasoning": result.plan_reasoning or "",
+            "reasoning_insights": reasoning.key_insights if reasoning else [],
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+
+        task_id = str(uuid.uuid4())[:8]
+        storage.create_task(task_id, query, priority=1, user_id=user_id)
+        storage.update_task_result(task_id, result_dict, [])
+        logger.info(f"[orchestrator] Chat research persisted as report task {task_id}")
+        return task_id
+    except Exception as e:
+        logger.warning(f"[orchestrator] Failed to persist chat report: {e}")
+        return None
+
+
 async def generate_orchestrator_response(
-    message: str, orchestrator, language: str = "en"
-) -> tuple[str, list, float]:
+    message: str, orchestrator, language: str = "en", user_id: int | None = None
+) -> tuple[str, list, float, str | None]:
     """
     使用 Orchestrator 全流水线处理金融研究查询
     带 90 秒超时保护，超时自动降级到直接 LLM
-    返回: (response_text, sources, confidence)
+    返回: (response_text, sources, confidence, report_task_id)
     """
     import asyncio
 
@@ -338,18 +435,26 @@ async def generate_orchestrator_response(
                 response_text = "Research completed."
 
         confidence = 0.9 if result.reasoning_result else 0.75
-        return response_text, sources, confidence
+
+        report_task_id = _persist_chat_report(result, message, user_id, language)
+        if report_task_id:
+            if language == "zh":
+                response_text += f"\n\n完整研究报告: /report/{report_task_id}"
+            else:
+                response_text += f"\n\nFull research report: /report/{report_task_id}"
+
+        return response_text, sources, confidence, report_task_id
 
     except asyncio.TimeoutError:
         logger.warning(
             "[orchestrator] Pipeline timed out (90s), falling back to direct LLM"
         )
         fallback = await generate_chat_response(message, "", language)
-        return fallback, [], 0.5
+        return fallback, [], 0.5, None
     except Exception as e:
         logger.error(f"[orchestrator] Error: {type(e).__name__}: {e}")
         fallback = await generate_chat_response(message, "", language)
-        return fallback, [], 0.5
+        return fallback, [], 0.5, None
 
 
 def _clean_json_response(text: str, language: str = "en") -> str:

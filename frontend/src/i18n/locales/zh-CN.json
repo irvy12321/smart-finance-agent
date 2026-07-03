@@ -161,7 +161,8 @@
     "quickStockPrice": "AAPL 的当前股价是多少？",
     "quickAnalysis": "提供 Tesla 的财务分析",
     "quickNews": "Apple 的最新新闻是什么？",
-    "quickTrends": "分析科技股的当前市场趋势"
+    "quickTrends": "分析科技股的当前市场趋势",
+    "viewFullReport": "查看完整报告"
   },
   "report": {
     "title": "报告",

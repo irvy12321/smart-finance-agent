@@ -21,7 +21,7 @@
 - **Prompt / Context 工程**: Agent prompt 全部 YAML 模板化（Jinja2，缺失降级内置常量）；对话历史确定性压缩；输入/输出双向 token 预算
 - **评估体系**: golden dataset + EvalRunner 端到端输出质量评估（含防幻觉数字校验），全确定性计算
 - **金融工具**: 股票价格查询、财务报告分析、新闻摘要
-- **实时聊天**: AI 金融助手对话界面
+- **实时聊天**: AI 金融助手对话界面；金融研究类提问自动持久化为完整研究报告，回复附报告链接可查证执行过程
 - **报告生成**: 自动生成结构化金融分析报告
 - **数据可视化**: 图表展示和数据可视化
 - **系统监控**: Prometheus 指标 + LLM 调用脱敏日志/全量事件持久化 SQLite + OpenTelemetry 链路追踪（开关式，默认 no-op）
@@ -149,7 +149,7 @@ smart-finance-agent/
 │   │   │   ├── system.py      # 系统状态 API
 │   │   │   ├── tools.py       # 工具调用 API
 │   │   │   ├── rag.py         # 知识库管理 API
-│   │   │   └── chat.py        # 聊天 API (支持 orchestrator 全流水线)
+│   │   │   └── chat.py        # 聊天 API (支持 orchestrator 全流水线, 研究结果持久化为报告)
 │   │   ├── core/              # 核心业务逻辑
 │   │   │   ├── orchestrator.py # 3-Layer 编排器（长期记忆召回 + 事件持久化 + OTel span）
 │   │   │   ├── planner.py     # 规划器 Agent（prompt 模板化）
@@ -258,7 +258,7 @@ POST /api/tools/news/analysis      # 新闻分析
 
 ```http
 POST /api/chat/conversations              # 创建会话
-POST /api/chat/conversations/{id}/messages # 发送消息
+POST /api/chat/conversations/{id}/messages # 发送消息 (金融研究类查询自动生成报告, 响应含 report_task_id, 可经 /api/report/{id} 查看)
 GET  /api/chat/conversations/{id}         # 会话历史
 GET  /api/chat/conversations              # 会话列表
 ```
