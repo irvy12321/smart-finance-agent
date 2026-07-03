@@ -7,7 +7,7 @@
 
 一个基于 Multi-Agent 架构的智能金融分析平台，使用 FastAPI 后端 + React 前端。
 
-**项目规模**：后端 15k+ / 前端 10k+ 行，51 个 REST 接口，180 个单元测试（后端 135 + pytest / 前端 45 + Vitest，CI 全绿）；注册 10 个取数 / 分析工具，覆盖行情、财务、新闻、知识库（RAG）、网页爬虫 5 类数据源。
+**项目规模**：后端 15k+ / 前端 10k+ 行，51 个 REST 接口，182 个单元测试（后端 137 pytest / 前端 45 Vitest，CI 全绿）；注册 10 个取数 / 分析工具，覆盖行情、财务、新闻、知识库（RAG）、网页爬虫 5 类数据源。
 
 **核心链路**：用户一句自然语言 → Planner 拆解为带依赖的任务 DAG（Kahn 拓扑排序 + 成环拒绝）→ Executor 按拓扑批次 asyncio 并行执行（超时隔离 / 熔断 / 四级降级 / 死锁恢复）→ Reasoner 综合推理（低置信度触发 Self-Critique）→ 输出带数据溯源与可信度标注的研究报告。
 
@@ -141,11 +141,14 @@ curl -X POST https://your-domain.com/api/auth/admin/create-user \
 smart-finance-agent/
 ├── backend/                    # FastAPI 后端 (唯一后端)
 │   ├── app/
-│   │   ├── api/               # API 路由
+│   │   ├── api/               # API 路由（8 个路由文件 / 51 个接口）
+│   │   │   ├── auth.py        # 认证 / 用户管理 API（JWT + RBAC）
+│   │   │   ├── research.py    # 股票研究主线 API
 │   │   │   ├── task.py        # 任务管理 API
 │   │   │   ├── report.py      # 报告查询 API
 │   │   │   ├── system.py      # 系统状态 API
 │   │   │   ├── tools.py       # 工具调用 API
+│   │   │   ├── rag.py         # 知识库管理 API
 │   │   │   └── chat.py        # 聊天 API (支持 orchestrator 全流水线)
 │   │   ├── core/              # 核心业务逻辑
 │   │   │   ├── orchestrator.py # 3-Layer 编排器（长期记忆召回 + 事件持久化 + OTel span）
@@ -153,16 +156,21 @@ smart-finance-agent/
 │   │   │   ├── executor.py    # 执行器 Agent
 │   │   │   ├── reasoner.py    # 推理器 Agent（Self-Critique 循环）
 │   │   │   ├── evaluation.py  # 端到端评估（golden set + 4 指标）
+│   │   │   ├── reliability.py # 确定性故障注入评测 harness
 │   │   │   ├── memory.py      # 长期记忆（独立 FAISS）+ 用户画像
 │   │   │   ├── prompt_manager.py  # YAML prompt 模板加载（Jinja2 + 降级）
 │   │   │   ├── context_manager.py # 对话历史压缩
 │   │   │   └── llm_call_logger.py # LLM 调用脱敏日志 → SQLite
-│   │   ├── rag/               # RAG 模块（含 reranker / query_rewriter / 语义切块）
-│   │   ├── tools/             # 工具模块
-│   │   ├── infrastructure/    # 基础设施 (LLM 客户端、配置、otel.py)
-│   │   └── utils/             # 工具函数
+│   │   ├── rag/               # RAG 模块（含 reranker / query_rewriter / 语义切块 / eval_data 评测集）
+│   │   ├── tools/             # 工具模块（10 个注册工具）
+│   │   ├── infrastructure/    # 基础设施 (LLM 客户端、配置、otel.py、smart_router)
+│   │   ├── auth/              # JWT / RBAC 依赖
+│   │   ├── monitoring/        # Prometheus 指标与中间件
+│   │   └── utils/             # 熔断器 / 重试 / 日志 / 异常
 │   ├── prompts/               # Agent prompt 模板 (planner/reasoner/report.yaml)
 │   ├── data/                  # SQLite 数据 + golden_dataset.json + memory/（长期记忆）
+│   ├── scripts/               # 评测脚本（rag_eval.py / reliability_eval.py）
+│   ├── tests/                 # 137 个后端单测（pytest）
 │   └── requirements.txt       # Python 依赖
 │
 ├── frontend/                   # React 前端 (唯一前端)
@@ -170,14 +178,18 @@ smart-finance-agent/
 │   │   ├── pages/             # 页面组件
 │   │   ├── components/        # UI 组件
 │   │   ├── services/          # API 服务
-│   │   └── hooks/             # 自定义 Hooks
+│   │   ├── hooks/             # 自定义 Hooks
+│   │   └── test/              # 45 个前端测试（Vitest）
 │   ├── package.json           # Node 依赖
 │   └── vite.config.ts         # Vite 配置
 │
+├── .github/                    # CI/CD workflows（lint / test / build / deploy）
+├── nginx/                      # Nginx 反代配置
 ├── _deprecated/                # 旧版代码 (已隔离，不再使用)
 ├── Dockerfile                  # 后端 Docker 镜像
 ├── docker-compose.yml          # 开发环境编排
 ├── docker-compose.prod.yml     # 生产环境编排
+├── docker-compose.monitoring.yml # Prometheus/Grafana 监控栈
 ├── start-all.bat               # Windows 一键启动
 └── README.md
 ```
@@ -313,9 +325,11 @@ NEWS_API_KEY=your_news_api_key
 
 ```python
 class LLMConfig(BaseSettings):
-    model: str = "openai/mimo-v2.5-pro"
+    model: str = ""          # 为空时自动取自 LLM_PROVIDER 对应的 provider 配置
     temperature: float = 0.3
     max_tokens: int = 4096
+    timeout: int = 300
+    max_retries: int = 3
 ```
 
 ## 开发指南
