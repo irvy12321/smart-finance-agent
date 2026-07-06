@@ -273,6 +273,31 @@ GET /api/system/config         # 系统配置
 GET /api/system/health         # 健康检查
 ```
 
+## MCP Server (Model Context Protocol)
+
+除 REST API 外，全部 10 个工具也通过 MCP (stdio) 对外暴露（`backend/app/mcp_server.py`），任何 MCP 客户端（Claude Desktop、Cursor、Agent 运行时等）都可直接调用，与编排器共用同一个 `ToolRegistry`（`app/tools/defaults.py` 统一注册）。
+
+```bash
+cd backend
+python -m app.mcp_server   # 以 stdio 方式启动 MCP server
+```
+
+MCP 客户端配置示例（Claude Desktop `mcpServers`）：
+
+```json
+{
+  "smart-finance-agent": {
+    "command": "python",
+    "args": ["-m", "app.mcp_server"],
+    "cwd": "<repo>/backend"
+  }
+}
+```
+
+- `tools/list` 返回全部工具及各自的 JSON Schema 入参定义（`TOOL_INPUT_SCHEMAS`）
+- `tools/call` 路由到对应 `BaseTool.execute()`，`ToolResult`（含 `success/is_mock/source`）序列化为 JSON 返回
+- 测试见 `backend/tests/test_mcp_server.py`（内存级 MCP 客户端端到端验证）
+
 ## 使用示例
 
 ### 1. 创建研究任务
@@ -558,6 +583,7 @@ python scripts/rag_eval.py
 - 指标：`task_success_rate`、`tool_accuracy`、`retrieval_recall@k`、`answer_groundedness`（回答必须包含 expected 数字、不得出现 forbidden 数字——防幻觉校验）
 - 全部为**确定性 Python 计算**，不用 LLM-as-judge，可复现、可进回归
 - 验证数据集与导入：`python -m app.core.evaluation --dry-run`
+- **回归门禁**：`--min-task-success / --min-tool-accuracy / --min-retrieval-recall / --min-groundedness` 阈值参数，任一聚合指标低于阈值即退出码非 0，CI 可直接卡住 prompt / planner / RAG 回归（见 `.github/workflows/ci.yml` 的 `agent-eval` job，默认只跑 dry-run，配置仓库变量 `AGENT_EVAL_ENABLED=true` + LLM secrets 后启用全量评估）
 
 ## 记忆系统 (Memory)
 
@@ -590,6 +616,7 @@ python scripts/rag_eval.py
 | Test | Vitest | pytest |
 | Build | Vite Build | - |
 | Coverage | ✅ | ✅ |
+| Agent Eval | - | golden set 回归门禁（dry-run 常开；全量评估需 `AGENT_EVAL_ENABLED=true`） |
 
 ### 工作流文件
 
