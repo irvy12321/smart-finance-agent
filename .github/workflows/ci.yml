@@ -188,6 +188,68 @@ jobs:
           retention-days: 7
 
   # ============================================================
+  # Agent Evaluation (golden set regression gate)
+  # The dry-run step always validates that the golden dataset parses
+  # and the evaluation harness imports. The full end-to-end eval calls
+  # real LLMs, so it only runs when the repo variable
+  # AGENT_EVAL_ENABLED == 'true' and the LLM secrets are configured
+  # (same dormant-by-default pattern as the deploy job).
+  # ============================================================
+  agent-eval:
+    name: Agent Eval
+    runs-on: ubuntu-latest
+    needs: [backend-lint]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate golden set (dry run)
+        run: python -m app.core.evaluation --dry-run
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+
+      - name: Run golden set eval with thresholds
+        if: vars.AGENT_EVAL_ENABLED == 'true'
+        run: |
+          python -m app.core.evaluation \
+            --json-out eval_results.json \
+            --min-task-success 0.8 \
+            --min-tool-accuracy 0.6 \
+            --min-retrieval-recall 0.8 \
+            --min-groundedness 0.6
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+          JWT_SECRET_KEY: test-jwt-secret-key-at-least-32-chars-long-aaaa
+          ALLOW_MOCK_DATA: "true"
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'mimo' }}
+          MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+
+      - name: Upload eval results
+        if: vars.AGENT_EVAL_ENABLED == 'true' && always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-eval-results
+          path: backend/eval_results.json
+          retention-days: 14
+
+  # ============================================================
   # Coverage Report Job
   # ============================================================
   coverage-report:

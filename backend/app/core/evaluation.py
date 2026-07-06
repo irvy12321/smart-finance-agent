@@ -17,6 +17,9 @@ Design:
 * ``--dry-run`` loads the golden set and reports case count + categories,
   proving the module imports and the dataset parses without making any LLM /
   network calls. Safe for CI smoke tests.
+* ``--min-*`` threshold flags turn the run into a regression gate: when any
+  aggregate metric falls below its threshold the process exits non-zero, so
+  CI can fail the build on prompt / planner / RAG regressions.
 """
 
 from __future__ import annotations
@@ -356,7 +359,35 @@ async def _run_async(args: argparse.Namespace) -> int:
             encoding="utf-8",
         )
         print(f"\nFull results written to {args.json_out}")
-    return 0
+    return check_thresholds(result, args)
+
+
+def check_thresholds(result: EvalResult, args: argparse.Namespace) -> int:
+    """Compare aggregate metrics against --min-* thresholds.
+
+    Returns 0 when every configured threshold is met, 1 otherwise. Thresholds
+    left at None are not enforced.
+    """
+    checks = [
+        ("task_success_rate", result.task_success_rate, args.min_task_success),
+        ("tool_accuracy", result.tool_accuracy, args.min_tool_accuracy),
+        (
+            "retrieval_recall@k",
+            result.retrieval_recall_at_k,
+            args.min_retrieval_recall,
+        ),
+        ("answer_groundedness", result.answer_groundedness, args.min_groundedness),
+    ]
+    failed = False
+    for name, value, minimum in checks:
+        if minimum is None:
+            continue
+        if value < minimum:
+            print(f"[FAIL] {name} = {value:.3f} < required {minimum:.3f}")
+            failed = True
+        else:
+            print(f"[PASS] {name} = {value:.3f} >= {minimum:.3f}")
+    return 1 if failed else 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -384,6 +415,18 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Write full per-case results to this JSON file",
     )
+    for flag, metric in (
+        ("--min-task-success", "task_success_rate"),
+        ("--min-tool-accuracy", "tool_accuracy"),
+        ("--min-retrieval-recall", "retrieval_recall@k"),
+        ("--min-groundedness", "answer_groundedness"),
+    ):
+        parser.add_argument(
+            flag,
+            type=float,
+            default=None,
+            help=f"Fail (exit 1) when {metric} is below this value (0..1)",
+        )
     args = parser.parse_args(argv)
     return asyncio.run(_run_async(args))
 

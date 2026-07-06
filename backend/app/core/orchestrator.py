@@ -5,7 +5,6 @@ Layer 2: Executor (并行执行)
 Layer 3: Synthesizer (Reasoner → Report → Chart)
 """
 
-import os
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -35,14 +34,8 @@ from app.monitoring.prometheus import (
     agent_stage_duration_seconds,
 )
 from app.rag.memory import ConversationMemory
-from app.tools.crawler_tool import CrawlerTool
-from app.tools.financial_report_tool import FinancialAnalysisTool, FinancialReportTool
-from app.tools.news_summary_tool import NewsAnalysisTool, NewsSummaryTool
-from app.tools.news_tool import NewsTool
-from app.tools.rag_tool import RAGTool
+from app.tools.defaults import register_default_tools
 from app.tools.registry import ToolRegistry
-from app.tools.research_tool import StockResearchTool
-from app.tools.stock_price_tool import StockHistoryTool, StockPriceTool
 from app.utils.logger import LogContext, get_logger
 from app.utils.tracing import PipelineTracker, TraceContext
 
@@ -99,7 +92,7 @@ class Orchestrator:
         self.router = LiteLLMRouter.get_instance() if use_router else None
 
         self.registry = ToolRegistry()
-        self._register_tools()
+        register_default_tools(self.registry)
 
         # Smart Router (查询复杂度评估 + 工具选择)
         self.smart_router = SmartRouter()
@@ -128,27 +121,6 @@ class Orchestrator:
         logger.info(
             f"Orchestrator initialized (3-layer, router={'enabled' if use_router else 'disabled'})"
         )
-
-    def _register_tools(self):
-        # Read API keys from environment
-        news_api_key = os.getenv("NEWS_API_KEY", "")
-        alpha_vantage_key = os.getenv("ALPHA_VANTAGE_API_KEY", "")
-        fmp_api_key = os.getenv("FMP_API_KEY", "")
-
-        tools = [
-            CrawlerTool(),
-            NewsTool(api_key=news_api_key),
-            RAGTool(),
-            StockPriceTool(api_key=alpha_vantage_key),
-            StockHistoryTool(api_key=alpha_vantage_key),
-            FinancialReportTool(api_key=fmp_api_key),
-            FinancialAnalysisTool(api_key=fmp_api_key),
-            NewsSummaryTool(api_key=news_api_key),
-            NewsAnalysisTool(),  # NewsAnalysisTool uses NewsSummaryTool internally
-            StockResearchTool(),  # full grounded single-stock pipeline as one DAG node
-        ]
-        for tool in tools:
-            self.registry.register(tool)
 
     async def run(self, query: str) -> RunResult:
         """3-Layer 流水线: SmartRoute → Plan → Execute → Synthesize"""
