@@ -87,6 +87,38 @@ async def client(test_app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture
+def temp_db(monkeypatch, tmp_path):
+    """Point app.storage at an isolated temporary SQLite database."""
+    from app import storage
+
+    monkeypatch.setattr(storage, "DB_DIR", tmp_path)
+    monkeypatch.setattr(storage, "DB_PATH", tmp_path / "test.db")
+    storage.init_db()
+    yield storage
+
+
+@pytest.fixture
+async def real_client(test_app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
+    """HTTP client with NO auth override: requests go through the real JWT
+    validation and RBAC dependencies. Rate limiting is disabled so tests can
+    register/login freely without cross-test 429s."""
+    from app.api import auth as auth_api
+    from app.auth.dependencies import get_current_user
+
+    test_app.dependency_overrides.pop(get_current_user, None)
+    auth_api.limiter.reset()
+    was_enabled = auth_api.limiter.enabled
+    auth_api.limiter.enabled = False
+    try:
+        transport = ASGITransport(app=test_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
+    finally:
+        auth_api.limiter.enabled = was_enabled
+        auth_api.limiter.reset()
+
+
+@pytest.fixture
 def mock_storage(monkeypatch):
     """Mock the storage module for isolated tests."""
     from unittest.mock import MagicMock, patch
