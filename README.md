@@ -21,6 +21,7 @@
 - **Prompt / Context 工程**: Agent prompt 全部 YAML 模板化（Jinja2，缺失降级内置常量）；对话历史确定性压缩；输入/输出双向 token 预算
 - **评估体系**: golden dataset + EvalRunner 端到端输出质量评估（含防幻觉数字校验），全确定性计算
 - **金融工具**: 股票价格查询、财务报告分析、新闻摘要
+- **MCP Server**: 全部 10 个注册工具经 Model Context Protocol（stdio）对外暴露，任何 MCP 客户端（Claude Desktop / Cursor / Agent 运行时）可直接调用，与编排器共用同一套工具注册
 - **实时聊天**: AI 金融助手对话界面；金融研究类提问自动持久化为完整研究报告，回复附报告链接可查证执行过程
 - **报告生成**: 自动生成结构化金融分析报告
 - **数据可视化**: 图表展示和数据可视化
@@ -162,7 +163,8 @@ smart-finance-agent/
 │   │   │   ├── context_manager.py # 对话历史压缩
 │   │   │   └── llm_call_logger.py # LLM 调用脱敏日志 → SQLite
 │   │   ├── rag/               # RAG 模块（含 reranker / query_rewriter / 语义切块 / eval_data 评测集）
-│   │   ├── tools/             # 工具模块（10 个注册工具）
+│   │   ├── tools/             # 工具模块（10 个注册工具，defaults.py 统一注册）
+│   │   ├── mcp_server.py      # MCP Server（stdio 暴露 ToolRegistry 全部工具）
 │   │   ├── infrastructure/    # 基础设施 (LLM 客户端、配置、otel.py、smart_router)
 │   │   ├── auth/              # JWT / RBAC 依赖
 │   │   ├── monitoring/        # Prometheus 指标与中间件
@@ -170,7 +172,7 @@ smart-finance-agent/
 │   ├── prompts/               # Agent prompt 模板 (planner/reasoner/report.yaml)
 │   ├── data/                  # SQLite 数据 + golden_dataset.json + memory/（长期记忆）
 │   ├── scripts/               # 评测脚本（rag_eval.py / reliability_eval.py）
-│   ├── tests/                 # 137 个后端单测（pytest）
+│   ├── tests/                 # 148 个后端单测（pytest）
 │   └── requirements.txt       # Python 依赖
 │
 ├── frontend/                   # React 前端 (唯一前端)
@@ -296,6 +298,7 @@ MCP 客户端配置示例（Claude Desktop `mcpServers`）：
 
 - `tools/list` 返回全部工具及各自的 JSON Schema 入参定义（`TOOL_INPUT_SCHEMAS`）
 - `tools/call` 路由到对应 `BaseTool.execute()`，`ToolResult`（含 `success/is_mock/source`）序列化为 JSON 返回
+- stdio 模式下 stdout 是 JSON-RPC 信道，启动时所有日志自动改路到 stderr，避免污染协议流
 - 测试见 `backend/tests/test_mcp_server.py`（内存级 MCP 客户端端到端验证）
 
 ## 使用示例
@@ -451,7 +454,9 @@ smart-finance-agent/
 │       ├── test_task_api.py      # 任务 API 测试
 │       ├── test_auth_api.py      # 认证 API 测试
 │       ├── test_system_api.py    # 系统 API 测试
-│       └── test_orchestrator.py  # Agent 流程测试
+│       ├── test_orchestrator.py  # Agent 流程测试
+│       ├── test_mcp_server.py    # MCP Server 测试（内存 client 端到端）
+│       └── test_evaluation_thresholds.py # 评估阈值门禁测试
 │
 ├── frontend/
 │   └── src/
