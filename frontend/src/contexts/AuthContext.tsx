@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem(TOKEN_KEY)
     const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
     const userStr = localStorage.getItem(USER_KEY)
-    let user = null
+    let user
     try {
       user = userStr ? JSON.parse(userStr) : null
     } catch {
