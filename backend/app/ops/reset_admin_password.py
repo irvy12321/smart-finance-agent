@@ -24,9 +24,9 @@ def reset_admin_password(username: str = "admin") -> str:
     # Import lazily so callers can validate environment before storage init.
     from app import storage
 
-    hashed_password = bcrypt.hashpw(
-        password.encode("utf-8"), bcrypt.gensalt()
-    ).decode("utf-8")
+    hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
     now = datetime.now(timezone.utc).isoformat()
 
     conn = storage._get_connection()
