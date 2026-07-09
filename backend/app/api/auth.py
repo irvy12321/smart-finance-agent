@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from app.api.error_utils import safe_internal_detail
 from app.auth import ACCESS_TOKEN_EXPIRE_MINUTES, create_token_pair, get_password_hash
 from app.auth.dependencies import (
     authenticate_user,
@@ -114,7 +115,7 @@ async def register(request: Request, user_data: UserCreate):
         logger.error(f"Registration failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {e!s}",
+            detail=safe_internal_detail("Registration failed"),
         ) from e
 
 
@@ -191,7 +192,7 @@ async def login(request: Request, user_data: UserLogin):
         logger.error(f"Login failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {e!s}",
+            detail=safe_internal_detail("Login failed"),
         ) from e
 
 
@@ -252,7 +253,7 @@ async def refresh_token(request: Request, body: RefreshTokenRequest):
         logger.error(f"Token refresh failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Token refresh failed: {e!s}",
+            detail=safe_internal_detail("Token refresh failed"),
         ) from e
 
 
@@ -278,7 +279,7 @@ async def logout(body: LogoutRequest):
         logger.error(f"Logout failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Logout failed: {e!s}",
+            detail=safe_internal_detail("Logout failed"),
         ) from e
 
 
@@ -355,7 +356,7 @@ async def admin_create_user(
         logger.error(f"Admin create user failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create user: {e!s}",
+            detail=safe_internal_detail("Failed to create user"),
         ) from e
 
 
@@ -392,10 +393,10 @@ async def admin_list_users(
         finally:
             conn.close()
     except Exception as e:
-        logger.error(f"Admin list users failed: {e}")
+        logger.error(f"Admin list users failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list users: {e!s}",
+            detail=safe_internal_detail("Failed to list users"),
         ) from e
 
 
@@ -472,10 +473,10 @@ async def admin_update_user(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Admin update user failed: {e}")
+        logger.error(f"Admin update user failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update user: {e!s}",
+            detail=safe_internal_detail("Failed to update user"),
         ) from e
 
 
@@ -524,8 +525,8 @@ async def admin_delete_user(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Admin delete user failed: {e}")
+        logger.error(f"Admin delete user failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete user: {e!s}",
+            detail=safe_internal_detail("Failed to delete user"),
         ) from e

@@ -40,11 +40,11 @@ class MetricsDashboard:
     """
 
     _instance: "MetricsDashboard | None" = None
-    _lock = threading.Lock()
+    _instance_lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
-            with cls._lock:
+            with cls._instance_lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
                     cls._instance._initialized = False
@@ -53,8 +53,10 @@ class MetricsDashboard:
     def __init__(self):
         if self._initialized:
             return
+        self._lock = threading.RLock()
         self._runs: list[PipelineRun] = []
         self._max_runs = 100
+        self._active_runs: dict[str, PipelineRun] = {}
         self._current_run: PipelineRun | None = None
         self._event_buffer: list[dict] = []
         self._initialized = True
@@ -69,21 +71,36 @@ class MetricsDashboard:
                 query=query,
                 start_time=time.time(),
             )
+            self._active_runs[trace_id] = run
             self._current_run = run
 
-    def record_agent_latency(self, agent_name: str, latency_ms: float):
+    def _get_active_run(self, trace_id: str | None = None) -> PipelineRun | None:
+        if trace_id:
+            return self._active_runs.get(trace_id)
+        return self._current_run
+
+    def record_agent_latency(
+        self, agent_name: str, latency_ms: float, trace_id: str | None = None
+    ):
         """记录 agent 延迟"""
         with self._lock:
-            if self._current_run:
-                self._current_run.agent_latencies[agent_name] = latency_ms
+            run = self._get_active_run(trace_id)
+            if run:
+                run.agent_latencies[agent_name] = latency_ms
 
     def record_tool_call(
-        self, tool_name: str, success: bool, duration_ms: float, task_id: str = ""
+        self,
+        tool_name: str,
+        success: bool,
+        duration_ms: float,
+        task_id: str = "",
+        trace_id: str | None = None,
     ):
         """记录 tool 调用"""
         with self._lock:
-            if self._current_run:
-                self._current_run.tool_calls.append(
+            run = self._get_active_run(trace_id)
+            if run:
+                run.tool_calls.append(
                     {
                         "tool": tool_name,
                         "success": success,
@@ -100,24 +117,29 @@ class MetricsDashboard:
         success_count: int = 0,
         failed_count: int = 0,
         dag_size: int = 0,
+        status: str | None = None,
     ):
         """记录 pipeline 结束"""
         with self._lock:
-            if self._current_run and self._current_run.trace_id == trace_id:
-                self._current_run.end_time = time.time()
-                self._current_run.total_ms = (
-                    self._current_run.end_time - self._current_run.start_time
-                ) * 1000
-                self._current_run.subtask_count = subtask_count
-                self._current_run.success_count = success_count
-                self._current_run.failed_count = failed_count
-                self._current_run.dag_size = dag_size
-                self._current_run.status = "success" if failed_count == 0 else "partial"
+            run = self._active_runs.pop(trace_id, None)
+            if not run:
+                return
 
-                self._runs.append(self._current_run)
-                if len(self._runs) > self._max_runs:
-                    self._runs = self._runs[-self._max_runs :]
+            run.end_time = time.time()
+            run.total_ms = (run.end_time - run.start_time) * 1000
+            run.subtask_count = subtask_count
+            run.success_count = success_count
+            run.failed_count = failed_count
+            run.dag_size = dag_size
+            run.status = status or ("success" if failed_count == 0 else "partial")
+
+            self._runs.append(run)
+            if len(self._runs) > self._max_runs:
+                self._runs = self._runs[-self._max_runs :]
+            if self._current_run and self._current_run.trace_id == trace_id:
                 self._current_run = None
+                if self._active_runs:
+                    self._current_run = next(reversed(self._active_runs.values()))
 
     def ingest_from_metrics_collector(self):
         """从 MetricsCollector 同步数据"""
@@ -128,7 +150,10 @@ class MetricsDashboard:
         """获取各 agent 延迟统计"""
         agent_data = defaultdict(lambda: {"latencies": [], "total_ms": 0, "calls": 0})
 
-        for run in self._runs:
+        with self._lock:
+            runs = list(self._runs)
+
+        for run in runs:
             for agent, latency in run.agent_latencies.items():
                 agent_data[agent]["latencies"].append(latency)
                 agent_data[agent]["total_ms"] += latency
@@ -152,7 +177,10 @@ class MetricsDashboard:
             lambda: {"calls": 0, "success": 0, "failure": 0, "total_ms": 0}
         )
 
-        for run in self._runs:
+        with self._lock:
+            runs = list(self._runs)
+
+        for run in runs:
             for tc in run.tool_calls:
                 tool = tc["tool"]
                 tool_data[tool]["calls"] += 1
@@ -175,7 +203,10 @@ class MetricsDashboard:
 
     def get_system_stats(self) -> dict:
         """获取系统级统计"""
-        if not self._runs:
+        with self._lock:
+            runs = list(self._runs)
+
+        if not runs:
             return {
                 "total_requests": 0,
                 "success_rate": 0,
@@ -186,17 +217,17 @@ class MetricsDashboard:
                 "total_failed": 0,
             }
 
-        total = len(self._runs)
-        success_runs = sum(1 for r in self._runs if r.status == "success")
-        total_tool_calls = sum(len(r.tool_calls) for r in self._runs)
-        total_success = sum(r.success_count for r in self._runs)
-        total_failed = sum(r.failed_count for r in self._runs)
+        total = len(runs)
+        success_runs = sum(1 for r in runs if r.status == "success")
+        total_tool_calls = sum(len(r.tool_calls) for r in runs)
+        total_success = sum(r.success_count for r in runs)
+        total_failed = sum(r.failed_count for r in runs)
 
         return {
             "total_requests": total,
             "success_rate": success_runs / max(total, 1) * 100,
-            "avg_dag_size": sum(r.dag_size for r in self._runs) / max(total, 1),
-            "avg_duration_ms": sum(r.total_ms for r in self._runs) / max(total, 1),
+            "avg_dag_size": sum(r.dag_size for r in runs) / max(total, 1),
+            "avg_duration_ms": sum(r.total_ms for r in runs) / max(total, 1),
             "total_tool_calls": total_tool_calls,
             "total_success": total_success,
             "total_failed": total_failed,
@@ -205,7 +236,10 @@ class MetricsDashboard:
     def get_error_trend(self) -> list[dict]:
         """获取错误趋势 (最近 N 次运行)"""
         trend = []
-        for run in self._runs[-20:]:
+        with self._lock:
+            runs = list(self._runs[-20:])
+
+        for run in runs:
             errors = sum(1 for tc in run.tool_calls if not tc["success"])
             trend.append(
                 {
@@ -220,7 +254,11 @@ class MetricsDashboard:
     def get_recent_runs(self, limit: int = 10) -> list[dict]:
         """获取最近的运行记录"""
         result = []
-        for run in self._runs[-limit:]:
+        limit = max(limit, 0)
+        with self._lock:
+            runs = list(self._runs[-limit:] if limit else [])
+
+        for run in runs:
             result.append(
                 {
                     "trace_id": run.trace_id[:8],

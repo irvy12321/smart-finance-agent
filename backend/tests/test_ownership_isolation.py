@@ -68,6 +68,17 @@ async def test_conversation_cross_user_access_denied(real_client, temp_db):
     assert resp.json()["total_messages"] == 1
 
 
+async def test_ownerless_conversation_access_denied(real_client, temp_db):
+    a = await _make_analyst(real_client, temp_db, "ownerless_conv_a")
+    temp_db.create_conversation("legacy-ownerless")
+    temp_db.add_message("legacy-ownerless", "user", "legacy private data")
+
+    resp = await real_client.get(
+        "/api/chat/conversations/legacy-ownerless", headers=_auth(a)
+    )
+    assert resp.status_code == 403
+
+
 async def test_conversation_list_only_own(real_client, temp_db):
     a = await _make_analyst(real_client, temp_db, "own_list_a")
     b = await _make_analyst(real_client, temp_db, "own_list_b")
@@ -140,8 +151,17 @@ async def test_report_cross_user_access_denied(real_client, temp_db):
     )
     temp_db.update_task(task_id, status="completed")
 
-    resp = await real_client.get(f"/api/report/{task_id}", headers=_auth(b))
-    assert resp.status_code == 403
+    for suffix in [
+        "",
+        "/summary",
+        "/markdown",
+        "/charts",
+        "/analysis",
+        "/sources",
+        "/process",
+    ]:
+        resp = await real_client.get(f"/api/report/{task_id}{suffix}", headers=_auth(b))
+        assert resp.status_code == 403, f"suffix={suffix}: {resp.text}"
 
     resp = await real_client.get(f"/api/report/{task_id}", headers=_auth(a))
     assert resp.status_code == 200

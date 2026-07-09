@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import ReactFlow, {
   Background,
   Controls,
@@ -42,10 +42,10 @@ export function DAGPanel({ nodes: inputNodes, edges: inputEdges, onSelectTask }:
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges)
 
   // Update nodes when layout changes
-  useCallback(() => {
+  useEffect(() => {
     setNodes(layoutedNodes)
     setEdges(layoutedEdges)
-  }, [layoutedNodes, layoutedEdges, setNodes, setEdges])()
+  }, [layoutedNodes, layoutedEdges, setNodes, setEdges])
 
   // Handle node click
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node<TaskNodeData>) => {
@@ -77,8 +77,8 @@ export function DAGPanel({ nodes: inputNodes, edges: inputEdges, onSelectTask }:
         <Background color="#374151" gap={16} />
         <Controls className="!bg-gray-800 !border-gray-700 !text-gray-300" />
         <MiniMap
-          nodeColor={(node: any) => {
-            const data = node.data as TaskNodeData
+          nodeColor={(node: Node<TaskNodeData>) => {
+            const data = node.data
             switch (data.status) {
               case 'success': return '#22c55e'
               case 'running': return '#3b82f6'

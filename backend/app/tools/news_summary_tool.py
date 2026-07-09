@@ -9,6 +9,7 @@ import aiohttp
 
 from app.tools.base_tool import MOCK_WARNING, BaseTool, ToolResult, mock_enabled
 from app.utils.logger import get_logger
+from app.utils.redaction import redact_sensitive_text
 
 logger = get_logger("news_summary_tool")
 
@@ -174,9 +175,10 @@ class NewsSummaryTool(BaseTool):
             try:
                 return await self._search_finnhub_news(query, max_results)
             except Exception as e:
-                logger.error(f"Finnhub news search failed for {query}: {e}")
+                safe_error = redact_sensitive_text(e)
+                logger.error(f"Finnhub news search failed for {query}: {safe_error}")
                 return self._unavailable(
-                    query, max_results, f"real data unavailable: {e}"
+                    query, max_results, f"real data unavailable: {safe_error}"
                 )
 
         if not self.api_key:
@@ -185,8 +187,11 @@ class NewsSummaryTool(BaseTool):
         try:
             return await self._search_real_news(query, max_results)
         except Exception as e:
-            logger.error(f"News search failed for {query}: {e}")
-            return self._unavailable(query, max_results, f"real data unavailable: {e}")
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"News search failed for {query}: {safe_error}")
+            return self._unavailable(
+                query, max_results, f"real data unavailable: {safe_error}"
+            )
 
     def _unavailable(self, query: str, max_results: int, reason: str) -> ToolResult:
         if not mock_enabled():
@@ -322,7 +327,8 @@ class NewsSummaryTool(BaseTool):
                     is_mock=False,
                 )
         except Exception as e:
-            logger.error(f"News API request failed: {e}")
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"News API request failed: {safe_error}")
             raise
 
     def _mock_news_sync(self, query: str, max_results: int) -> ToolResult:
@@ -489,8 +495,9 @@ class NewsAnalysisTool(BaseTool):
                 warning=news_result.warning,
             )
         except Exception as e:
-            logger.error(f"News analysis failed for {query}: {e}")
-            return ToolResult(success=False, error=str(e), tool_name=self.name)
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"News analysis failed for {query}: {safe_error}")
+            return ToolResult(success=False, error=safe_error, tool_name=self.name)
 
     def _analyze_news(self, data: dict, query: str, period: str) -> dict:
         """分析新闻数据"""

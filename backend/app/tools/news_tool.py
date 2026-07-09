@@ -3,6 +3,7 @@ import aiohttp
 from app.tools.base_tool import BaseTool, ToolResult
 from app.tools.cache import get_cache
 from app.utils.logger import get_logger
+from app.utils.redaction import redact_sensitive_text
 
 logger = get_logger("news_tool")
 
@@ -40,7 +41,8 @@ class NewsTool(BaseTool):
             try:
                 result = await self._search_newsapi(query)
             except Exception as e:
-                logger.warning(f"NewsAPI failed: {e}, using fallback")
+                safe_error = redact_sensitive_text(e)
+                logger.warning(f"NewsAPI failed: {safe_error}, using fallback")
                 result = await self._fallback(query)
 
         # 存入缓存

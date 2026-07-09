@@ -14,6 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app import storage
+from app.api.error_utils import safe_internal_detail
 from app.auth.dependencies import require_role
 from app.auth.models import UserResponse
 from app.auth.roles import Role
@@ -125,6 +126,14 @@ def _get_orchestrator(request: Request):
     return getattr(request.app.state, "orchestrator", None)
 
 
+def _ensure_conversation_owner(
+    conversation_id: str, current_user: UserResponse
+) -> None:
+    owner_id = storage.get_conversation_owner(conversation_id)
+    if owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+
 # ============================================================
 # API Routes
 # ============================================================
@@ -147,8 +156,11 @@ async def create_conversation(
             message="Conversation created successfully",
         )
     except Exception as e:
-        logger.error(f"Error creating conversation: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error creating conversation: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=safe_internal_detail("Failed to create conversation"),
+        ) from e
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=ChatResponse)
@@ -161,15 +173,12 @@ async def send_message(
 ):
     """Send a message in a conversation (Admin/Analyst only)"""
     try:
-        # Check ownership
-        owner_id = storage.get_conversation_owner(conversation_id)
-        if owner_id is not None and owner_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
-
         # Get or create conversation
         conversation = storage.get_conversation(conversation_id)
         if conversation is None:
-            storage.create_conversation(conversation_id)
+            storage.create_conversation(conversation_id, user_id=current_user.id)
+        else:
+            _ensure_conversation_owner(conversation_id, current_user)
 
         # Add user message
         ChatMessage(
@@ -241,8 +250,10 @@ async def send_message(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error sending message: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error sending message: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Failed to send message")
+        ) from e
 
 
 @router.get(
@@ -253,13 +264,10 @@ async def get_conversation_history(
     current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
 ):
     """Get conversation history (Admin/Analyst only)"""
-    owner_id = storage.get_conversation_owner(conversation_id)
-    if owner_id is not None and owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
-
     conversation = storage.get_conversation(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    _ensure_conversation_owner(conversation_id, current_user)
 
     messages = [ChatMessage(**msg) for msg in conversation["messages"]]
 
@@ -285,9 +293,9 @@ async def delete_conversation(
     current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
 ):
     """Delete a conversation (Admin/Analyst only)"""
-    owner_id = storage.get_conversation_owner(conversation_id)
-    if owner_id is not None and owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if storage.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    _ensure_conversation_owner(conversation_id, current_user)
 
     deleted = storage.delete_conversation(conversation_id)
     if not deleted:

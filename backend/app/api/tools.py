@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.api.error_utils import safe_bad_request_detail, safe_internal_detail
 from app.auth.dependencies import get_current_user, require_role
 from app.auth.models import UserResponse
 from app.auth.roles import Role
@@ -63,6 +64,8 @@ class StockPriceResponse(BaseModel):
     low_52w: float = 0
     timestamp: str
     source: str
+    is_mock: bool = False
+    warning: str = ""
 
 
 class StockHistoryRequest(BaseModel):
@@ -81,6 +84,8 @@ class StockHistoryResponse(BaseModel):
     period: str
     history: list[dict[str, Any]]
     source: str = ""
+    is_mock: bool = False
+    warning: str = ""
 
 
 class FinancialReportRequest(BaseModel):
@@ -103,6 +108,8 @@ class FinancialReportResponse(BaseModel):
     quarterly: dict[str, Any] = {}
     timestamp: str
     source: str
+    is_mock: bool = False
+    warning: str = ""
 
 
 class FinancialAnalysisRequest(BaseModel):
@@ -122,6 +129,9 @@ class FinancialAnalysisResponse(BaseModel):
     analysis_type: str
     analysis: dict[str, Any]
     timestamp: str
+    source: str = ""
+    is_mock: bool = False
+    warning: str = ""
 
 
 class NewsRequest(BaseModel):
@@ -140,6 +150,8 @@ class NewsResponse(BaseModel):
     total_results: int
     timestamp: str
     source: str = ""
+    is_mock: bool = False
+    warning: str = ""
 
 
 class NewsAnalysisRequest(BaseModel):
@@ -156,6 +168,9 @@ class NewsAnalysisResponse(BaseModel):
     period: str
     analysis: dict[str, Any]
     timestamp: str
+    source: str = ""
+    is_mock: bool = False
+    warning: str = ""
 
 
 # ============================================================
@@ -176,8 +191,10 @@ async def list_tools(current_user: UserResponse = Depends(get_current_user)):
             total=len(tools),
         )
     except Exception as e:
-        logger.error(f"Error listing tools: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error listing tools: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Failed to list tools")
+        ) from e
 
 
 @router.post("/stock/price", response_model=StockPriceResponse)
@@ -191,7 +208,10 @@ async def get_stock_price(
         result = await tool.execute(symbol=request.symbol)
 
         if not result.success:
-            raise HTTPException(status_code=400, detail=result.error)
+            raise HTTPException(
+                status_code=400,
+                detail=safe_bad_request_detail(result.error, "Stock price failed"),
+            )
 
         data = result.data
         return StockPriceResponse(
@@ -207,12 +227,16 @@ async def get_stock_price(
             low_52w=data.get("52w_low", 0),
             timestamp=data.get("timestamp", ""),
             source=data.get("source", ""),
+            is_mock=result.is_mock or bool(data.get("is_mock", False)),
+            warning=result.warning or data.get("warning", ""),
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting stock price: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error getting stock price: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Stock price request failed")
+        ) from e
 
 
 @router.post("/stock/history", response_model=StockHistoryResponse)
@@ -226,7 +250,10 @@ async def get_stock_history(
         result = await tool.execute(symbol=request.symbol, period=request.period)
 
         if not result.success:
-            raise HTTPException(status_code=400, detail=result.error)
+            raise HTTPException(
+                status_code=400,
+                detail=safe_bad_request_detail(result.error, "Stock history failed"),
+            )
 
         data = result.data
         return StockHistoryResponse(
@@ -234,12 +261,16 @@ async def get_stock_history(
             period=data.get("period", request.period),
             history=data.get("history", []),
             source=data.get("source", ""),
+            is_mock=result.is_mock or bool(data.get("is_mock", False)),
+            warning=result.warning or data.get("warning", ""),
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting stock history: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error getting stock history: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Stock history request failed")
+        ) from e
 
 
 @router.post("/financial/report", response_model=FinancialReportResponse)
@@ -255,7 +286,10 @@ async def get_financial_report(
         )
 
         if not result.success:
-            raise HTTPException(status_code=400, detail=result.error)
+            raise HTTPException(
+                status_code=400,
+                detail=safe_bad_request_detail(result.error, "Financial report failed"),
+            )
 
         data = result.data
         return FinancialReportResponse(
@@ -267,12 +301,17 @@ async def get_financial_report(
             quarterly=data.get("quarterly", {}),
             timestamp=data.get("timestamp", ""),
             source=data.get("source", ""),
+            is_mock=result.is_mock or bool(data.get("is_mock", False)),
+            warning=result.warning or data.get("warning", ""),
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting financial report: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error getting financial report: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=safe_internal_detail("Financial report request failed"),
+        ) from e
 
 
 @router.post("/financial/analysis", response_model=FinancialAnalysisResponse)
@@ -288,7 +327,12 @@ async def get_financial_analysis(
         )
 
         if not result.success:
-            raise HTTPException(status_code=400, detail=result.error)
+            raise HTTPException(
+                status_code=400,
+                detail=safe_bad_request_detail(
+                    result.error, "Financial analysis failed"
+                ),
+            )
 
         data = result.data
         return FinancialAnalysisResponse(
@@ -296,12 +340,18 @@ async def get_financial_analysis(
             analysis_type=data.get("analysis_type", request.analysis_type),
             analysis=data.get("analysis", {}),
             timestamp=data.get("timestamp", ""),
+            source=result.source or data.get("source", ""),
+            is_mock=result.is_mock or bool(data.get("is_mock", False)),
+            warning=result.warning or data.get("warning", ""),
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting financial analysis: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error getting financial analysis: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=safe_internal_detail("Financial analysis request failed"),
+        ) from e
 
 
 @router.post("/news/search", response_model=NewsResponse)
@@ -317,7 +367,10 @@ async def search_news(
         )
 
         if not result.success:
-            raise HTTPException(status_code=400, detail=result.error)
+            raise HTTPException(
+                status_code=400,
+                detail=safe_bad_request_detail(result.error, "News search failed"),
+            )
 
         data = result.data
         return NewsResponse(
@@ -327,12 +380,16 @@ async def search_news(
             total_results=data.get("total_results", 0),
             timestamp=data.get("timestamp", ""),
             source=data.get("source", ""),
+            is_mock=result.is_mock or bool(data.get("is_mock", False)),
+            warning=result.warning or data.get("warning", ""),
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error searching news: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error searching news: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("News search request failed")
+        ) from e
 
 
 @router.post("/news/analysis", response_model=NewsAnalysisResponse)
@@ -346,7 +403,10 @@ async def get_news_analysis(
         result = await tool.execute(query=request.query, period=request.period)
 
         if not result.success:
-            raise HTTPException(status_code=400, detail=result.error)
+            raise HTTPException(
+                status_code=400,
+                detail=safe_bad_request_detail(result.error, "News analysis failed"),
+            )
 
         data = result.data
         return NewsAnalysisResponse(
@@ -354,9 +414,15 @@ async def get_news_analysis(
             period=data.get("period", request.period),
             analysis=data.get("analysis", {}),
             timestamp=data.get("timestamp", ""),
+            source=result.source or data.get("source", ""),
+            is_mock=result.is_mock or bool(data.get("is_mock", False)),
+            warning=result.warning or data.get("warning", ""),
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting news analysis: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error getting news analysis: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=safe_internal_detail("News analysis request failed"),
+        ) from e

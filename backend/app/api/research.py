@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from app.api.error_utils import safe_internal_detail
 from app.auth.dependencies import require_role
 from app.auth.models import UserResponse
 from app.auth.roles import Role
@@ -41,5 +42,7 @@ async def research_symbol(
         result = await service.research(symbol, language=language)
         return result.to_dict()
     except Exception as e:
-        logger.error(f"Research failed for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=f"Research failed: {e}") from e
+        logger.error(f"Research failed for {symbol}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Research failed")
+        ) from e

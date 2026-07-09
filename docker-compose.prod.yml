@@ -15,12 +15,18 @@ services:
     environment:
       - ENVIRONMENT=production
       - PYTHONUNBUFFERED=1
+      - ALLOW_MOCK_DATA=${ALLOW_MOCK_DATA:-false}
+      - LITELLM_LOCAL_MODEL_COST_MAP=${LITELLM_LOCAL_MODEL_COST_MAP:-true}
     expose:
       - "8000"
     volumes:
       - backend_data:/app/data
       - backend_output:/app/output
       - backend_logs:/app/logs
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
@@ -58,17 +64,23 @@ services:
         - VITE_SENTRY_DSN=${SENTRY_DSN:-}
     container_name: sfa-frontend-prod
     ports:
-      - "80:80"
-      - "443:443"
+      - "80:8080"
+      # Enable after copying nginx/conf.d/default.conf.example to default.conf
+      # and mounting valid certificates under nginx/ssl.
+      # - "443:8443"
     volumes:
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
       backend:
         condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: always
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
       retries: 5

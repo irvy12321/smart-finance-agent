@@ -9,6 +9,7 @@ import aiohttp
 
 from app.tools.base_tool import MOCK_WARNING, BaseTool, ToolResult, mock_enabled
 from app.utils.logger import get_logger
+from app.utils.redaction import redact_sensitive_text
 
 logger = get_logger("financial_report_tool")
 
@@ -107,9 +108,10 @@ class FinancialReportTool(BaseTool):
         try:
             return await self._fetch_real_data(symbol, report_type)
         except Exception as e:
-            logger.error(f"Financial report query failed for {symbol}: {e}")
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"Financial report query failed for {symbol}: {safe_error}")
             return await self._unavailable(
-                symbol, report_type, f"real data unavailable: {e}"
+                symbol, report_type, f"real data unavailable: {safe_error}"
             )
 
     async def _unavailable(
@@ -131,10 +133,10 @@ class FinancialReportTool(BaseTool):
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             # 获取公司概况
-            profile_url = (
-                f"{FMP_BASE_URL}/profile?symbol={symbol}&apikey={self.api_key}"
-            )
-            async with session.get(profile_url) as resp:
+            profile_params = {"symbol": symbol, "apikey": self.api_key}
+            async with session.get(
+                f"{FMP_BASE_URL}/profile", params=profile_params
+            ) as resp:
                 profile_data = await resp.json()
 
             if (
@@ -147,18 +149,24 @@ class FinancialReportTool(BaseTool):
             profile = profile_data[0]
 
             # 获取财务报表
-            income_url = f"{FMP_BASE_URL}/income-statement?symbol={symbol}&limit=3&apikey={self.api_key}"
-            async with session.get(income_url) as resp:
+            income_params = {"symbol": symbol, "limit": 3, "apikey": self.api_key}
+            async with session.get(
+                f"{FMP_BASE_URL}/income-statement", params=income_params
+            ) as resp:
                 income_data = await resp.json()
 
             # 获取资产负债表
-            balance_url = f"{FMP_BASE_URL}/balance-sheet-statement?symbol={symbol}&limit=3&apikey={self.api_key}"
-            async with session.get(balance_url) as resp:
+            balance_params = {"symbol": symbol, "limit": 3, "apikey": self.api_key}
+            async with session.get(
+                f"{FMP_BASE_URL}/balance-sheet-statement", params=balance_params
+            ) as resp:
                 balance_data = await resp.json()
 
             # 获取关键指标
-            metrics_url = f"{FMP_BASE_URL}/key-metrics?symbol={symbol}&limit=3&apikey={self.api_key}"
-            async with session.get(metrics_url) as resp:
+            metrics_params = {"symbol": symbol, "limit": 3, "apikey": self.api_key}
+            async with session.get(
+                f"{FMP_BASE_URL}/key-metrics", params=metrics_params
+            ) as resp:
                 metrics_data = await resp.json()
 
             # 构建财务数据
@@ -180,8 +188,15 @@ class FinancialReportTool(BaseTool):
 
             if report_type == "quarterly":
                 # 获取季度数据
-                quarterly_url = f"{FMP_BASE_URL}/income-statement?symbol={symbol}&period=quarter&limit=4&apikey={self.api_key}"
-                async with session.get(quarterly_url) as resp:
+                quarterly_params = {
+                    "symbol": symbol,
+                    "period": "quarter",
+                    "limit": 4,
+                    "apikey": self.api_key,
+                }
+                async with session.get(
+                    f"{FMP_BASE_URL}/income-statement", params=quarterly_params
+                ) as resp:
                     quarterly_data = await resp.json()
                 result["quarterly"] = self._parse_quarterly(quarterly_data)
 
@@ -378,8 +393,9 @@ class FinancialAnalysisTool(BaseTool):
                 warning=report_result.warning,
             )
         except Exception as e:
-            logger.error(f"Financial analysis failed for {symbol}: {e}")
-            return ToolResult(success=False, error=str(e), tool_name=self.name)
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"Financial analysis failed for {symbol}: {safe_error}")
+            return ToolResult(success=False, error=safe_error, tool_name=self.name)
 
     def _analyze_financials(self, data: dict, analysis_type: str) -> dict:
         """分析财务数据"""

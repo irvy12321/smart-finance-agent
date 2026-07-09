@@ -50,13 +50,14 @@ curl http://localhost:8000/metrics
 ### 4. Start Monitoring Stack
 
 ```bash
+export GRAFANA_ADMIN_PASSWORD='replace-with-a-strong-password'
 docker-compose -f docker-compose.monitoring.yml up -d
 ```
 
 ### 5. Access Services
 
 - **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3001 (admin/admin123)
+- **Grafana**: http://localhost:3001 (admin / value of `GRAFANA_ADMIN_PASSWORD`)
 
 ## Metrics Reference
 
@@ -137,7 +138,7 @@ The pre-configured dashboard includes:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRAFANA_ADMIN_PASSWORD` | admin123 | Grafana admin password |
+| `GRAFANA_ADMIN_PASSWORD` | required | Grafana admin password |
 | `ENVIRONMENT` | development | Environment name |
 
 ## Troubleshooting

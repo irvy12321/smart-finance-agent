@@ -159,6 +159,8 @@ async def multi_query_retrieve(
     top_k: int = 5,
     use_hyde: bool = False,
     reranker: Any | None = None,
+    metadata_filter: dict[str, Any] | None = None,
+    min_score: float = 0.0,
 ) -> list[dict[str, Any]]:
     """多路检索 + 合并去重 + (可选) reranker 精排.
 
@@ -193,7 +195,12 @@ async def multi_query_retrieve(
     all_results: list[dict[str, Any]] = []
     for q in queries:
         try:
-            res = retriever.retrieve(q, top_k=top_k)
+            res = retriever.retrieve(
+                q,
+                top_k=top_k,
+                metadata_filter=metadata_filter,
+                min_score=min_score,
+            )
             all_results.extend(res)
         except Exception as e:
             logger.warning(
@@ -203,7 +210,12 @@ async def multi_query_retrieve(
 
     if hyde_doc:
         try:
-            res = retriever.retrieve(hyde_doc, top_k=top_k)
+            res = retriever.retrieve(
+                hyde_doc,
+                top_k=top_k,
+                metadata_filter=metadata_filter,
+                min_score=min_score,
+            )
             all_results.extend(res)
         except Exception as e:
             logger.warning(f"HyDE retrieve failed ({type(e).__name__}: {e}); skipping")

@@ -8,7 +8,7 @@ from httpx import AsyncClient
 def mock_storage():
     with patch("app.api.chat.storage") as mock:
         mock.get_conversation.return_value = None
-        mock.get_conversation_owner.return_value = None
+        mock.get_conversation_owner.return_value = 1
         mock.create_conversation.return_value = None
         mock.add_message.return_value = None
         mock.list_conversations.return_value = []
@@ -34,7 +34,7 @@ async def test_create_conversation(client: AsyncClient, mock_storage):
 
 @pytest.mark.asyncio
 async def test_send_message(client: AsyncClient, mock_storage, mock_llm):
-    mock_storage.get_conversation.return_value = {"messages": []}
+    mock_storage.get_conversation.return_value = None
 
     response = await client.post(
         "/api/chat/conversations/test-conv/messages",
@@ -44,6 +44,7 @@ async def test_send_message(client: AsyncClient, mock_storage, mock_llm):
     data = response.json()
     assert data["conversation_id"] == "test-conv"
     assert "response" in data
+    mock_storage.create_conversation.assert_called_once_with("test-conv", user_id=1)
 
 
 @pytest.mark.asyncio
@@ -113,6 +114,8 @@ async def test_list_conversations(client: AsyncClient, mock_storage):
 
 @pytest.mark.asyncio
 async def test_delete_conversation(client: AsyncClient, mock_storage):
+    mock_storage.get_conversation.return_value = {"messages": []}
+
     response = await client.delete("/api/chat/conversations/test-conv")
     assert response.status_code == 200
     assert "deleted" in response.json()["message"].lower()

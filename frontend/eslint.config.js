@@ -61,4 +61,17 @@ export default [
       'no-undef': 'off',
     },
   },
+  {
+    files: ['src/**/*.d.ts', 'src/test/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+  {
+    files: ['src/contexts/**/*.tsx', 'src/components/ui/*Context.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ]

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -33,7 +33,6 @@ export default function SystemOverview() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
-  const abortControllerRef = useRef<AbortController | null>(null)
 
   const fetchSystemData = useCallback(async () => {
     try {
@@ -86,7 +85,6 @@ export default function SystemOverview() {
     }
     return () => {
       if (interval) clearInterval(interval)
-      abortControllerRef.current?.abort()
     }
   }, [autoRefresh, fetchSystemData])
 

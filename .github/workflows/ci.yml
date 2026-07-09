@@ -400,6 +400,10 @@ jobs:
         run: |
           set -euo pipefail
           PORT="${ECS_SSH_PORT:-22}"
+          RUN_SUFFIX="${GITHUB_RUN_ID:-manual}_${GITHUB_RUN_ATTEMPT:-0}"
+          OK_FILE="/tmp/sfa_deploy_${RUN_SUFFIX}.ok"
+          FAIL_FILE="/tmp/sfa_deploy_${RUN_SUFFIX}.fail"
+          LOG_FILE="/tmp/sfa_deploy_${RUN_SUFFIX}.log"
           git archive --format=tar.gz -o /tmp/src.tar.gz HEAD
           export SSHPASS="$ECS_SSH_PASSWORD"
           sshpass -e scp $SSH_OPTS -P "$PORT" /tmp/src.tar.gz "$ECS_SSH_USER@$ECS_HOST:/tmp/src.tar.gz"
@@ -407,16 +411,14 @@ jobs:
             set -e
             cd '$ECS_PROJECT_DIR'
             tar xzf /tmp/src.tar.gz
-            rm -f /tmp/sfa_deploy.ok /tmp/sfa_deploy.fail /tmp/sfa_deploy.log
             # Each image build is retried up to 3x: the ECS host's Docker registry
             # mirror occasionally fails DNS resolution (transient), which used to
             # fail the whole deploy and require a manual re-run.
-            nohup sh -c '( docker compose -f docker-compose.prod.yml build backend || { sleep 10; docker compose -f docker-compose.prod.yml build backend; } || { sleep 15; docker compose -f docker-compose.prod.yml build backend; } ) \
+            nohup sh -c "( docker compose -f docker-compose.prod.yml build backend || { sleep 10; docker compose -f docker-compose.prod.yml build backend; } || { sleep 15; docker compose -f docker-compose.prod.yml build backend; } ) \
               && ( docker compose -f docker-compose.prod.yml build frontend || { sleep 10; docker compose -f docker-compose.prod.yml build frontend; } || { sleep 15; docker compose -f docker-compose.prod.yml build frontend; } ) \
-              && docker compose -f docker-compose.prod.yml up -d --remove-orphans \
-              && docker image prune -f \
-              && touch /tmp/sfa_deploy.ok || touch /tmp/sfa_deploy.fail' \
-              > /tmp/sfa_deploy.log 2>&1 &
+              && docker compose -f docker-compose.prod.yml up -d \
+              && touch '$OK_FILE' || touch '$FAIL_FILE'" \
+              > '$LOG_FILE' 2>&1 &
             echo 'Build started on ECS'
           "
 
@@ -424,11 +426,15 @@ jobs:
         run: |
           set -uo pipefail
           PORT="${ECS_SSH_PORT:-22}"
+          RUN_SUFFIX="${GITHUB_RUN_ID:-manual}_${GITHUB_RUN_ATTEMPT:-0}"
+          OK_FILE="/tmp/sfa_deploy_${RUN_SUFFIX}.ok"
+          FAIL_FILE="/tmp/sfa_deploy_${RUN_SUFFIX}.fail"
+          LOG_FILE="/tmp/sfa_deploy_${RUN_SUFFIX}.log"
           export SSHPASS="$ECS_SSH_PASSWORD"
           for i in $(seq 1 90); do
             sleep 20
             OUT=$(sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" \
-              'if [ -f /tmp/sfa_deploy.ok ]; then echo OK; elif [ -f /tmp/sfa_deploy.fail ]; then echo FAIL; else echo RUNNING; fi; tail -n 1 /tmp/sfa_deploy.log 2>/dev/null' 2>/dev/null) || OUT="RUNNING (ssh retry)"
+              "if [ -f '$OK_FILE' ]; then echo OK; elif [ -f '$FAIL_FILE' ]; then echo FAIL; else echo RUNNING; fi; tail -n 1 '$LOG_FILE' 2>/dev/null" 2>/dev/null) || OUT="RUNNING (ssh retry)"
             STATE=$(printf '%s\n' "$OUT" | head -n 1)
             echo "[$i] $OUT"
             if [ "$STATE" = "OK" ]; then
@@ -438,7 +444,7 @@ jobs:
             fi
             if [ "$STATE" = "FAIL" ]; then
               echo "::error::ECS build failed. Last 40 log lines:"
-              sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" 'tail -n 40 /tmp/sfa_deploy.log' 2>/dev/null || true
+              sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" "tail -n 40 '$LOG_FILE'" 2>/dev/null || true
               exit 1
             fi
           done

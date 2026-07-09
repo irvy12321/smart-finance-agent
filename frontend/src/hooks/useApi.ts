@@ -90,7 +90,7 @@ export function useTask() {
                 status: 'completed',
                 result,
               }))
-            } catch (_resultError: unknown) {
+            } catch {
               // Task completed but result fetch failed - still mark as completed with partial info
               setTaskState(prev => ({
                 ...prev,

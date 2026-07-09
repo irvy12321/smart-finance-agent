@@ -33,6 +33,14 @@ docker compose down
 ### Production
 
 ```bash
+# Prepare production environment files
+cp .env.production.example .env
+cp backend/.env.production.example backend/.env
+# Edit backend/.env and replace every placeholder secret/key before deploy.
+
+# Validate compose syntax
+docker compose -f docker-compose.prod.yml config
+
 # Build production images
 docker compose -f docker-compose.prod.yml build
 
@@ -41,6 +49,10 @@ docker compose -f docker-compose.prod.yml up -d
 
 # View logs
 docker compose -f docker-compose.prod.yml logs -f
+
+# Verify health
+curl http://localhost/health
+curl http://localhost/api/ping
 ```
 
 ## Architecture
@@ -51,7 +63,7 @@ docker compose -f docker-compose.prod.yml logs -f
 │                                                             │
 │  ┌─────────────────────┐      ┌─────────────────────────┐  │
 │  │   Frontend (Nginx)  │      │   Backend (FastAPI)     │  │
-│  │   Port: 80/443      │─────▶│   Port: 8000            │  │
+│  │   Port: 80          │─────▶│   Port: 8000            │  │
 │  │   - Static files    │      │   - API endpoints       │  │
 │  │   - API proxy       │      │   - Agent orchestration │  │
 │  └─────────────────────┘      └─────────────────────────┘  │
@@ -71,32 +83,51 @@ docker compose -f docker-compose.prod.yml logs -f
   - Static asset caching (1 year)
   - Security headers
   - Non-root user (nginx)
+  - Listens on non-privileged container ports (`8080`, optional TLS `8443`);
+    Compose maps host `3000`/`80`/`443` to those internal ports.
 
 ### Backend Image
 
-- **Base**: `python:3.11-slim`
+- **Base**: `python:3.12-slim-bookworm`
 - **Size**: ~500MB
 - **Features**:
   - Multi-stage build (dependencies → runtime)
-  - Virtual environment isolation
-  - uvloop for better performance
-  - 4 worker processes
+  - Runtime dependencies copied from the builder stage
+  - 2 uvicorn worker processes
   - Non-root user (appuser)
   - tini init system
+
+Compose services run with `no-new-privileges:true` and `cap_drop: [ALL]` so the
+runtime cannot gain extra Linux capabilities after startup.
 
 ## Environment Variables
 
 ### Backend (.env)
 
 ```env
+# Required auth configuration
+JWT_SECRET_KEY=replace-with-a-64-byte-random-secret
+DEFAULT_ADMIN_PASSWORD=replace-with-a-strong-admin-password
+
 # LLM Configuration
 MIMO_API_KEY=your-api-key
 LLM_PROVIDER=mimo
+
+# Production reliability defaults
+ALLOW_MOCK_DATA=false
+LITELLM_LOCAL_MODEL_COST_MAP=true
+CORS_ORIGINS=https://your-domain.example
 
 # Sentry (optional)
 SENTRY_DSN=your-sentry-dsn
 ENVIRONMENT=production
 ```
+
+Production startup fails fast when `JWT_SECRET_KEY` is missing, weak, or still a
+placeholder; when `DEFAULT_ADMIN_PASSWORD` is missing, weak, or still a
+placeholder; when `ALLOW_MOCK_DATA=true`; or when `CORS_ORIGINS` contains
+wildcard/localhost origins. Production startup also fails if the active LLM
+provider API key is missing or still a placeholder.
 
 ### Frontend (build args)
 
@@ -134,8 +165,8 @@ Health checks run every 30 seconds with 3 retries.
 
 | Service | CPU | Memory |
 |---------|-----|--------|
-| Frontend | 2 CPUs | 512MB |
-| Backend | 4 CPUs | 4GB |
+| Frontend | 1 CPU | 512MB |
+| Backend | 1 CPU | 4GB |
 
 ## SSL/TLS Configuration
 
@@ -151,7 +182,9 @@ For production with HTTPS:
    # Edit default.conf with your domain
    ```
 
-3. Restart frontend service:
+3. Uncomment the `443:8443` port mapping in `docker-compose.prod.yml`.
+
+4. Restart frontend service:
    ```bash
    docker compose restart frontend
    ```

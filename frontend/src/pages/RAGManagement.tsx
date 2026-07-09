@@ -53,7 +53,12 @@ export default function RAGManagement() {
         ragApi.listDocuments(),
         ragApi.getStats(),
       ])
-      setDocuments(docsRes.documents)
+      setDocuments(
+        docsRes.documents.map((doc) => ({
+          ...doc,
+          chunks: doc.chunk_count,
+        }))
+      )
       setStats(statsRes)
     } catch (err: unknown) {
       toast.error(t('common.error'), err instanceof Error ? err.message : 'Unknown error')

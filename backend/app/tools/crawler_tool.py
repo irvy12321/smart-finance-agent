@@ -9,6 +9,7 @@ from app.infrastructure.config import get_crawler_config
 from app.tools.base_tool import BaseTool, ToolResult
 from app.tools.cache import get_cache
 from app.utils.logger import get_logger
+from app.utils.redaction import redact_sensitive_text
 
 logger = get_logger("crawler_tool")
 
@@ -102,18 +103,19 @@ class CrawlerTool(BaseTool):
             return ToolResult(
                 success=False, error="No URL provided", tool_name=self.name
             )
+        safe_url = redact_sensitive_text(url)
 
         # SSRF protection
         ssrf_error = _validate_url(url)
         if ssrf_error:
-            logger.warning(f"SSRF blocked for URL {url}: {ssrf_error}")
+            logger.warning(f"SSRF blocked for URL {safe_url}: {ssrf_error}")
             return ToolResult(success=False, error=ssrf_error, tool_name=self.name)
 
         # 检查缓存
         cache_key = f"crawler:{url}"
         hit, cached_result = self._cache.get(cache_key)
         if hit:
-            logger.debug(f"Crawler cache hit: {url}")
+            logger.debug(f"Crawler cache hit: {safe_url}")
             return cached_result
 
         try:
@@ -122,10 +124,10 @@ class CrawlerTool(BaseTool):
             if len(cleaned) > self.config.max_content_length:
                 cleaned = cleaned[: self.config.max_content_length] + "..."
 
-            logger.info(f"Fetched {len(cleaned)} chars from {url}")
+            logger.info(f"Fetched {len(cleaned)} chars from {safe_url}")
             result = ToolResult(
                 success=True,
-                data={"url": url, "content": cleaned, "length": len(cleaned)},
+                data={"url": safe_url, "content": cleaned, "length": len(cleaned)},
                 tool_name=self.name,
             )
 
@@ -136,22 +138,25 @@ class CrawlerTool(BaseTool):
         except aiohttp.ClientResponseError as e:
             if e.status == 404:
                 logger.warning(
-                    f"URL not found (404): {url} - returning fallback message"
+                    f"URL not found (404): {safe_url} - returning fallback message"
                 )
                 return ToolResult(
                     success=True,
                     data={
-                        "url": url,
-                        "content": f"[Content unavailable: page not found at {url}]",
+                        "url": safe_url,
+                        "content": f"[Content unavailable: page not found at {safe_url}]",
                         "length": 0,
                     },
                     tool_name=self.name,
                 )
-            logger.error(f"Crawler failed for {url}: {e}")
-            return ToolResult(success=False, error=str(e), tool_name=self.name)
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"Crawler failed for {safe_url}: {safe_error}")
+            return ToolResult(success=False, error=safe_error, tool_name=self.name)
         except Exception as e:
-            logger.error(f"Crawler failed for {url}: {e}")
-            return ToolResult(success=False, error=str(e), tool_name=self.name)
+            safe_url = redact_sensitive_text(url)
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"Crawler failed for {safe_url}: {safe_error}")
+            return ToolResult(success=False, error=safe_error, tool_name=self.name)
 
     _MAX_REDIRECTS = 5
 

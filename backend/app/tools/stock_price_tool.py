@@ -12,6 +12,7 @@ import aiohttp
 from app.tools.base_tool import MOCK_WARNING, BaseTool, ToolResult, mock_enabled
 from app.tools.cache import get_cache
 from app.utils.logger import get_logger
+from app.utils.redaction import redact_sensitive_text
 
 logger = get_logger("stock_price_tool")
 
@@ -231,8 +232,9 @@ class StockPriceTool(BaseTool):
                 self._cache.set(cache_key, result, ttl=STOCK_PRICE_CACHE_TTL)
             return result
         except Exception as e:
-            logger.error(f"Stock price query failed for {symbol}: {e}")
-            return self._unavailable(symbol, f"real data unavailable: {e}")
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"Stock price query failed for {symbol}: {safe_error}")
+            return self._unavailable(symbol, f"real data unavailable: {safe_error}")
 
     def _unavailable(self, symbol: str, reason: str) -> ToolResult:
         """Return an explicit failure, or a clearly-labelled mock if ALLOW_MOCK_DATA is set."""
@@ -296,7 +298,8 @@ class StockPriceTool(BaseTool):
                     is_mock=False,
                 )
         except Exception as e:
-            logger.error(f"Alpha Vantage API error for {symbol}: {e}")
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"Alpha Vantage API error for {symbol}: {safe_error}")
             raise
 
     def _mock_price_sync(self, symbol: str) -> ToolResult:
@@ -351,8 +354,11 @@ class StockHistoryTool(BaseTool):
         try:
             return await self._fetch_real_history(symbol, period)
         except Exception as e:
-            logger.error(f"Stock history query failed for {symbol}: {e}")
-            return self._unavailable(symbol, period, f"real data unavailable: {e}")
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"Stock history query failed for {symbol}: {safe_error}")
+            return self._unavailable(
+                symbol, period, f"real data unavailable: {safe_error}"
+            )
 
     def _unavailable(self, symbol: str, period: str, reason: str) -> ToolResult:
         if not mock_enabled():

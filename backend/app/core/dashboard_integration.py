@@ -63,6 +63,7 @@ class DashboardIntegration:
                     success=data.get("success", False),
                     duration_ms=data.get("duration_ms", 0),
                     task_id=data.get("task_id", ""),
+                    trace_id=event.trace_id,
                 )
 
             elif etype == "pipeline_end":
@@ -72,6 +73,7 @@ class DashboardIntegration:
                     success_count=data.get("success_count", 0),
                     failed_count=data.get("failed_count", 0),
                     dag_size=data.get("dag_size", 0),
+                    status=data.get("status"),
                 )
 
         except Exception as e:

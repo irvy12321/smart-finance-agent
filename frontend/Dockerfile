@@ -62,12 +62,12 @@ RUN mkdir -p /var/cache/nginx/client_temp \
 # Switch to non-root user
 USER nginx
 
-# Expose port
-EXPOSE 80
+# Expose non-privileged port for the non-root nginx worker
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:80/ || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]

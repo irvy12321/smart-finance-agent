@@ -174,56 +174,6 @@ export default function Research() {
       console.error('[Research] Failed to fetch initial status:', err)
       // Status fetch failed, will retry in polling loop
     }
-    pollingRef.current = true
-    stopRef.current = false
-
-    // Immediately fetch current status
-    try {
-      console.log('[Research] Fetching initial status...')
-      const statusResp = await taskApi.getStatus(activeTaskId)
-      console.log('[Research] Initial status:', statusResp.status, 'progress:', statusResp.progress)
-      if (stopRef.current || !mountedRef.current) {
-        pollingRef.current = false
-        return
-      }
-      setTaskStatus(statusResp)
-
-      // Check if already completed
-      if (statusResp.status === 'completed') {
-        pollingRef.current = false
-        try {
-          console.log('[Research] Task completed, fetching result...')
-          const resultResp = await taskApi.getResult(activeTaskId)
-          console.log('[Research] Result received:', resultResp ? 'success' : 'empty')
-          if (!stopRef.current && mountedRef.current) {
-            setResult(resultResp)
-            setPhase('completed')
-            saveState({ query, phase: 'completed', taskId: activeTaskId, result: resultResp, taskStatus: statusResp })
-          }
-        } catch (err) {
-          console.error('[Research] Failed to fetch result:', err)
-          if (!stopRef.current && mountedRef.current) {
-            setError(t('error.serverError'))
-            setPhase('error')
-          }
-        }
-        return
-      }
-
-      // Check if already failed - show error immediately
-      if (statusResp.status === 'failed') {
-        pollingRef.current = false
-        if (!stopRef.current && mountedRef.current) {
-          setError(statusResp.message || t('research.taskFailed'))
-          setPhase('error')
-        }
-        return
-      }
-    } catch (err) {
-      console.error('[Research] Failed to fetch initial status:', err)
-      // Status fetch failed, will retry in polling loop
-    }
-
     // Continue polling
     let pollCount = 0
     const maxPolls = 300
@@ -301,7 +251,7 @@ export default function Research() {
     }
 
     poll()
-  }, [t])
+  }, [query, t])
 
   const handleReset = useCallback(() => {
     stopRef.current = true

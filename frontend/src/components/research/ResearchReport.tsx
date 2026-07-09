@@ -18,6 +18,15 @@ interface ResearchReportProps {
   isLoading?: boolean
 }
 
+type RawRiskFactor =
+  | string
+  | {
+      factor?: string
+      text?: string
+      description?: string
+      severity?: string
+    }
+
 export default function ResearchReport({ symbol, taskId, isLoading }: ResearchReportProps) {
   const { t } = useTranslation()
   const [report, setReport] = useState<ReportData | null>(null)
@@ -36,7 +45,7 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
         title: data.report_title || `${symbol} Analysis`,
         summary: data.summary || '',
         keyFindings: data.key_findings || [],
-        riskFactors: (data.risk_factors || []).map((r: any) => ({
+        riskFactors: (data.risk_factors || []).map((r: RawRiskFactor) => ({
           text: typeof r === 'string' ? r : (r.factor ?? r.text ?? r.description ?? ''),
           severity: (typeof r === 'object' && r?.severity) ? r.severity : 'medium'
         })),

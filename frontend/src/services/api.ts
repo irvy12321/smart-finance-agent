@@ -49,10 +49,10 @@ const api = axios.create({
 let isRefreshing = false
 let failedQueue: Array<{
   resolve: (token: string) => void
-  reject: (error: any) => void
+  reject: (error: unknown) => void
 }> = []
 
-const processQueue = (error: any, token: string | null = null) => {
+const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error)
@@ -61,6 +61,33 @@ const processQueue = (error: any, token: string | null = null) => {
     }
   })
   failedQueue = []
+}
+
+interface ApiErrorPayload {
+  detail?: string
+  message?: string
+}
+
+type ApiErrorWithUserMessage = AxiosError<ApiErrorPayload> & {
+  userMessage?: string
+}
+
+interface RAGDocument {
+  id: string
+  filename: string
+  file_type: string
+  file_size: number
+  chunk_count: number
+  status: string
+  created_at: string
+  updated_at: string
+  metadata: Record<string, unknown>
+}
+
+interface RAGSearchResult {
+  text: string
+  score: number
+  metadata: Record<string, unknown>
 }
 
 // Request interceptor - add auth token and language
@@ -80,7 +107,7 @@ api.interceptors.request.use(
 // Response interceptor for error handling with automatic token refresh
 api.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError) => {
+  async (error: AxiosError<ApiErrorPayload>) => {
     // Ignore cancelled requests (AbortController)
     if (error.code === 'ERR_CANCELED' || error.name === 'CanceledError') {
       return Promise.reject(error)
@@ -169,8 +196,8 @@ api.interceptors.response.use(
 
     // Handle other errors
     const message =
-      (error.response?.data as any)?.detail ||
-      (error.response?.data as any)?.message ||
+      error.response?.data?.detail ||
+      error.response?.data?.message ||
       error.message ||
       'An unexpected error occurred'
 
@@ -180,16 +207,17 @@ api.interceptors.response.use(
       message,
     })
 
+    const apiError = error as ApiErrorWithUserMessage
     if (error.response?.status === 404) {
-      (error as any).userMessage = 'Resource not found.'
+      apiError.userMessage = 'Resource not found.'
     } else if (error.response?.status === 500) {
-      (error as any).userMessage = `Server error: ${message}`
+      apiError.userMessage = `Server error: ${message}`
     } else if (error.code === 'ECONNABORTED') {
-      (error as any).userMessage = 'Request timed out. Please try again.'
+      apiError.userMessage = 'Request timed out. Please try again.'
     } else if (!error.response) {
-      (error as any).userMessage = 'Cannot connect to server. Please check if backend is running.'
+      apiError.userMessage = 'Cannot connect to server. Please check if backend is running.'
     } else {
-      (error as any).userMessage = message
+      apiError.userMessage = message
     }
 
     return Promise.reject(error)
@@ -365,8 +393,8 @@ export const chatApi = {
 
 // RAG API
 export const ragApi = {
-  listDocuments: async (): Promise<{ documents: any[] }> => {
-    const response = await api.get<{ documents: any[] }>('/rag/documents')
+  listDocuments: async (): Promise<{ documents: RAGDocument[] }> => {
+    const response = await api.get<{ documents: RAGDocument[] }>('/rag/documents')
     return response.data
   },
 
@@ -379,8 +407,8 @@ export const ragApi = {
     return response.data
   },
 
-  getDocument: async (docId: string): Promise<any> => {
-    const response = await api.get(`/rag/documents/${docId}`)
+  getDocument: async (docId: string): Promise<RAGDocument> => {
+    const response = await api.get<RAGDocument>(`/rag/documents/${docId}`)
     return response.data
   },
 
@@ -389,8 +417,8 @@ export const ragApi = {
     return response.data
   },
 
-  search: async (query: string, topK?: number): Promise<{ results: any[] }> => {
-    const response = await api.post<{ results: any[] }>('/rag/search', { query, top_k: topK })
+  search: async (query: string, topK?: number): Promise<{ results: RAGSearchResult[] }> => {
+    const response = await api.post<{ results: RAGSearchResult[] }>('/rag/search', { query, top_k: topK })
     return response.data
   },
 

@@ -36,7 +36,7 @@ export interface TaskResult {
   task_id: string
   tool: string
   success: boolean
-  data?: any
+  data?: unknown
   error?: string
   duration_ms: number
   status: TaskStatus
@@ -58,7 +58,7 @@ export interface WorkflowEvent {
   description?: string
   success?: boolean
   duration_ms?: number
-  data?: string
+  data?: unknown
   error?: string
   status?: TaskStatus
 
@@ -78,7 +78,7 @@ export interface TaskNodeData {
   description?: string
   confidence?: number
   error?: string
-  data?: string
+  data?: unknown
 }
 
 // Node style config

@@ -127,13 +127,14 @@ curl http://localhost:8000/metrics
 ### 3. Start Monitoring Stack
 
 ```bash
+export GRAFANA_ADMIN_PASSWORD='replace-with-a-strong-password'
 docker-compose -f docker-compose.monitoring.yml up -d
 ```
 
 ### 4. Access Services
 
 - **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3001 (admin/admin123)
+- **Grafana**: http://localhost:3001 (admin / value of `GRAFANA_ADMIN_PASSWORD`)
 
 ## Key Features
 

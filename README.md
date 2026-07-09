@@ -682,7 +682,7 @@ Dependabot 会每周一自动检查并创建依赖更新 PR。
    docker-compose -f docker-compose.prod.yml up -d --build
    ```
 
-3. **验证**：`curl http://localhost:8000/ping` 返回 `{"status":"ok"}`；前端经 nginx 暴露在 80/443。
+3. **验证**：`curl http://localhost:8000/ping` 返回 `{"status":"ok"}`；前端默认经 nginx 暴露在宿主机 80，按 Docker 文档配置 TLS 后再开放 443。
 
 4. **首次创建管理员后**：用上面「ECS 部署后创建用户」的接口添加其它账号，并尽快修改 admin 口令。
 

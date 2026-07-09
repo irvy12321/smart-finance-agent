@@ -3,8 +3,9 @@ Task API routes
 """
 
 import asyncio
-import contextlib
 import json
+import secrets
+import time
 import uuid
 from datetime import datetime
 from typing import Any
@@ -23,6 +24,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from app import storage
+from app.api.error_utils import safe_bad_request_detail, safe_internal_detail
 from app.auth.dependencies import get_current_user, require_role
 from app.auth.models import UserResponse
 from app.auth.roles import Role
@@ -32,25 +34,74 @@ logger = get_logger("api.task")
 
 router = APIRouter(prefix="/task", tags=["task"])
 
-# Native browser EventSource cannot attach an Authorization header, so the SSE
-# endpoint also accepts the access token via the `token` query parameter.
+# Native browser EventSource cannot attach an Authorization header, so clients
+# can request a short-lived one-time stream token before opening the SSE URL.
 _optional_bearer = HTTPBearer(auto_error=False)
+_STREAM_TOKEN_TTL_SECONDS = 60.0
+_STREAM_TOKEN_MAX_ENTRIES = 1024
+_stream_tokens: dict[str, tuple[UserResponse, str, float]] = {}
+
+
+def _prune_stream_tokens(now: float | None = None) -> None:
+    now = now if now is not None else time.monotonic()
+
+    expired_tokens = [
+        token
+        for token, (_, _, expires_at) in _stream_tokens.items()
+        if expires_at <= now
+    ]
+    for token in expired_tokens:
+        _stream_tokens.pop(token, None)
+
+    overflow = len(_stream_tokens) - _STREAM_TOKEN_MAX_ENTRIES
+    if overflow <= 0:
+        return
+
+    oldest_tokens = sorted(_stream_tokens.items(), key=lambda item: item[1][2])[
+        :overflow
+    ]
+    for token, _ in oldest_tokens:
+        _stream_tokens.pop(token, None)
+
+
+def _issue_stream_token(user: UserResponse, task_id: str) -> str:
+    now = time.monotonic()
+    _prune_stream_tokens(now)
+    token = secrets.token_urlsafe(32)
+    _stream_tokens[token] = (user, task_id, now + _STREAM_TOKEN_TTL_SECONDS)
+    _prune_stream_tokens(now)
+    return token
+
+
+def _consume_stream_token(token: str, task_id: str) -> UserResponse | None:
+    now = time.monotonic()
+    _prune_stream_tokens(now)
+    entry = _stream_tokens.pop(token, None)
+    if entry is None:
+        return None
+    user, token_task_id, expires_at = entry
+    if token_task_id != task_id or now > expires_at:
+        return None
+    return user
 
 
 async def get_user_for_stream(
-    token: str | None = Query(default=None),
+    task_id: str,
+    stream_token: str | None = Query(default=None),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
 ) -> UserResponse:
-    """Authenticate an SSE request via Authorization header or `token` query."""
-    if credentials is None and token:
-        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return await get_current_user(credentials)
+    """Authenticate an SSE request via Authorization header or stream token."""
+    if credentials is not None:
+        return await get_current_user(credentials)
+    if stream_token:
+        user = _consume_stream_token(stream_token, task_id)
+        if user is not None:
+            return user
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 # Keep strong references to fire-and-forget background tasks so they are not
@@ -78,6 +129,11 @@ class TaskCreateResponse(BaseModel):
     task_id: str
     status: str
     message: str
+
+
+class StreamTokenResponse(BaseModel):
+    stream_token: str
+    expires_in_seconds: int
 
 
 class TaskStatusResponse(BaseModel):
@@ -181,8 +237,10 @@ async def create_task(
             message=f"Task created successfully. Use /api/task/{task_id}/run to start execution.",
         )
     except Exception as e:
-        logger.error(f"Error creating task: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error creating task: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Failed to create task")
+        ) from e
 
 
 @router.get("/{task_id}/status", response_model=TaskStatusResponse)
@@ -196,7 +254,7 @@ async def get_task_status(
         raise HTTPException(status_code=404, detail="Task not found")
 
     owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
+    if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     return TaskStatusResponse(
@@ -220,7 +278,7 @@ async def run_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
+    if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "pending":
@@ -254,7 +312,7 @@ async def get_task_result(
         raise HTTPException(status_code=404, detail="Task not found")
 
     owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
+    if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
@@ -291,9 +349,50 @@ async def list_tasks(
     return TaskListResponse(tasks=task_list)
 
 
+@router.post("/{task_id}/stream-token", response_model=StreamTokenResponse)
+async def create_stream_token(
+    task_id: str,
+    current_user: UserResponse = Depends(require_role(Role.ADMIN, Role.ANALYST)),
+):
+    """Create a short-lived one-time token for opening the task SSE stream."""
+    task = storage.get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return StreamTokenResponse(
+        stream_token=_issue_stream_token(current_user, task_id),
+        expires_in_seconds=int(_STREAM_TOKEN_TTL_SECONDS),
+    )
+
+
 # ============================================================
 # Background Task Execution
 # ============================================================
+
+
+async def _cancel_progress_task(
+    task_id: str, progress_task: asyncio.Task | None
+) -> None:
+    """Stop the progress updater without masking the pipeline outcome."""
+    if progress_task is None:
+        return
+
+    if not progress_task.done():
+        progress_task.cancel()
+
+    try:
+        await progress_task
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        logger.warning(
+            f"[task:{task_id}] Progress updater failed during cleanup: {type(exc).__name__}: {safe_bad_request_detail(exc, 'Unexpected error')}",
+            exc_info=True,
+        )
 
 
 async def execute_task_background(task_id: str, orchestrator, language: str = "en"):
@@ -305,6 +404,12 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
         return
 
     query = task["query"]
+    events: list[dict[str, Any]] = []
+    pipeline_start_time = datetime.now().timestamp()
+    last_event_time = pipeline_start_time
+    current_progress = 10.0
+    current_stage = "planning"
+    progress_task: asyncio.Task | None = None
 
     try:
         if language == "zh":
@@ -325,11 +430,6 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
         )
 
         # Run with overall timeout (900s)
-        events = []
-        last_event_time = datetime.now().timestamp()
-        pipeline_start_time = datetime.now().timestamp()
-        current_progress = 10.0
-        current_stage = "planning"
 
         async def _progress_updater():
             """Background task to update progress during long operations"""
@@ -463,9 +563,7 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
         await asyncio.wait_for(_run_pipeline(), timeout=900)
 
         # Cancel progress updater
-        progress_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await progress_task
+        await _cancel_progress_task(task_id, progress_task)
 
         # Process events and create result
         result = process_events(events, query, language)
@@ -475,9 +573,7 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
 
     except asyncio.TimeoutError:
         # Cancel progress updater
-        progress_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await progress_task
+        await _cancel_progress_task(task_id, progress_task)
         elapsed = datetime.now().timestamp() - pipeline_start_time
         logger.error(
             f"[task:{task_id}] Timed out after {elapsed:.0f}s (last event {datetime.now().timestamp() - last_event_time:.0f}s ago). Events collected: {len(events)}"
@@ -490,9 +586,7 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
         storage.update_task_failure(task_id, "failed", "timeout", timeout_msg)
     except Exception as e:
         # Cancel progress updater
-        progress_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await progress_task
+        await _cancel_progress_task(task_id, progress_task)
         elapsed = datetime.now().timestamp() - pipeline_start_time
         logger.error(
             f"[task:{task_id}] Failed after {elapsed:.0f}s with error: {type(e).__name__}: {e}",
@@ -502,7 +596,7 @@ async def execute_task_background(task_id: str, orchestrator, language: str = "e
             task_id,
             "failed",
             "error",
-            f"Task failed: {type(e).__name__}: {str(e)[:200]}",
+            f"Task failed: {type(e).__name__}: {safe_bad_request_detail(e, 'Unexpected error')[:200]}",
         )
 
 
@@ -711,14 +805,13 @@ async def stream_task_events(
     - complete: All tasks completed
     - error: Error occurred
     """
-    # Verify task ownership
-    owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
-
     task = storage.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    # Verify task ownership
+    owner_id = storage.get_task_owner(task_id)
+    if owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     async def event_generator():
         """Generate SSE events"""
@@ -788,7 +881,8 @@ async def stream_task_events(
                 break
             except Exception as e:
                 logger.error(f"SSE error for task {task_id}: {e}")
-                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                safe_error = safe_bad_request_detail(e, "Stream error")
+                yield f"event: error\ndata: {json.dumps({'error': safe_error})}\n\n"
                 break
 
     return StreamingResponse(

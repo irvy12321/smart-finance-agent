@@ -49,7 +49,7 @@ ENVIRONMENT=development
 - **FastAPI Integration**: Automatic capture of unhandled exceptions
 - **Logging Integration**: ERROR level logs are sent to Sentry
 - **Request Context**: HTTP request details are attached to errors
-- **Sensitive Data Filtering**: Authorization headers and passwords are automatically filtered
+- **Sensitive Data Filtering**: Authorization/cookie/API-key headers, sensitive query tokens, and password/token fields are automatically filtered
 
 ## Testing Sentry Integration
 

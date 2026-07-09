@@ -15,6 +15,9 @@ export function DetailPanel({ task, onClose }: DetailPanelProps) {
 
   const style = NODE_STYLES[task.status]
   const displayName = TOOL_DISPLAY_NAMES[task.tool] || task.tool
+  const resultData = typeof task.data === 'string'
+    ? task.data
+    : JSON.stringify(task.data, null, 2) ?? String(task.data)
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
@@ -61,12 +64,12 @@ export function DetailPanel({ task, onClose }: DetailPanelProps) {
         )}
 
         {/* Result Data */}
-        {task.data && (
+        {task.data !== undefined && task.data !== null && (
           <div>
             <span className="text-xs text-gray-500 uppercase tracking-wider">{t('workflow.result')}</span>
             <div className="mt-1 bg-gray-900 rounded p-3 max-h-[200px] overflow-auto">
               <pre className="text-xs text-gray-300 whitespace-pre-wrap">
-                {typeof task.data === 'string' ? task.data : JSON.stringify(task.data, null, 2)}
+                {resultData}
               </pre>
             </div>
           </div>

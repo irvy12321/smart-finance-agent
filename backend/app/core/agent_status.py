@@ -4,7 +4,9 @@ Agent 状态管理 - EventBus + 状态机
 """
 
 import asyncio
+import contextlib
 import contextvars
+import threading
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
@@ -24,9 +26,17 @@ _CURRENT_TRACE_ID: contextvars.ContextVar[str] = contextvars.ContextVar(
 )
 
 
-def set_current_trace_id(trace_id: str) -> None:
+def set_current_trace_id(trace_id: str) -> contextvars.Token[str]:
     """Bind the current asyncio task (this run) to a trace id."""
-    _CURRENT_TRACE_ID.set(trace_id)
+    return _CURRENT_TRACE_ID.set(trace_id)
+
+
+def reset_current_trace_id(token: contextvars.Token[str] | None) -> None:
+    """Restore the previous trace id for the current context."""
+    if token is None:
+        return
+    with contextlib.suppress(ValueError, LookupError):
+        _CURRENT_TRACE_ID.reset(token)
 
 
 def get_current_trace_id() -> str:
@@ -69,31 +79,39 @@ class EventBus:
     """
 
     _instance: "EventBus | None" = None
+    _instance_lock = threading.Lock()
 
     def __init__(self):
         self._subscribers: dict[str, list[EventCallback]] = {}
         self._event_history: list[AgentEvent] = []
         self._max_history = 500
+        self._lock = threading.RLock()
 
     @classmethod
     def get_instance(cls) -> "EventBus":
         if cls._instance is None:
-            cls._instance = cls()
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = cls()
         return cls._instance
 
     def subscribe(self, event_type: str, callback: EventCallback):
         """订阅事件"""
-        if event_type not in self._subscribers:
-            self._subscribers[event_type] = []
-        self._subscribers[event_type].append(callback)
+        with self._lock:
+            subscribers = self._subscribers.setdefault(event_type, [])
+            if callback not in subscribers:
+                subscribers.append(callback)
         logger.debug(f"Subscribed to event: {event_type}")
 
     def unsubscribe(self, event_type: str, callback: EventCallback):
         """取消订阅"""
-        if event_type in self._subscribers:
-            self._subscribers[event_type] = [
-                cb for cb in self._subscribers[event_type] if cb != callback
-            ]
+        with self._lock:
+            if event_type in self._subscribers:
+                self._subscribers[event_type] = [
+                    cb for cb in self._subscribers[event_type] if cb != callback
+                ]
+                if not self._subscribers[event_type]:
+                    self._subscribers.pop(event_type, None)
 
     async def emit(self, event: AgentEvent):
         """发布事件 (异步通知所有订阅者)"""
@@ -101,13 +119,16 @@ class EventBus:
         # other concurrent runs sharing this process-wide bus.
         if not event.trace_id:
             event.trace_id = _CURRENT_TRACE_ID.get()
-        self._event_history.append(event)
-        if len(self._event_history) > self._max_history:
-            self._event_history = self._event_history[-self._max_history :]
+        with self._lock:
+            self._event_history.append(event)
+            if len(self._event_history) > self._max_history:
+                self._event_history = self._event_history[-self._max_history :]
 
-        callbacks = self._subscribers.get(event.event_type, [])
-        # 通配符订阅
-        callbacks += self._subscribers.get("*", [])
+            callbacks = list(self._subscribers.get(event.event_type, ()))
+            # 通配符订阅
+            if event.event_type != "*":
+                callbacks.extend(self._subscribers.get("*", ()))
+            callbacks = self._dedupe_callbacks(callbacks)
 
         if callbacks:
             tasks = [self._safe_call(cb, event) for cb in callbacks]
@@ -123,13 +144,31 @@ class EventBus:
         self, event_type: str | None = None, limit: int = 50
     ) -> list[AgentEvent]:
         """获取事件历史"""
-        events = self._event_history
+        with self._lock:
+            events = list(self._event_history)
         if event_type:
             events = [e for e in events if e.event_type == event_type]
         return events[-limit:]
 
     def clear(self):
-        self._event_history.clear()
+        with self._lock:
+            self._event_history.clear()
+
+    def subscriber_count(self, event_type: str) -> int:
+        with self._lock:
+            return len(self._subscribers.get(event_type, ()))
+
+    @staticmethod
+    def _dedupe_callbacks(callbacks: list[EventCallback]) -> list[EventCallback]:
+        seen: set[int] = set()
+        unique: list[EventCallback] = []
+        for callback in callbacks:
+            marker = id(callback)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            unique.append(callback)
+        return unique
 
 
 class TaskStateTracker:
@@ -144,6 +183,7 @@ class TaskStateTracker:
     """
 
     _instance: "TaskStateTracker | None" = None
+    _instance_lock = threading.Lock()
 
     # Cap retained trace buckets so a long-lived process doesn't grow unbounded
     # (each completed run leaves one bucket behind). Oldest buckets are evicted
@@ -153,11 +193,14 @@ class TaskStateTracker:
     def __init__(self):
         self._states_by_trace: dict[str, dict[str, TaskStatus]] = {}
         self._details_by_trace: dict[str, dict[str, dict]] = {}
+        self._lock = threading.RLock()
 
     @classmethod
     def get_instance(cls) -> "TaskStateTracker":
         if cls._instance is None:
-            cls._instance = cls()
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = cls()
         return cls._instance
 
     def _bucket(self) -> str:
@@ -177,28 +220,34 @@ class TaskStateTracker:
         return self._details_by_trace.setdefault(self._bucket(), {})
 
     def set_status(self, task_id: str, status: TaskStatus, detail: dict | None = None):
-        self._states()[task_id] = status
-        if detail:
-            self._details()[task_id] = detail
+        with self._lock:
+            self._states()[task_id] = status
+            if detail:
+                self._details()[task_id] = detail
         logger.info(f"Task {task_id} -> {status.value}")
 
     def get_status(self, task_id: str) -> TaskStatus:
-        return self._states().get(task_id, TaskStatus.PENDING)
+        with self._lock:
+            return self._states().get(task_id, TaskStatus.PENDING)
 
     def get_all_states(self) -> dict[str, str]:
-        return {tid: s.value for tid, s in self._states().items()}
+        with self._lock:
+            return {tid: s.value for tid, s in self._states().items()}
 
     def get_all_details(self) -> dict[str, dict]:
-        return dict(self._details())
+        with self._lock:
+            return dict(self._details())
 
     def summary(self) -> dict[str, int]:
-        counts = {}
-        for status in self._states().values():
-            counts[status.value] = counts.get(status.value, 0) + 1
-        return counts
+        with self._lock:
+            counts = {}
+            for status in self._states().values():
+                counts[status.value] = counts.get(status.value, 0) + 1
+            return counts
 
     def reset(self):
         """Clear only the current run's state, leaving other runs untouched."""
         trace_id = _CURRENT_TRACE_ID.get()
-        self._states_by_trace.pop(trace_id, None)
-        self._details_by_trace.pop(trace_id, None)
+        with self._lock:
+            self._states_by_trace.pop(trace_id, None)
+            self._details_by_trace.pop(trace_id, None)

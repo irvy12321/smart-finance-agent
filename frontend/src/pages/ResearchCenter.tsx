@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/layout'
 import { StockPool, ResearchReport, AgentExecution } from '../components/research'
 import { Plus, Loader2 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { taskApi } from '../services/api'
 import { useToast } from '../components/ui/ToastContext'
 
@@ -11,7 +12,7 @@ interface TaskStep {
   name: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   duration?: number
-  icon: any
+  icon: LucideIcon | null
   color: string
 }
 

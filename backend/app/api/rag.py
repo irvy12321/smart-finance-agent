@@ -2,8 +2,9 @@
 RAG API 路由 - 文档上传、向量化、检索管理
 """
 
-import contextlib
 import json
+import os
+import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -20,12 +21,14 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
+from app.api.error_utils import safe_bad_request_detail, safe_internal_detail
 from app.auth.dependencies import require_role
 from app.auth.models import UserResponse
 from app.auth.roles import Role
 from app.rag.chunker import chunk_text
 from app.rag.embed import create_embedder
 from app.rag.file_parser import FileParserError, get_supported_extensions, parse_file
+from app.rag.retriever import Retriever
 from app.rag.vector_store import VectorStore
 from app.utils.logger import get_logger
 
@@ -37,10 +40,16 @@ router = APIRouter(prefix="/rag", tags=["rag"])
 RAG_DATA_DIR = Path(__file__).parent.parent.parent / "data" / "rag"
 DOCUMENTS_FILE = RAG_DATA_DIR / "documents.json"
 VECTOR_STORE_DIR = RAG_DATA_DIR / "vector_store"
+MAX_UPLOAD_BYTES = int(os.getenv("RAG_MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
+MAX_METADATA_CHARS = int(os.getenv("RAG_MAX_METADATA_CHARS", str(16 * 1024)))
+UPLOAD_READ_CHUNK_BYTES = int(
+    os.getenv("RAG_UPLOAD_READ_CHUNK_BYTES", str(1024 * 1024))
+)
 
 # 全局实例
 _vector_store: VectorStore | None = None
 _embedder = None
+_documents_lock = threading.RLock()
 
 
 def _ensure_dirs():
@@ -72,23 +81,84 @@ def _get_vector_store() -> VectorStore:
 def _load_documents() -> list[dict[str, Any]]:
     """加载文档列表"""
     _ensure_dirs()
-    if DOCUMENTS_FILE.exists():
-        try:
-            with open(DOCUMENTS_FILE, encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Failed to load documents: {e}")
+    with _documents_lock:
+        if DOCUMENTS_FILE.exists():
+            try:
+                with open(DOCUMENTS_FILE, encoding="utf-8") as f:
+                    documents = json.load(f)
+                if isinstance(documents, list):
+                    return documents
+                logger.error("RAG documents file is not a list")
+            except Exception as e:
+                logger.error(f"Failed to load documents: {e}")
     return []
 
 
 def _save_documents(documents: list[dict[str, Any]]):
     """保存文档列表"""
     _ensure_dirs()
+    with _documents_lock:
+        try:
+            tmp_file = DOCUMENTS_FILE.with_name(f"{DOCUMENTS_FILE.name}.tmp")
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(documents, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_file, DOCUMENTS_FILE)
+        except Exception as e:
+            logger.error(f"Failed to save documents: {e}")
+
+
+def _safe_upload_filename(filename: str | None) -> str:
+    safe_name = Path(filename or "").name
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    return safe_name
+
+
+def _parse_upload_metadata(metadata: str | None) -> dict[str, Any]:
+    if not metadata:
+        return {}
+    if len(metadata) > MAX_METADATA_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Metadata too large. Maximum size is {MAX_METADATA_CHARS} characters.",
+        )
     try:
-        with open(DOCUMENTS_FILE, "w", encoding="utf-8") as f:
-            json.dump(documents, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"Failed to save documents: {e}")
+        parsed = json.loads(metadata)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid metadata JSON") from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=400, detail="Metadata must be a JSON object")
+    return parsed
+
+
+async def _read_upload_file(file: UploadFile) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+
+    while True:
+        remaining = MAX_UPLOAD_BYTES - total + 1
+        read_size = min(UPLOAD_READ_CHUNK_BYTES, remaining)
+        chunk = await file.read(read_size)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_UPLOAD_BYTES} bytes.",
+            )
+        chunks.append(chunk)
+
+    return b"".join(chunks)
+
+
+def _resolve_rag_data_path(path_value: Any) -> Path | None:
+    try:
+        path = Path(str(path_value)).resolve()
+        path.relative_to(RAG_DATA_DIR.resolve())
+        return path
+    except (TypeError, ValueError, OSError):
+        return None
 
 
 # ============================================================
@@ -138,6 +208,8 @@ class RAGSearchRequest(BaseModel):
 
     query: str = Field(..., min_length=1, max_length=1000)
     top_k: int = Field(default=5, ge=1, le=20)
+    metadata_filter: dict[str, Any] = Field(default_factory=dict)
+    min_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class RAGSearchResult(BaseModel):
@@ -190,28 +262,38 @@ async def upload_document(
 ):
     """上传文档并触发向量化"""
     _ensure_dirs()
+    filename = _safe_upload_filename(file.filename)
 
     # 验证文件类型
     allowed_types = get_supported_extensions()
-    file_ext = Path(file.filename).suffix.lower()
+    file_ext = Path(filename).suffix.lower()
     if file_ext not in allowed_types:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported file type: {file_ext}. Allowed: {', '.join(allowed_types)}",
         )
+    if file.size is not None and file.size > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {MAX_UPLOAD_BYTES} bytes.",
+        )
 
     # 读取文件内容
-    content = await file.read()
+    content = await _read_upload_file(file)
 
     # 解析文件内容
     try:
-        text_content = parse_file(content, file.filename)
-        logger.info(
-            f"File parsed successfully: {file.filename} ({len(text_content)} chars)"
-        )
+        text_content = parse_file(content, filename)
+        logger.info(f"File parsed successfully: {filename} ({len(text_content)} chars)")
     except FileParserError as e:
-        logger.error(f"File parsing failed: {file.filename} - {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        logger.error(f"File parsing failed: {filename} - {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=safe_bad_request_detail(e, "File parsing failed"),
+        ) from e
+
+    # 解析元数据
+    doc_metadata = _parse_upload_metadata(metadata)
 
     # 生成文档 ID
     doc_id = str(uuid.uuid4())[:8]
@@ -230,17 +312,11 @@ async def upload_document(
         with open(file_path, "wb") as f:
             f.write(content)
 
-    # 解析元数据
-    doc_metadata = {}
-    if metadata:
-        with contextlib.suppress(json.JSONDecodeError):
-            doc_metadata = json.loads(metadata)
-
     # 创建文档记录
     now = datetime.now().isoformat()
     document = {
         "id": doc_id,
-        "filename": file.filename,
+        "filename": filename,
         "file_type": file_ext,
         "file_size": len(content),
         "chunk_count": 0,
@@ -256,19 +332,32 @@ async def upload_document(
     _save_documents(documents)
 
     # 后台处理向量化
-    background_tasks.add_task(_process_document, doc_id, text_content, doc_metadata)
+    background_tasks.add_task(
+        _process_document,
+        doc_id,
+        text_content,
+        doc_metadata,
+        filename=filename,
+        file_type=file_ext,
+    )
 
-    logger.info(f"Document uploaded: {file.filename} -> {doc_id}")
+    logger.info(f"Document uploaded: {filename} -> {doc_id}")
 
     return DocumentUploadResponse(
         document_id=doc_id,
-        filename=file.filename,
+        filename=filename,
         status="processing",
         message="Document uploaded. Vectorization in progress.",
     )
 
 
-async def _process_document(doc_id: str, content: str, metadata: dict[str, Any]):
+async def _process_document(
+    doc_id: str,
+    content: str,
+    metadata: dict[str, Any],
+    filename: str = "",
+    file_type: str = "",
+):
     """后台处理文档向量化"""
     try:
         # 分块
@@ -283,8 +372,16 @@ async def _process_document(doc_id: str, content: str, metadata: dict[str, Any])
 
         # 存储到向量数据库
         vector_store = _get_vector_store()
+        base_metadata = Retriever.normalize_metadata(
+            metadata,
+            doc_id=doc_id,
+            filename=filename,
+            file_type=file_type,
+            source=metadata.get("source") or filename,
+            doc_type=metadata.get("doc_type") or file_type,
+        )
         chunk_metadata = [
-            {**metadata, "doc_id": doc_id, "chunk_index": i} for i in range(len(chunks))
+            {**base_metadata, "chunk_index": i} for i in range(len(chunks))
         ]
         vector_store.add(embeddings, chunks, chunk_metadata)
         vector_store.save()
@@ -344,21 +441,21 @@ async def delete_document(
     try:
         vector_store = _get_vector_store()
         # 过滤掉属于该文档的向量
-        new_texts = []
-        new_metadata = []
+        texts_snapshot, metadata_snapshot = vector_store.snapshot()
+        new_texts: list[str] = []
+        new_metadata: list[dict] = []
 
-        for i, meta in enumerate(vector_store.metadata):
+        for text, meta in zip(texts_snapshot, metadata_snapshot, strict=False):
             if meta.get("doc_id") != doc_id:
-                new_texts.append(vector_store.texts[i])
+                new_texts.append(text)
                 new_metadata.append(meta)
 
         # 重建索引（如果文档数量较多，可能需要优化）
-        if len(new_texts) < vector_store.size:
+        if len(new_texts) < len(texts_snapshot):
             embedder = _get_embedder()
             if new_texts:
                 new_embeddings = embedder.embed_batch(new_texts)
-                vector_store.clear()
-                vector_store.add(new_embeddings, new_texts, new_metadata)
+                vector_store.rebuild(new_embeddings, new_texts, new_metadata)
             else:
                 vector_store.clear()
             vector_store.save()
@@ -368,8 +465,8 @@ async def delete_document(
     # 删除原始文件
     if "file_path" in doc_to_delete:
         try:
-            file_path = Path(doc_to_delete["file_path"])
-            if file_path.exists():
+            file_path = _resolve_rag_data_path(doc_to_delete["file_path"])
+            if file_path and file_path.exists():
                 file_path.unlink()
         except Exception as e:
             logger.error(f"Failed to delete file: {e}")
@@ -400,7 +497,12 @@ async def search_documents(
         query_embedding = embedder.embed_text(request.query)
 
         # 搜索
-        results = vector_store.search(query_embedding, top_k=request.top_k)
+        results = vector_store.search(
+            query_embedding,
+            top_k=request.top_k,
+            metadata_filter=request.metadata_filter or None,
+            min_score=request.min_score if request.min_score > 0 else None,
+        )
 
         return RAGSearchResponse(
             query=request.query,
@@ -413,8 +515,10 @@ async def search_documents(
             total=len(results),
         )
     except Exception as e:
-        logger.error(f"RAG search failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {e!s}") from e
+        logger.error(f"RAG search failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Search failed")
+        ) from e
 
 
 @router.get("/stats", response_model=RAGStatsResponse)
@@ -460,13 +564,25 @@ async def reindex_documents(
     for doc in documents:
         if "file_path" in doc:
             try:
-                with open(doc["file_path"], encoding="utf-8") as f:
-                    content = f.read()
+                file_path = _resolve_rag_data_path(doc["file_path"])
+                if not file_path:
+                    logger.warning(
+                        f"Skipping reindex for document outside RAG data dir: {doc['id']}"
+                    )
+                    _update_document_status(doc["id"], "failed", 0)
+                    continue
+                content = parse_file(file_path.read_bytes(), doc.get("filename", ""))
                 background_tasks.add_task(
-                    _process_document, doc["id"], content, doc.get("metadata", {})
+                    _process_document,
+                    doc["id"],
+                    content,
+                    doc.get("metadata", {}),
+                    filename=doc.get("filename", ""),
+                    file_type=doc.get("file_type", ""),
                 )
             except Exception as e:
                 logger.error(f"Failed to read document {doc['id']}: {e}")
+                _update_document_status(doc["id"], "failed", 0)
 
     return {"message": f"Reindexing {len(documents)} documents in background"}
 

@@ -5,8 +5,10 @@ Report Agent - 结构化研究报告生成
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 
 from app.core.agent_status import AgentEvent, EventBus
 from app.core.executor import ExecutionResult
@@ -17,6 +19,10 @@ from app.infrastructure.otel import traced
 from app.utils.logger import get_logger
 
 logger = get_logger("report_agent")
+
+_NUMERIC_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9_.])-?\d[\d,]*(?:\.\d+)?%?(?![A-Za-z0-9_])"
+)
 
 
 @dataclass
@@ -253,6 +259,9 @@ class ReportAgent:
             logger.info(f"LLM response received ({len(response)} chars)")
 
             report_data = self._parse_response(response)
+            report_data = self._remove_unsupported_numbers(
+                report_data, allowed_numbers=self._extract_number_tokens(prompt)
+            )
 
             analysis = StructuredAnalysis(
                 key_findings=report_data.get("key_findings", []),
@@ -301,8 +310,6 @@ class ReportAgent:
             )
 
     def _parse_response(self, response: str) -> dict:
-        import re
-
         text = response.strip()
 
         logger.debug(f"Report response ({len(text)} chars): {text[:300]}")
@@ -371,3 +378,52 @@ class ReportAgent:
         if isinstance(data, dict):
             return json.dumps(data, ensure_ascii=False, indent=2)[:500]
         return str(data)[:500]
+
+    @classmethod
+    def _extract_number_tokens(cls, text: str) -> set[str]:
+        return {
+            normalized
+            for match in _NUMERIC_TOKEN_RE.finditer(text or "")
+            if (normalized := cls._normalize_number_token(match.group(0)))
+        }
+
+    @staticmethod
+    def _normalize_number_token(token: str) -> str:
+        raw = token.strip()
+        if not raw:
+            return ""
+        has_percent = raw.endswith("%")
+        raw = raw[:-1] if has_percent else raw
+        raw = raw.replace(",", "")
+        try:
+            number = Decimal(raw)
+        except (InvalidOperation, ValueError):
+            return token
+        normalized = format(number.normalize(), "f")
+        if "." in normalized:
+            normalized = normalized.rstrip("0").rstrip(".")
+        if normalized == "-0":
+            normalized = "0"
+        return f"{normalized}%" if has_percent else normalized
+
+    @classmethod
+    def _remove_unsupported_numbers(cls, value, allowed_numbers: set[str]):
+        if isinstance(value, str):
+            return _NUMERIC_TOKEN_RE.sub(
+                lambda match: (
+                    match.group(0)
+                    if cls._normalize_number_token(match.group(0)) in allowed_numbers
+                    else "[unsupported number removed]"
+                ),
+                value,
+            )
+        if isinstance(value, list):
+            return [
+                cls._remove_unsupported_numbers(item, allowed_numbers) for item in value
+            ]
+        if isinstance(value, dict):
+            return {
+                key: cls._remove_unsupported_numbers(item, allowed_numbers)
+                for key, item in value.items()
+            }
+        return value

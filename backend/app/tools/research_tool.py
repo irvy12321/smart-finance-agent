@@ -15,6 +15,7 @@ from typing import Any
 from app.core.research import ResearchService
 from app.tools.base_tool import BaseTool, ToolResult
 from app.utils.logger import get_logger
+from app.utils.redaction import redact_sensitive_text
 
 logger = get_logger("research_tool")
 
@@ -48,8 +49,9 @@ class StockResearchTool(BaseTool):
                 symbol, language=language, use_llm=use_llm
             )
         except Exception as e:
-            logger.error(f"stock_research failed for {symbol}: {e}")
-            return ToolResult(success=False, error=str(e), tool_name=self.name)
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"stock_research failed for {symbol}: {safe_error}")
+            return ToolResult(success=False, error=safe_error, tool_name=self.name)
 
         data: dict[str, Any] = result.to_dict()
         # The whole report is mock-tainted if any underlying section is simulated;

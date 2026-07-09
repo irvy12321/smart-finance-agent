@@ -7,6 +7,7 @@
 - .docx: python-docx 提取
 """
 
+import warnings
 from pathlib import Path
 
 from app.utils.logger import get_logger
@@ -40,7 +41,12 @@ def parse_pdf_file(content: bytes, filename: str) -> str:
     try:
         import io
 
-        from PyPDF2 import PdfReader
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=DeprecationWarning)
+                from PyPDF2 import PdfReader
 
         pdf_reader = PdfReader(io.BytesIO(content))
         text_parts = []

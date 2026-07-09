@@ -6,7 +6,7 @@ import yaml
 # Load .env file at module level for config access
 from dotenv import load_dotenv
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _env_path = Path(__file__).parent.parent.parent / ".env"
 if _env_path.exists():
@@ -100,6 +100,8 @@ def get_provider_config() -> dict:
 
 
 class LLMConfig(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="LLM_")
+
     model: str = ""
     temperature: float = 0.3
     max_tokens: int = 4096
@@ -119,9 +121,6 @@ class LLMConfig(BaseSettings):
                 self.api_key = os.getenv(provider_config["api_key_env"], "")
             if not self.api_base:
                 self.api_base = provider_config["api_base"]
-
-    class Config:
-        env_prefix = "LLM_"
 
 
 class AgentModelConfig(BaseSettings):

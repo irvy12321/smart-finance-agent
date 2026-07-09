@@ -24,7 +24,11 @@ def _get_persist_dir() -> str:
 
 
 def _keyword_search(
-    query: str, texts: list[str], metadata: list[dict], top_k: int = 5
+    query: str,
+    texts: list[str],
+    metadata: list[dict],
+    top_k: int = 5,
+    metadata_filter: dict | None = None,
 ) -> list[dict]:
     """关键词搜索（BM25 风格）"""
     import math
@@ -57,6 +61,10 @@ def _keyword_search(
     # 计算每个文档的相关性分数
     scores = []
     for i, (text, doc_tokens) in enumerate(zip(texts, doc_tokens_list, strict=False)):
+        meta = metadata[i] if i < len(metadata) else {}
+        if not VectorStore._metadata_matches(meta, metadata_filter):
+            continue
+
         # 词重叠（包含子串匹配）
         overlap = set()
         for qt in query_tokens:
@@ -124,12 +132,31 @@ class Retriever:
             f"reranker={type(self.reranker).__name__}"
         )
 
+    @staticmethod
+    def normalize_metadata(metadata: dict | None = None, **defaults) -> dict:
+        normalized = dict(metadata or {})
+        for key, value in defaults.items():
+            if value not in (None, ""):
+                normalized.setdefault(key, value)
+
+        source = normalized.get("source") or normalized.get("filename") or "unknown"
+        doc_type = (
+            normalized.get("doc_type") or normalized.get("file_type") or "unknown"
+        )
+        normalized["source"] = source
+        normalized["doc_type"] = str(doc_type).lstrip(".") or "unknown"
+        return normalized
+
     def add_document(self, text: str, metadata: dict | None = None):
         chunks = chunk_text(text)
         if not chunks:
             return
         embeddings = self.embedder.embed_batch(chunks)
-        meta = [metadata or {}] * len(chunks)
+        base_metadata = self.normalize_metadata(metadata)
+        meta = [
+            {**base_metadata, "chunk_index": chunk_index}
+            for chunk_index in range(len(chunks))
+        ]
         self.store.add(embeddings, chunks, meta)
         logger.info(f"Added document: {len(chunks)} chunks indexed")
 
@@ -137,14 +164,25 @@ class Retriever:
         embeddings = self.embedder.embed_batch(texts)
         self.store.add(embeddings, texts, metadata)
 
-    def retrieve(self, query: str, top_k: int | None = None) -> list[dict]:
+    def retrieve(
+        self,
+        query: str,
+        top_k: int | None = None,
+        metadata_filter: dict | None = None,
+        min_score: float = 0.0,
+    ) -> list[dict]:
         k = top_k or self.top_k
 
         # 先尝试向量搜索
         vector_results = []
         if self.store.size > 0:
             query_vec = self.embedder.embed_text(query)
-            vector_results = self.store.search(query_vec, top_k=k)
+            vector_results = self.store.search(
+                query_vec,
+                top_k=k,
+                metadata_filter=metadata_filter,
+                min_score=min_score if min_score > 0 else None,
+            )
 
         # 检查向量搜索结果质量
         best_score = max([r.get("score", 0) for r in vector_results], default=0)
@@ -152,17 +190,22 @@ class Retriever:
         # 如果向量搜索结果分数较低，使用关键词搜索
         keyword_results = []
         if best_score < 0.1 and self.store.size > 0:
+            texts_snapshot, metadata_snapshot = self.store.snapshot()
             keyword_results = _keyword_search(
-                query, self.store.texts, self.store.metadata, top_k=k
+                query,
+                texts_snapshot,
+                metadata_snapshot,
+                top_k=k,
+                metadata_filter=metadata_filter,
             )
 
         # 如果关键词搜索有结果，优先使用
         if keyword_results:
-            results = keyword_results
+            results = [r for r in keyword_results if r.get("score", 0) >= min_score]
         else:
             # 过滤掉分数为0的结果
-            results = [r for r in vector_results if r.get("score", 0) > 0]
-            if not results:
+            results = [r for r in vector_results if r.get("score", 0) >= min_score]
+            if not results and min_score <= 0:
                 results = vector_results[:k]
 
         # 按分数排序
@@ -187,6 +230,8 @@ class Retriever:
         query: str,
         top_k: int | None = None,
         llm_client=None,
+        metadata_filter: dict | None = None,
+        min_score: float = 0.0,
     ) -> list[dict]:
         """多路改写检索 + HyDE + reranker 精排.
 
@@ -199,7 +244,9 @@ class Retriever:
         k = top_k or self.top_k
 
         if not self._query_rewrite_enabled or llm_client is None:
-            return self.retrieve(query, top_k=k)
+            return self.retrieve(
+                query, top_k=k, metadata_filter=metadata_filter, min_score=min_score
+            )
 
         from app.rag.query_rewriter import QueryRewriter, multi_query_retrieve
 
@@ -213,6 +260,8 @@ class Retriever:
             top_k=k,
             use_hyde=self._hyde_enabled,
             reranker=self.reranker,
+            metadata_filter=metadata_filter,
+            min_score=min_score,
         )
 
     @property

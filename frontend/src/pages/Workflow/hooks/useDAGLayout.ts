@@ -19,14 +19,16 @@ const defaultOptions: LayoutOptions = {
   nodeSep: 50,
 }
 
+const emptyOptions: Partial<LayoutOptions> = {}
+
 export function useDAGLayout(
   nodes: Node<TaskNodeData>[],
   edges: Edge[],
-  options: Partial<LayoutOptions> = {}
+  options: Partial<LayoutOptions> = emptyOptions
 ) {
-  const layoutOptions = { ...defaultOptions, ...options }
-
   return useMemo(() => {
+    const layoutOptions = { ...defaultOptions, ...options }
+
     if (nodes.length === 0) {
       return { nodes: [], edges }
     }
@@ -64,5 +66,5 @@ export function useDAGLayout(
     })
 
     return { nodes: layoutedNodes, edges }
-  }, [nodes, edges, layoutOptions])
+  }, [nodes, edges, options])
 }

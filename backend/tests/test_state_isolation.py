@@ -6,6 +6,7 @@ and a streaming subscriber must only see events from its own run.
 """
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -14,6 +15,8 @@ from app.core.agent_status import (
     EventBus,
     TaskStateTracker,
     TaskStatus,
+    get_current_trace_id,
+    reset_current_trace_id,
     set_current_trace_id,
 )
 
@@ -166,3 +169,72 @@ async def test_subscriber_can_filter_foreign_run_events():
 
     assert "mine" in collected
     assert "theirs" not in collected
+
+
+@pytest.mark.asyncio
+async def test_wildcard_subscriber_does_not_accumulate_on_specific_event():
+    bus = EventBus()
+    calls: list[str] = []
+
+    async def wildcard(event: AgentEvent):
+        calls.append(event.event_type)
+
+    bus.subscribe("*", wildcard)
+
+    await bus.emit(AgentEvent(event_type="probe-leak", agent_name="test"))
+    await bus.emit(AgentEvent(event_type="probe-leak", agent_name="test"))
+
+    assert calls == ["probe-leak", "probe-leak"]
+    assert bus.subscriber_count("probe-leak") == 0
+    assert bus.subscriber_count("*") == 1
+
+
+@pytest.mark.asyncio
+async def test_duplicate_subscribe_is_idempotent():
+    bus = EventBus()
+    calls = 0
+
+    async def callback(event: AgentEvent):
+        nonlocal calls
+        calls += 1
+
+    bus.subscribe("probe-idempotent", callback)
+    bus.subscribe("probe-idempotent", callback)
+
+    await bus.emit(AgentEvent(event_type="probe-idempotent", agent_name="test"))
+
+    assert calls == 1
+    assert bus.subscriber_count("probe-idempotent") == 1
+
+
+def test_trace_context_reset_restores_previous_value():
+    outer_token = set_current_trace_id("outer")
+    inner_token = set_current_trace_id("inner")
+    try:
+        reset_current_trace_id(inner_token)
+        assert get_current_trace_id() == "outer"
+    finally:
+        reset_current_trace_id(outer_token)
+
+    assert get_current_trace_id() == ""
+
+
+def test_state_tracker_concurrent_writes_are_consistent():
+    tracker = TaskStateTracker()
+
+    def write_status(index: int):
+        tracker.set_status(
+            f"task-{index}",
+            TaskStatus.SUCCESS,
+            {"index": index},
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(write_status, range(100)))
+
+    states = tracker.get_all_states()
+    details = tracker.get_all_details()
+
+    assert len(states) == 100
+    assert len(details) == 100
+    assert all(status == "success" for status in states.values())

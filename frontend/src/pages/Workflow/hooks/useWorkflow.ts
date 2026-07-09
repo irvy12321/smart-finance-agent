@@ -132,7 +132,7 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
   }, [])
 
   // Update node status
-  const updateNodeStatus = useCallback((taskId: string, status: TaskStatus, duration_ms?: number, data?: string, error?: string) => {
+  const updateNodeStatus = useCallback((taskId: string, status: TaskStatus, duration_ms?: number, data?: unknown, error?: string) => {
     setState(prev => {
       const newNodes = prev.nodes.map(node => {
         if (node.id === taskId) {
@@ -234,7 +234,14 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
 
         case 'stage_change': {
           // Update planner/synthesizer/report status based on data.stage
-          const currentStage = (event as any).data?.stage || event.stage
+          const eventData = event.data
+          const currentStage = (
+            typeof eventData === 'object' &&
+            eventData !== null &&
+            'stage' in eventData
+          )
+            ? String((eventData as { stage?: unknown }).stage ?? event.stage)
+            : event.stage
           if (currentStage === 'planning') {
             updateNodeStatus('planner', 'running')
           } else if (currentStage === 'executing') {
@@ -280,7 +287,7 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
   }, [buildDAG, updateNodeStatus])
 
   // Connect to SSE
-  const connect = useCallback((taskId: string, query?: string) => {
+  const connect = useCallback(async (taskId: string, query?: string) => {
     // Disconnect existing connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
@@ -293,12 +300,34 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
       status: 'connecting',
     }))
 
-    // Native EventSource cannot set an Authorization header, so the access
-    // token is passed as a query parameter (the backend accepts both).
+    // Native EventSource cannot set an Authorization header. Use the main
+    // access token only to request a short-lived one-time stream token.
     const authToken = localStorage.getItem('auth_token')
-    const streamUrl = authToken
-      ? `/api/task/${taskId}/stream?token=${encodeURIComponent(authToken)}`
-      : `/api/task/${taskId}/stream`
+    if (!authToken) {
+      setState(prev => ({ ...prev, status: 'error' }))
+      return
+    }
+
+    let streamToken: string
+    try {
+      const response = await fetch(`/api/task/${taskId}/stream-token`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      })
+      if (!response.ok) {
+        throw new Error(`Stream token request failed: ${response.status}`)
+      }
+      const data = await response.json()
+      streamToken = data.stream_token
+    } catch (err) {
+      console.error('Failed to create SSE stream token:', err)
+      setState(prev => ({ ...prev, status: 'error' }))
+      return
+    }
+
+    const streamUrl = `/api/task/${taskId}/stream?stream_token=${encodeURIComponent(streamToken)}`
     const eventSource = new EventSource(streamUrl)
     eventSourceRef.current = eventSource
     reconnectAttemptsRef.current = 0
@@ -333,7 +362,7 @@ export function useWorkflow(): [WorkflowState, WorkflowActions] {
 
         reconnectTimeoutRef.current = setTimeout(() => {
           console.log(`Reconnecting SSE (attempt ${reconnectAttemptsRef.current})...`)
-          connect(taskId, query)
+          void connect(taskId, query)
         }, delay)
       } else {
         setState(prev => ({ ...prev, status: 'error' }))

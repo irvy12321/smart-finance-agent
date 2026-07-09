@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Clock, CheckCircle, Loader2, AlertCircle, ExternalLink } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { taskApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import type { TaskListItem } from '../../types/api'
@@ -33,7 +34,7 @@ export default function RecentTasks() {
     fetchTasks()
   }, [fetchTasks])
 
-  const statusConfig: Record<string, { icon: any; color: string; bg: string; label: string; animate: string }> = {
+  const statusConfig: Record<string, { icon: LucideIcon; color: string; bg: string; label: string; animate: string }> = {
     pending: { icon: Clock, color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: t('dashboard.pendingTasks'), animate: '' },
     running: { icon: Loader2, color: 'text-blue-400', bg: 'bg-blue-500/10', label: t('dashboard.runningTasks'), animate: 'animate-spin' },
     completed: { icon: CheckCircle, color: 'text-green-400', bg: 'bg-green-500/10', label: t('dashboard.completedTasks'), animate: '' },

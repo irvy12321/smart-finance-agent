@@ -76,7 +76,7 @@ async def get_report(
         raise HTTPException(status_code=404, detail="Task not found")
 
     owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
+    if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
@@ -102,7 +102,7 @@ async def get_report_summary(
         raise HTTPException(status_code=404, detail="Task not found")
 
     owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
+    if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
@@ -137,7 +137,7 @@ async def get_report_markdown(
         raise HTTPException(status_code=404, detail="Task not found")
 
     owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
+    if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
@@ -167,7 +167,7 @@ async def get_report_charts(
         raise HTTPException(status_code=404, detail="Task not found")
 
     owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
+    if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
@@ -197,7 +197,7 @@ async def get_report_analysis(
         raise HTTPException(status_code=404, detail="Task not found")
 
     owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
+    if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
@@ -231,7 +231,7 @@ async def get_report_sources(
         raise HTTPException(status_code=404, detail="Task not found")
 
     owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
+    if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":
@@ -262,7 +262,7 @@ async def get_report_process(
         raise HTTPException(status_code=404, detail="Task not found")
 
     owner_id = storage.get_task_owner(task_id)
-    if owner_id is not None and owner_id != current_user.id:
+    if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     if task["status"] != "completed":

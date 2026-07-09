@@ -118,7 +118,7 @@ class ExecutorAgent:
                 ready = [
                     tid
                     for tid, deps in task_graph.items()
-                    if all(d in completed for d in deps)
+                    if all(d in completed and completed[d].success for d in deps)
                 ]
 
                 if not ready:
@@ -271,6 +271,20 @@ class ExecutorAgent:
             )
         )
 
+        failed_deps = [
+            dep_id
+            for dep_id in task.depends_on
+            if dep_id in completed and not completed[dep_id].success
+        ]
+        if failed_deps and task.tool_name != "llm_synthesize":
+            return TaskResult(
+                task_id=task.task_id,
+                tool_name=task.tool_name,
+                success=False,
+                error=f"Skipped because dependencies failed: {', '.join(failed_deps)}",
+                status=TaskStatus.SKIPPED,
+            )
+
         if task.tool_name == "llm_synthesize":
             result = await self._run_synthesize(task, completed, trace)
         else:
@@ -413,11 +427,16 @@ class ExecutorAgent:
         self, task: SubTask, completed: dict[str, TaskResult], trace: TraceContext
     ) -> TaskResult:
         context_parts = []
+        failed_context_parts = []
         for dep_id in task.depends_on:
             dep = completed.get(dep_id)
             if dep and dep.success and dep.data:
                 context_parts.append(
                     f"=== {dep.tool_name} ({dep.task_id}) ===\n{self._format_data(dep.data)}"
+                )
+            elif dep and not dep.success:
+                failed_context_parts.append(
+                    f"=== {dep.tool_name} ({dep.task_id}) FAILED ===\n{dep.error}"
                 )
 
         if not context_parts:
@@ -426,6 +445,11 @@ class ExecutorAgent:
                     context_parts.append(
                         f"=== {dep.tool_name} ({dep.task_id}) ===\n{self._format_data(dep.data)}"
                     )
+
+        if failed_context_parts:
+            context_parts.append(
+                "Unavailable dependency results:\n" + "\n\n".join(failed_context_parts)
+            )
 
         synthesis_prompt = task.params.get(
             "prompt", "Analyze and summarize the following information:"
@@ -545,15 +569,13 @@ class ExecutorAgent:
         """
         unlockable = []
         for tid, deps in task_graph.items():
-            unresolved = [d for d in deps if d not in completed and d in task_graph]
+            unresolved = [d for d in deps if d not in completed]
             if not unresolved:
                 # 检查是否有失败/跳过的依赖（允许继续）
                 failed_deps = [
                     d for d in deps if d in completed and not completed[d].success
                 ]
-                if failed_deps and all(
-                    d in completed for d in deps if d not in task_graph
-                ):
+                if failed_deps:
                     unlockable.append(tid)
 
         if unlockable:

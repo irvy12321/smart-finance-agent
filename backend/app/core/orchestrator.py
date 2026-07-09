@@ -5,6 +5,8 @@ Layer 2: Executor (并行执行)
 Layer 3: Synthesizer (Reasoner → Report → Chart)
 """
 
+import asyncio
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -13,6 +15,7 @@ from app.core.agent_status import (
     AgentStage,
     EventBus,
     TaskStateTracker,
+    reset_current_trace_id,
     set_current_trace_id,
 )
 from app.core.chart_renderer import ChartRenderer
@@ -40,6 +43,16 @@ from app.utils.logger import LogContext, get_logger
 from app.utils.tracing import PipelineTracker, TraceContext
 
 logger = get_logger("orchestrator")
+
+
+@contextmanager
+def _bound_route_model(router, model: str):
+    token = router.set_route_model(model) if router else None
+    try:
+        yield
+    finally:
+        if router:
+            router.reset_route_model(token)
 
 
 async def _persist_event(event: AgentEvent) -> None:
@@ -123,9 +136,36 @@ class Orchestrator:
         )
 
     async def run(self, query: str) -> RunResult:
-        """3-Layer 流水线: SmartRoute → Plan → Execute → Synthesize"""
         trace = TraceContext()
-        set_current_trace_id(trace.trace_id)
+        trace_token = set_current_trace_id(trace.trace_id)
+        try:
+            result = await self._run_with_trace(query, trace)
+            await self._safe_emit_pipeline_end(
+                trace,
+                result.plan,
+                result.exec_result,
+                status="success",
+            )
+            return result
+        except asyncio.CancelledError:
+            await self._safe_emit_pipeline_end(
+                trace,
+                status="cancelled",
+                error_type="CancelledError",
+            )
+            raise
+        except Exception as exc:
+            await self._safe_emit_pipeline_end(
+                trace,
+                status="error",
+                error_type=type(exc).__name__,
+            )
+            raise
+        finally:
+            reset_current_trace_id(trace_token)
+
+    async def _run_with_trace(self, query: str, trace: TraceContext) -> RunResult:
+        """3-Layer 流水线: SmartRoute → Plan → Execute → Synthesize"""
         tracker = PipelineTracker(trace.trace_id, query)
         LogContext.set(trace_id=trace.trace_id, agent_name="orchestrator")
 
@@ -158,13 +198,13 @@ class Orchestrator:
 
         # 复杂度路由: 本次运行的所有 LLM 阶段统一使用选中的模型
         # (contextvar, 按 asyncio task 隔离, 并发运行互不串台)
-        route_model_token = None
-        if self.router:
-            route_model_token = self.router.set_route_model(route.selected_model)
-
         # Layer 1: Planning (带容错)
         t0 = time.perf_counter()
-        with trace.span("planning"), otel_span("orchestrator.planning"):
+        with (
+            _bound_route_model(self.router, route.selected_model),
+            trace.span("planning"),
+            otel_span("orchestrator.planning"),
+        ):
             await self._emit_stage(AgentStage.PLANNING)
             try:
                 plan = await self.planner.plan(query, route_decision=route)
@@ -183,7 +223,11 @@ class Orchestrator:
 
         # Layer 2: Execution (带容错)
         t0 = time.perf_counter()
-        with trace.span("execution"), otel_span("orchestrator.execution"):
+        with (
+            _bound_route_model(self.router, route.selected_model),
+            trace.span("execution"),
+            otel_span("orchestrator.execution"),
+        ):
             await self._emit_stage(AgentStage.EXECUTING)
             try:
                 exec_result = await self.executor.execute(plan)
@@ -221,7 +265,11 @@ class Orchestrator:
         chart_paths = []
 
         t0 = time.perf_counter()
-        with trace.span("synthesizer"), otel_span("orchestrator.synthesizer"):
+        with (
+            _bound_route_model(self.router, route.selected_model),
+            trace.span("synthesizer"),
+            otel_span("orchestrator.synthesizer"),
+        ):
             # 3a: Reasoning (带容错)
             await self._emit_stage(AgentStage.REASONING)
             if exec_result.final_answer:
@@ -318,9 +366,6 @@ class Orchestrator:
         # 打印流水线摘要
         tracker.print_summary()
 
-        if self.router:
-            self.router.reset_route_model(route_model_token)
-
         return RunResult(
             query=query,
             answer=exec_result.final_answer,
@@ -338,9 +383,32 @@ class Orchestrator:
         )
 
     async def run_with_streaming(self, query: str, language: str = "en"):
-        """流式输出 (供 UI 使用) - 带容错"""
         trace = TraceContext()
-        set_current_trace_id(trace.trace_id)
+        trace_token = set_current_trace_id(trace.trace_id)
+        try:
+            async for event in self._run_with_streaming_trace(query, language, trace):
+                yield event
+        except asyncio.CancelledError:
+            await self._safe_emit_pipeline_end(
+                trace,
+                status="cancelled",
+                error_type="CancelledError",
+            )
+            raise
+        except Exception as exc:
+            await self._safe_emit_pipeline_end(
+                trace,
+                status="error",
+                error_type=type(exc).__name__,
+            )
+            raise
+        finally:
+            reset_current_trace_id(trace_token)
+
+    async def _run_with_streaming_trace(
+        self, query: str, language: str, trace: TraceContext
+    ):
+        """流式输出 (供 UI 使用) - 带容错"""
         self._current_language = language  # Store language for later use
 
         self.memory.add_user_message(query)
@@ -348,6 +416,15 @@ class Orchestrator:
 
         if self.router:
             self.router.token_budget.reset()
+
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="pipeline_start",
+                agent_name="orchestrator",
+                data={"query": query},
+                trace_id=trace.trace_id,
+            )
+        )
 
         # Layer 0: Smart Routing
         yield {
@@ -358,12 +435,12 @@ class Orchestrator:
 
         # 复杂度路由: 本次运行的所有 LLM 阶段统一使用选中的模型
         # (contextvar, 按 asyncio task 隔离, 并发运行互不串台)
-        route_model_token = None
-        if self.router:
-            route_model_token = self.router.set_route_model(route.selected_model)
-
         # Layer 1: Planning (带容错)
-        with trace.span("planning"), otel_span("orchestrator.planning"):
+        with (
+            _bound_route_model(self.router, route.selected_model),
+            trace.span("planning"),
+            otel_span("orchestrator.planning"),
+        ):
             try:
                 plan = await self.planner.plan(query, route_decision=route)
             except Exception as e:
@@ -435,21 +512,26 @@ class Orchestrator:
         self.event_bus.subscribe("task_start", _on_task_start)
         self.event_bus.subscribe("task_complete", _on_task_complete)
 
-        # Set executor language
-        self.executor._current_language = getattr(self, "_current_language", "en")
+        try:
+            # Set executor language
+            self.executor._current_language = getattr(self, "_current_language", "en")
 
-        with trace.span("execution"), otel_span("orchestrator.execution"):
-            try:
-                exec_result = await self.executor.execute(plan)
-            except Exception as e:
-                logger.error(f"Execution failed: {e}")
-                exec_result = ExecutionResult(
-                    plan=plan,
-                    final_answer=f"Execution failed: {e}",
-                )
-
-        self.event_bus.unsubscribe("task_start", _on_task_start)
-        self.event_bus.unsubscribe("task_complete", _on_task_complete)
+            with (
+                _bound_route_model(self.router, route.selected_model),
+                trace.span("execution"),
+                otel_span("orchestrator.execution"),
+            ):
+                try:
+                    exec_result = await self.executor.execute(plan)
+                except Exception as e:
+                    logger.error(f"Execution failed: {e}")
+                    exec_result = ExecutionResult(
+                        plan=plan,
+                        final_answer=f"Execution failed: {e}",
+                    )
+        finally:
+            self.event_bus.unsubscribe("task_start", _on_task_start)
+            self.event_bus.unsubscribe("task_complete", _on_task_complete)
 
         # 按序 yield 收集到的 task 事件
         for te in _task_events:
@@ -477,13 +559,14 @@ class Orchestrator:
         reasoning_result = None
         if exec_result.final_answer:
             try:
-                reasoning_result = await self.reasoner.reason_with_critique(
-                    context=self._build_reasoning_context(
-                        query, exec_result.final_answer
-                    ),
-                    question=query,
-                    language=getattr(self, "_current_language", "en"),
-                )
+                with _bound_route_model(self.router, route.selected_model):
+                    reasoning_result = await self.reasoner.reason_with_critique(
+                        context=self._build_reasoning_context(
+                            query, exec_result.final_answer
+                        ),
+                        question=query,
+                        language=getattr(self, "_current_language", "en"),
+                    )
                 if plan.is_fallback:
                     reasoning_result.confidence = min(
                         reasoning_result.confidence, self._FALLBACK_MAX_CONFIDENCE
@@ -509,13 +592,14 @@ class Orchestrator:
         yield {"stage": "reporting", "message": "Generating structured report..."}
         report = None
         try:
-            report = await self.report_agent.generate(
-                query=query,
-                exec_result=exec_result,
-                reasoning_result=reasoning_result,
-                trace_id=trace.trace_id,
-                language=getattr(self, "_current_language", "en"),
-            )
+            with _bound_route_model(self.router, route.selected_model):
+                report = await self.report_agent.generate(
+                    query=query,
+                    exec_result=exec_result,
+                    reasoning_result=reasoning_result,
+                    trace_id=trace.trace_id,
+                    language=getattr(self, "_current_language", "en"),
+                )
         except Exception as e:
             logger.error(f"Report generation failed, using fallback: {e}")
             from app.core.report_agent import StructuredAnalysis
@@ -558,8 +642,12 @@ class Orchestrator:
                 {"source": "report"},
             )
 
-        if self.router:
-            self.router.reset_route_model(route_model_token)
+        await self._safe_emit_pipeline_end(
+            trace,
+            plan,
+            exec_result,
+            status="success",
+        )
 
         yield {
             "stage": "complete",
@@ -586,6 +674,58 @@ class Orchestrator:
             "trace_id": trace.trace_id,
             "task_states": self.state_tracker.get_all_states(),
         }
+
+    async def _safe_emit_pipeline_end(
+        self,
+        trace: TraceContext,
+        plan: Plan | None = None,
+        exec_result: ExecutionResult | None = None,
+        *,
+        status: str,
+        error_type: str = "",
+    ) -> None:
+        try:
+            await self._emit_pipeline_end(
+                trace,
+                plan,
+                exec_result,
+                status=status,
+                error_type=error_type,
+            )
+        except Exception as exc:
+            logger.warning(
+                f"[trace:{trace.trace_id}] Failed to emit pipeline_end: {exc}"
+            )
+
+    async def _emit_pipeline_end(
+        self,
+        trace: TraceContext,
+        plan: Plan | None = None,
+        exec_result: ExecutionResult | None = None,
+        *,
+        status: str,
+        error_type: str = "",
+    ) -> None:
+        task_results = exec_result.task_results if exec_result else []
+        data = {
+            "status": status,
+            "subtask_count": len(plan.subtasks) if plan else 0,
+            "success_count": sum(1 for result in task_results if result.success),
+            "failed_count": sum(1 for result in task_results if not result.success),
+            "dag_size": len(plan.subtasks) if plan else 0,
+            "total_duration_ms": trace.summary()["total_ms"],
+        }
+        if error_type:
+            data["error_type"] = error_type
+
+        await self.event_bus.emit(
+            AgentEvent(
+                event_type="pipeline_end",
+                agent_name="orchestrator",
+                data=data,
+                trace_id=trace.trace_id,
+            )
+        )
 
     async def _emit_stage(self, stage: AgentStage):
         await self.event_bus.emit(

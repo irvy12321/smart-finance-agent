@@ -2,15 +2,18 @@
 System API routes
 """
 
-import hashlib
 import time
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app import storage
+from app.api.error_utils import safe_internal_detail
+from app.auth.dependencies import require_role
+from app.auth.models import UserResponse
+from app.auth.roles import Role
 from app.utils.logger import get_logger
 
 logger = get_logger("api.system")
@@ -107,12 +110,16 @@ async def get_system_status():
             timestamp=datetime.now().isoformat(),
         )
     except Exception as e:
-        logger.error(f"Error getting system status: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error getting system status: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Failed to get system status")
+        ) from e
 
 
 @router.get("/metrics", response_model=SystemMetricsResponse)
-async def get_system_metrics():
+async def get_system_metrics(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN)),
+):
     """Get system metrics"""
     try:
         tasks = storage.list_tasks()
@@ -140,12 +147,16 @@ async def get_system_metrics():
             timestamp=datetime.now().isoformat(),
         )
     except Exception as e:
-        logger.error(f"Error getting system metrics: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error getting system metrics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Failed to get system metrics")
+        ) from e
 
 
 @router.get("/agents", response_model=AgentStatusResponse)
-async def get_agent_status():
+async def get_agent_status(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN)),
+):
     """Get agent status"""
     try:
         # In a real implementation, this would query the actual agent status
@@ -183,12 +194,16 @@ async def get_agent_status():
             },
         )
     except Exception as e:
-        logger.error(f"Error getting agent status: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error getting agent status: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Failed to get agent status")
+        ) from e
 
 
 @router.get("/config", response_model=SystemConfigResponse)
-async def get_system_config():
+async def get_system_config(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN)),
+):
     """Get system configuration"""
     try:
         from app.infrastructure.config import (
@@ -215,8 +230,10 @@ async def get_system_config():
             version="1.0.0",
         )
     except Exception as e:
-        logger.error(f"Error getting system config: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error getting system config: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=safe_internal_detail("Failed to get system config")
+        ) from e
 
 
 @router.get("/health")
@@ -264,7 +281,9 @@ def record_request_failure():
 
 
 @router.get("/cache")
-async def get_cache_stats():
+async def get_cache_stats(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN)),
+):
     """Get cache statistics"""
     from app.tools.cache import get_cache_stats
 
@@ -272,7 +291,9 @@ async def get_cache_stats():
 
 
 @router.post("/cache/clear")
-async def clear_cache():
+async def clear_cache(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN)),
+):
     """Clear all cache entries"""
     from app.tools.cache import get_cache
 
@@ -282,14 +303,15 @@ async def clear_cache():
 
 
 @router.get("/auth-health")
-async def auth_health():
-    """JWT secret health check - returns hash for multi-instance comparison"""
+async def auth_health(
+    current_user: UserResponse = Depends(require_role(Role.ADMIN)),
+):
+    """JWT secret health check without exposing secret-derived material."""
     import os
 
     secret = os.getenv("JWT_SECRET_KEY", "")
-    secret_hash = hashlib.sha256(secret.encode()).hexdigest() if secret else "NOT_SET"
     return {
         "status": "ok" if secret else "error",
-        "jwt_secret_hash": secret_hash,
-        "jwt_secret_length": len(secret),
+        "jwt_secret_configured": bool(secret),
+        "jwt_secret_min_length_ok": len(secret) >= 32,
     }

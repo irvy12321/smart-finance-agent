@@ -25,7 +25,7 @@ class MetricsCollector:
     """并发安全的指标收集器"""
 
     _instance: "MetricsCollector | None" = None
-    _lock = threading.Lock()
+    _lock = threading.RLock()
 
     def __new__(cls):
         if cls._instance is None:
@@ -72,19 +72,8 @@ class MetricsCollector:
     def get_histogram_stats(self, name: str) -> dict:
         """获取直方图统计"""
         with self._lock:
-            values = self._histograms.get(name, [])
-            if not values:
-                return {"count": 0}
-            return {
-                "count": len(values),
-                "min": min(values),
-                "max": max(values),
-                "avg": sum(values) / len(values),
-                "p50": sorted(values)[len(values) // 2],
-                "p99": sorted(values)[int(len(values) * 0.99)]
-                if len(values) > 1
-                else values[0],
-            }
+            values = list(self._histograms.get(name, ()))
+        return self._histogram_stats_from_values(values)
 
     def get_agent_summary(self) -> dict[str, dict]:
         """获取各 Agent 的指标摘要"""
@@ -106,13 +95,20 @@ class MetricsCollector:
 
     def get_all(self) -> dict:
         """获取所有指标"""
+        with self._lock:
+            counters = dict(self._counters)
+            gauges = dict(self._gauges)
+            histograms = {
+                name: self._histogram_stats_from_values(list(values))
+                for name, values in self._histograms.items()
+            }
+            agent_summary = self._agent_summary_unlocked()
+
         return {
-            "counters": dict(self._counters),
-            "gauges": dict(self._gauges),
-            "histograms": {
-                name: self.get_histogram_stats(name) for name in self._histograms
-            },
-            "agent_summary": self.get_agent_summary(),
+            "counters": counters,
+            "gauges": gauges,
+            "histograms": histograms,
+            "agent_summary": agent_summary,
         }
 
     def clear(self):
@@ -121,6 +117,39 @@ class MetricsCollector:
             self._counters.clear()
             self._gauges.clear()
             self._histograms.clear()
+
+    @staticmethod
+    def _histogram_stats_from_values(values: list[float]) -> dict:
+        if not values:
+            return {"count": 0}
+
+        sorted_values = sorted(values)
+        p50_idx = len(sorted_values) // 2
+        p99_idx = min(len(sorted_values) - 1, int(len(sorted_values) * 0.99))
+        return {
+            "count": len(sorted_values),
+            "min": sorted_values[0],
+            "max": sorted_values[-1],
+            "avg": sum(sorted_values) / len(sorted_values),
+            "p50": sorted_values[p50_idx],
+            "p99": sorted_values[p99_idx],
+        }
+
+    def _agent_summary_unlocked(self) -> dict[str, dict]:
+        agent_stats = defaultdict(
+            lambda: {"calls": 0, "tokens": 0, "errors": 0, "total_ms": 0}
+        )
+        for m in self._metrics:
+            agent = m.tags.get("agent", "unknown")
+            if m.name == "agent_call":
+                agent_stats[agent]["calls"] += 1
+            elif m.name == "agent_tokens":
+                agent_stats[agent]["tokens"] += m.value
+            elif m.name == "agent_error":
+                agent_stats[agent]["errors"] += 1
+            elif m.name == "agent_latency":
+                agent_stats[agent]["total_ms"] += m.value
+        return dict(agent_stats)
 
 
 # 便捷函数

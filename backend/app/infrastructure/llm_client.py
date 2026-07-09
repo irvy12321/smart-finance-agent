@@ -1,8 +1,14 @@
 import contextlib
 import contextvars
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
+
+# Avoid a startup-time network fetch for LiteLLM's model price map. Operators
+# can explicitly set this to "false" before process start if they want remote
+# refreshes, but production/offline startup should be deterministic by default.
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "true")
 
 import litellm
 
