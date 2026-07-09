@@ -445,8 +445,17 @@ jobs:
               exit 0
             fi
             if [ "$STATE" = "FAIL" ]; then
-              echo "::error::ECS build failed. Last 40 log lines:"
+              echo "::error::ECS deploy failed. Last 40 deploy log lines:"
               sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" "tail -n 40 '$LOG_FILE'" 2>/dev/null || true
+              echo "::group::ECS container status"
+              sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" 'docker ps -a --filter "name=sfa" --format "{{.Names}} {{.Status}}"' 2>/dev/null || true
+              echo "::endgroup::"
+              echo "::group::Backend health"
+              sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" 'docker inspect --format "{{json .State.Health}}" sfa-backend-prod 2>/dev/null || true' 2>/dev/null || true
+              echo "::endgroup::"
+              echo "::group::Backend logs"
+              sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" 'docker logs --tail 120 sfa-backend-prod 2>&1 || true' 2>/dev/null || true
+              echo "::endgroup::"
               exit 1
             fi
           done
