@@ -5,6 +5,7 @@ on:
     branches: [main, master, develop]
   pull_request:
     branches: [main, master, develop]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -376,6 +377,9 @@ jobs:
   # required secrets/variables are configured. Required secrets:
   #   ECS_HOST, ECS_SSH_USER, ECS_SSH_PASSWORD, ECS_PROJECT_DIR
   #   (optional) ECS_SSH_PORT
+  #   (optional) SFA_DEFAULT_ADMIN_PASSWORD for production bootstrap
+  # Optional variables:
+  #   RESET_ADMIN_PASSWORD_ON_DEPLOY=true to rotate/reset admin during deploy
   # ============================================================
   deploy:
     name: Deploy to ECS
@@ -388,6 +392,8 @@ jobs:
       ECS_SSH_PASSWORD: ${{ secrets.ECS_SSH_PASSWORD }}
       ECS_SSH_PORT: ${{ secrets.ECS_SSH_PORT }}
       ECS_PROJECT_DIR: ${{ secrets.ECS_PROJECT_DIR }}
+      SFA_DEFAULT_ADMIN_PASSWORD: ${{ secrets.SFA_DEFAULT_ADMIN_PASSWORD }}
+      RESET_ADMIN_PASSWORD_ON_DEPLOY: ${{ vars.RESET_ADMIN_PASSWORD_ON_DEPLOY || 'false' }}
       SSH_OPTS: "-o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=60 -o ServerAliveInterval=15"
     steps:
       - name: Checkout code
@@ -404,19 +410,59 @@ jobs:
           OK_FILE="/tmp/sfa_deploy_${RUN_SUFFIX}.ok"
           FAIL_FILE="/tmp/sfa_deploy_${RUN_SUFFIX}.fail"
           LOG_FILE="/tmp/sfa_deploy_${RUN_SUFFIX}.log"
+          APP_ENV_FILE="/tmp/sfa_app_env_${RUN_SUFFIX}"
           git archive --format=tar.gz -o /tmp/src.tar.gz HEAD
+          umask 077
+          {
+            printf 'SFA_DEFAULT_ADMIN_PASSWORD=%q\n' "$SFA_DEFAULT_ADMIN_PASSWORD"
+            printf 'RESET_ADMIN_PASSWORD_ON_DEPLOY=%q\n' "$RESET_ADMIN_PASSWORD_ON_DEPLOY"
+          } > "$APP_ENV_FILE"
           export SSHPASS="$ECS_SSH_PASSWORD"
           sshpass -e scp $SSH_OPTS -P "$PORT" /tmp/src.tar.gz "$ECS_SSH_USER@$ECS_HOST:/tmp/src.tar.gz"
-          REMOTE_ENV=$(printf "PROJECT_DIR=%q OK_FILE=%q FAIL_FILE=%q LOG_FILE=%q" "$ECS_PROJECT_DIR" "$OK_FILE" "$FAIL_FILE" "$LOG_FILE")
+          sshpass -e scp $SSH_OPTS -P "$PORT" "$APP_ENV_FILE" "$ECS_SSH_USER@$ECS_HOST:$APP_ENV_FILE"
+          rm -f "$APP_ENV_FILE"
+          REMOTE_ENV=$(printf "PROJECT_DIR=%q OK_FILE=%q FAIL_FILE=%q LOG_FILE=%q APP_ENV_FILE=%q" "$ECS_PROJECT_DIR" "$OK_FILE" "$FAIL_FILE" "$LOG_FILE" "$APP_ENV_FILE")
           sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" "$REMOTE_ENV bash -s" <<'REMOTE_SCRIPT'
             set -e
             cd "$PROJECT_DIR"
+            if [ -f "$APP_ENV_FILE" ]; then
+              set -a
+              . "$APP_ENV_FILE"
+              set +a
+              rm -f "$APP_ENV_FILE"
+            fi
             tar xzf /tmp/src.tar.gz
+            upsert_env_var() {
+              key="$1"
+              value="$2"
+              file="$3"
+              [ -n "$value" ] || return 0
+              [ -f "$file" ] || touch "$file"
+              if grep -q "^${key}=" "$file"; then
+                tmp="${file}.tmp.$$"
+                awk -v key="$key" -v value="$value" '
+                  BEGIN { prefix = key "=" }
+                  $0 ~ "^" key "=" { $0 = prefix value }
+                  { print }
+                ' "$file" > "$tmp"
+                mv "$tmp" "$file"
+              else
+                printf '\n%s=%s\n' "$key" "$value" >> "$file"
+              fi
+            }
+            upsert_env_var "DEFAULT_ADMIN_PASSWORD" "${SFA_DEFAULT_ADMIN_PASSWORD:-}" "backend/.env"
+            if ! grep -Eq '^DEFAULT_ADMIN_PASSWORD=.{12,}' backend/.env 2>/dev/null; then
+              echo 'DEFAULT_ADMIN_PASSWORD is missing or too short in backend/.env. Set repository secret SFA_DEFAULT_ADMIN_PASSWORD.'
+              exit 1
+            fi
             # Each image build is retried up to 3x: the ECS host's Docker registry
             # mirror occasionally fails DNS resolution (transient), which used to
             # fail the whole deploy and require a manual re-run.
             nohup sh -c '
               ( docker compose -f docker-compose.prod.yml build backend || { sleep 10; docker compose -f docker-compose.prod.yml build backend; } || { sleep 15; docker compose -f docker-compose.prod.yml build backend; } ) &&
+              if [ "${RESET_ADMIN_PASSWORD_ON_DEPLOY:-false}" = "true" ]; then
+                docker compose -f docker-compose.prod.yml run --rm --no-deps backend python -m app.ops.reset_admin_password;
+              fi &&
               ( docker compose -f docker-compose.prod.yml build frontend || { sleep 10; docker compose -f docker-compose.prod.yml build frontend; } || { sleep 15; docker compose -f docker-compose.prod.yml build frontend; } ) &&
               docker compose -f docker-compose.prod.yml up -d &&
               touch "$OK_FILE" || touch "$FAIL_FILE"
