@@ -41,6 +41,22 @@ def clear_stream_token_state():
     task_api._stream_tokens.clear()
 
 
+def test_fail_interrupted_running_tasks(temp_db):
+    pending = temp_db.create_task("pending-task", "Analyze MSFT", user_id=1)
+    running = temp_db.create_task("running-task", "Analyze AAPL", user_id=1)
+    temp_db.update_task(running["task_id"], status="running", current_stage="executing")
+
+    count = temp_db.fail_interrupted_running_tasks()
+
+    assert count == 1
+    assert temp_db.get_task(pending["task_id"])["status"] == "pending"
+
+    recovered = temp_db.get_task(running["task_id"])
+    assert recovered["status"] == "failed"
+    assert recovered["current_stage"] == "interrupted"
+    assert "backend restart" in recovered["message"]
+
+
 @pytest.fixture
 def auth_app(test_app, mock_current_user):
     """Override auth dependency for testing."""

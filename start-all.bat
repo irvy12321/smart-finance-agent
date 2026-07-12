@@ -94,7 +94,7 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING') 
 REM Start Backend (FastAPI)
 echo [1/2] Starting Backend (FastAPI on :8000)...
 cd /d "%~dp0backend"
-start "SFA-Backend" cmd /k "title Smart Finance Agent - Backend && python -m uvicorn app.main:app --reload --port 8000"
+start "SFA-Backend" cmd /k "title Smart Finance Agent - Backend && python -m uvicorn app.main:app --reload --reload-exclude data/* --reload-exclude data/**/* --port 8000"
 
 REM Wait for backend to be ready
 echo [2/2] Waiting for backend to be ready...

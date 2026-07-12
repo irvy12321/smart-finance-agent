@@ -34,6 +34,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from app import storage
 from app.api import api_router
 from app.core.startup_check import is_production, run_startup_checks
 from app.utils.logger import get_logger
@@ -277,6 +278,12 @@ async def lifespan(app: FastAPI):
 
     # Fail fast on unsafe deployment settings.
     run_startup_checks()
+    interrupted_count = storage.fail_interrupted_running_tasks()
+    if interrupted_count:
+        logger.warning(
+            "Marked %s interrupted running task(s) as failed after startup",
+            interrupted_count,
+        )
 
     # Initialize Sentry
     init_sentry()
@@ -439,5 +446,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True,
+        reload_excludes=["data/*", "data/**/*"],
         log_level="info",
     )
