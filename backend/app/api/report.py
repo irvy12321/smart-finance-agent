@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app import storage
+from app.api.report_content import enrich_report_result
 from app.auth.dependencies import get_current_user
 from app.auth.models import UserResponse
 from app.utils.logger import get_logger
@@ -86,7 +87,7 @@ async def get_report(
             detail=f"Task is not completed. Current status: {task['status']}",
         )
 
-    result = task.get("result", {})
+    result = enrich_report_result(task.get("result", {}))
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
 
@@ -112,7 +113,7 @@ async def get_report_summary(
             detail=f"Task is not completed. Current status: {task['status']}",
         )
 
-    result = task.get("result", {})
+    result = enrich_report_result(task.get("result", {}))
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
 
@@ -147,7 +148,7 @@ async def get_report_markdown(
             detail=f"Task is not completed. Current status: {task['status']}",
         )
 
-    result = task.get("result", {})
+    result = enrich_report_result(task.get("result", {}))
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
 
@@ -177,7 +178,7 @@ async def get_report_charts(
             detail=f"Task is not completed. Current status: {task['status']}",
         )
 
-    result = task.get("result", {})
+    result = enrich_report_result(task.get("result", {}))
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
 
@@ -207,7 +208,7 @@ async def get_report_analysis(
             detail=f"Task is not completed. Current status: {task['status']}",
         )
 
-    result = task.get("result", {})
+    result = enrich_report_result(task.get("result", {}))
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
 
@@ -241,7 +242,7 @@ async def get_report_sources(
             detail=f"Task is not completed. Current status: {task['status']}",
         )
 
-    result = task.get("result", {})
+    result = enrich_report_result(task.get("result", {}))
     if not result:
         raise HTTPException(status_code=404, detail="No report available")
 
