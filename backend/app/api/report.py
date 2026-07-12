@@ -26,6 +26,7 @@ class ReportResponse(BaseModel):
     """Response model for report"""
 
     task_id: str
+    answer: str = ""
     report_markdown: str = ""
     report_title: str = ""
     summary: str = ""
