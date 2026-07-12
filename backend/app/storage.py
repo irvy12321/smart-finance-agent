@@ -512,6 +512,40 @@ def update_task_failure(
         conn.close()
 
 
+def fail_interrupted_running_tasks() -> int:
+    """Mark in-progress tasks as failed after a process restart.
+
+    Background research work lives in the FastAPI process. If the process is
+    restarted by uvicorn reload or deployment, those tasks cannot resume safely,
+    so leaving them as ``running`` makes the UI poll forever and report fetches
+    return 400.
+    """
+    conn = _get_connection()
+    try:
+        now = datetime.now().isoformat()
+        cursor = conn.execute(
+            """
+            UPDATE tasks
+            SET status = ?,
+                current_stage = ?,
+                message = ?,
+                updated_at = ?
+            WHERE status = ?
+            """,
+            (
+                "failed",
+                "interrupted",
+                "Task was interrupted by a backend restart. Please start a new research task.",
+                now,
+                "running",
+            ),
+        )
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
+
 def list_tasks(user_id: int | None = None) -> list[dict[str, Any]]:
     conn = _get_connection()
     try:
