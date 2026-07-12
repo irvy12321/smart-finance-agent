@@ -165,3 +165,4 @@ async def test_report_cross_user_access_denied(real_client, temp_db):
 
     resp = await real_client.get(f"/api/report/{task_id}", headers=_auth(a))
     assert resp.status_code == 200
+    assert resp.json()["answer"] == "done"

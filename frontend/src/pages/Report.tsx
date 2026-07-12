@@ -88,7 +88,7 @@ export default function Report() {
 
   const handleDownload = () => {
     if (!report) return
-    const content = `# ${report.report_title || t('report.title')}
+    const content = report.answer || `# ${report.report_title || t('report.title')}
 
 ## ${t('report.summary')}
 ${report.summary || t('report.noReport')}
