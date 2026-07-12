@@ -1,14 +1,27 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FileText, Download, ExternalLink, Brain, AlertTriangle, Target, Loader2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  BarChart3,
+  Brain,
+  Download,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Target,
+} from 'lucide-react'
 import { reportApi } from '../../services/api'
+import SimpleChart from '../SimpleChart'
+import type { ChartSpec } from '../../types/api'
 
 interface ReportData {
   title: string
   summary: string
   keyFindings: string[]
   riskFactors: { text: string; severity: string }[]
+  marketTrends: string[]
   recommendations: string[]
+  chartSpecs: ChartSpec[]
   confidence: number
 }
 
@@ -45,11 +58,16 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
         title: data.report_title || `${symbol} Analysis`,
         summary: data.summary || '',
         keyFindings: data.key_findings || [],
-        riskFactors: (data.risk_factors || []).map((r: RawRiskFactor) => ({
-          text: typeof r === 'string' ? r : (r.factor ?? r.text ?? r.description ?? ''),
-          severity: (typeof r === 'object' && r?.severity) ? r.severity : 'medium'
+        riskFactors: (data.risk_factors || []).map((risk: RawRiskFactor) => ({
+          text:
+            typeof risk === 'string'
+              ? risk
+              : (risk.factor ?? risk.text ?? risk.description ?? ''),
+          severity: typeof risk === 'object' && risk?.severity ? risk.severity : 'medium',
         })),
+        marketTrends: data.market_trends || [],
         recommendations: data.recommendations || [],
+        chartSpecs: data.chart_specs || [],
         confidence: data.confidence || 0,
       })
     } catch (err) {
@@ -60,9 +78,6 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
   }, [taskId, symbol])
 
   useEffect(() => {
-    // Only fetch once the task has finished running; fetching while the task is
-    // still in progress returns 400 ("Task is not completed"). When isLoading
-    // flips false on completion this re-runs and pulls the finished report.
     if (taskId && !isLoading) {
       fetchReport()
     }
@@ -121,10 +136,9 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
 
   return (
     <div className="bg-dark-card border border-dark-border rounded-lg overflow-hidden h-full flex flex-col">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border">
-        <div>
-          <h2 className="text-sm font-semibold text-primary-100">{report.title}</h2>
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-primary-100 truncate">{report.title}</h2>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs text-primary-500">{t('report.summary')}:</span>
             <div className="w-20 h-1.5 bg-dark-border rounded-full">
@@ -133,10 +147,12 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
                 style={{ width: `${report.confidence * 100}%` }}
               />
             </div>
-            <span className="text-xs text-green-400">{(report.confidence * 100).toFixed(0)}%</span>
+            <span className="text-xs text-green-400">
+              {(report.confidence * 100).toFixed(0)}%
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button className="p-1.5 text-primary-400 hover:text-primary-200 hover:bg-dark-bg rounded transition-colors">
             <Download className="w-4 h-4" />
           </button>
@@ -146,68 +162,132 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-4 space-y-4">
-        {/* Summary */}
-        {report.summary && (
-          <div>
-            <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider mb-2">{t('report.summary')}</h3>
-            <p className="text-xs text-primary-200 leading-relaxed">{report.summary}</p>
+      <div className="flex-1 overflow-auto p-3 space-y-3">
+        <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] gap-3">
+          {report.summary && (
+            <div className="bg-dark-bg border border-dark-border rounded p-3">
+              <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider mb-2">
+                {t('report.summary')}
+              </h3>
+              <p className="text-xs text-primary-200 leading-relaxed">{report.summary}</p>
+            </div>
+          )}
+
+          {report.chartSpecs.length > 0 && (
+            <div className="bg-dark-bg border border-dark-border rounded p-3">
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+                <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">
+                  Visuals
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {report.chartSpecs.slice(0, 2).map((chart, index) => (
+                  <SimpleChart
+                    key={`${chart.title}-${index}`}
+                    data={chart.data || []}
+                    type={chart.chart_type === 'line' ? 'line' : 'bar'}
+                    title={chart.title}
+                    height={150}
+                    showLabels
+                    showValues
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {report.marketTrends.length > 0 && (
+          <div className="bg-dark-bg border border-dark-border rounded p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+              <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">
+                {t('report.marketTrends')}
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              {report.marketTrends.slice(0, 3).map((trend, index) => (
+                <div key={index} className="p-2 bg-dark-card border border-dark-border rounded">
+                  <p className="text-xs text-primary-200 leading-relaxed">{trend}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Key Findings */}
-        {report.keyFindings.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Brain className="w-3.5 h-3.5 text-blue-400" />
-              <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">{t('report.keyFindings')}</h3>
-            </div>
-            <div className="space-y-2">
-              {report.keyFindings.map((finding, i) => (
-                <div key={i} className="flex items-start gap-2 p-2 bg-dark-bg rounded">
-                  <div className="w-5 h-5 bg-blue-500/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-xs font-bold text-blue-400">{i + 1}</span>
+        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3">
+          {report.keyFindings.length > 0 && (
+            <div className="bg-dark-bg border border-dark-border rounded p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Brain className="w-3.5 h-3.5 text-blue-400" />
+                <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">
+                  {t('report.keyFindings')}
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {report.keyFindings.slice(0, 4).map((finding, index) => (
+                  <div
+                    key={index}
+                    className="flex items-start gap-2 p-2 bg-dark-card border border-dark-border rounded"
+                  >
+                    <div className="w-5 h-5 bg-blue-500/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-xs font-bold text-blue-400">{index + 1}</span>
+                    </div>
+                    <p className="text-xs text-primary-200">{finding}</p>
                   </div>
-                  <p className="text-xs text-primary-200">{finding}</p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Risk Factors */}
-        {report.riskFactors.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
-              <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">{t('report.riskFactors')}</h3>
+          {report.riskFactors.length > 0 && (
+            <div className="bg-dark-bg border border-dark-border rounded p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
+                <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">
+                  {t('report.riskFactors')}
+                </h3>
+              </div>
+              <div className="space-y-1.5">
+                {report.riskFactors.slice(0, 4).map((risk, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 p-2 bg-dark-card border border-dark-border rounded"
+                  >
+                    <div
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        risk.severity === 'high'
+                          ? 'bg-red-500'
+                          : risk.severity === 'medium'
+                            ? 'bg-yellow-500'
+                            : 'bg-green-500'
+                      }`}
+                    />
+                    <p className="text-xs text-primary-200">{risk.text}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="space-y-1.5">
-              {report.riskFactors.map((risk, i) => (
-                <div key={i} className="flex items-center gap-2 p-2 bg-dark-bg rounded">
-                  <div className={`w-1.5 h-1.5 rounded-full ${
-                    risk.severity === 'high' ? 'bg-red-500' : risk.severity === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
-                  }`} />
-                  <p className="text-xs text-primary-200">{risk.text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Recommendations */}
         {report.recommendations.length > 0 && (
-          <div>
+          <div className="bg-dark-bg border border-dark-border rounded p-3">
             <div className="flex items-center gap-2 mb-2">
               <Target className="w-3.5 h-3.5 text-green-400" />
-              <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">{t('report.recommendations')}</h3>
+              <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">
+                {t('report.recommendations')}
+              </h3>
             </div>
-            <div className="space-y-1.5">
-              {report.recommendations.map((rec, i) => (
-                <div key={i} className="flex items-start gap-2 p-2 bg-dark-bg rounded">
-                  <span className="text-green-400 mt-0.5">•</span>
-                  <p className="text-xs text-primary-200">{rec}</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              {report.recommendations.slice(0, 3).map((recommendation, index) => (
+                <div
+                  key={index}
+                  className="flex items-start gap-2 p-2 bg-dark-card border border-dark-border rounded"
+                >
+                  <span className="text-green-400 mt-0.5">-</span>
+                  <p className="text-xs text-primary-200">{recommendation}</p>
                 </div>
               ))}
             </div>

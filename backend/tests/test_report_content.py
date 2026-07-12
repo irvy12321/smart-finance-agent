@@ -68,3 +68,26 @@ def test_enrich_report_result_preserves_useful_structured_cards():
     assert enriched["risk_factors"] == result["risk_factors"]
     assert enriched["market_trends"] == result["market_trends"]
     assert enriched["recommendations"] == result["recommendations"]
+
+
+def test_enrich_report_result_adds_chart_specs_from_grounded_numbers():
+    result = {
+        "answer": (
+            "AAPL valuation includes P/E of 34.09, EPS of 7.49, "
+            "ROE of 151.91%, and RSI of 43.17. "
+            "The stock price moved from $163.50 to $145.52 over the period."
+        ),
+        "chart_specs": [],
+    }
+
+    enriched = enrich_report_result(result)
+
+    assert len(enriched["chart_specs"]) >= 1
+    metric_chart = enriched["chart_specs"][0]
+    assert metric_chart["chart_type"] == "bar"
+    assert {point["label"] for point in metric_chart["data"]} >= {
+        "P/E",
+        "EPS",
+        "ROE %",
+        "RSI",
+    }

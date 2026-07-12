@@ -69,6 +69,9 @@ def enrich_report_result(result: dict[str, Any]) -> dict[str, Any]:
     ):
         enriched["recommendations"] = extracted["recommendations"]
 
+    if not enriched.get("chart_specs") and extracted.get("chart_specs"):
+        enriched["chart_specs"] = extracted["chart_specs"]
+
     return enriched
 
 
@@ -135,7 +138,134 @@ def extract_report_cards_from_answer(answer: str) -> dict[str, Any]:
         "risk_factors": risk_factors,
         "market_trends": market_trends,
         "recommendations": recommendations,
+        "chart_specs": _extract_chart_specs(answer),
     }
+
+
+def _extract_chart_specs(answer: str) -> list[dict[str, Any]]:
+    charts: list[dict[str, Any]] = []
+    metric_chart = _extract_metric_chart(answer)
+    if metric_chart:
+        charts.append(metric_chart)
+
+    series_chart = _extract_money_series_chart(answer)
+    if series_chart:
+        charts.append(series_chart)
+
+    return charts[:2]
+
+
+def _extract_metric_chart(answer: str) -> dict[str, Any] | None:
+    metrics: dict[str, float] = {}
+    for raw_line in answer.splitlines():
+        line = _clean_report_line(raw_line)
+        lowered = line.lower()
+        numbers = _extract_numbers(line)
+        if not numbers:
+            continue
+
+        if "p/e" in lowered or "pe ratio" in lowered:
+            _set_metric(metrics, "P/E", _last_in_range(numbers, 0, 150))
+        if "rsi" in lowered:
+            _set_metric(metrics, "RSI", _last_in_range(numbers, 0, 100))
+        if "roe" in lowered:
+            _set_metric(metrics, "ROE %", _last_in_range(numbers, 0, 300))
+        if "d/e" in lowered or "debt-to-equity" in lowered:
+            _set_metric(metrics, "D/E", _last_in_range(numbers, 0, 20))
+        if "eps" in lowered:
+            _set_metric(metrics, "EPS", _last_in_range(numbers, 0, 200))
+
+        if len(metrics) >= 5:
+            break
+
+    if len(metrics) < 2:
+        return None
+
+    return {
+        "chart_type": "bar",
+        "title": "Key financial metrics",
+        "x_label": "Metric",
+        "y_label": "Value",
+        "data": [
+            {"label": label, "value": round(value, 2)}
+            for label, value in list(metrics.items())[:5]
+        ],
+        "description": "Extracted from grounded numbers in the generated report.",
+    }
+
+
+def _extract_money_series_chart(answer: str) -> dict[str, Any] | None:
+    for raw_line in answer.splitlines():
+        line = _clean_report_line(raw_line)
+        money_values = _extract_money_values(line)
+        if len(money_values) < 2:
+            continue
+
+        lowered = line.lower()
+        years = re.findall(r"\b(20\d{2})\b", line)
+        if years and len(years) >= len(money_values[:3]):
+            labels = years[: len(money_values[:3])]
+            title = "Financial trend"
+        elif "price" in lowered or all(value < 1000 for value in money_values[:2]):
+            labels = ["Start", "End"][: len(money_values[:2])]
+            title = "Price movement"
+            money_values = money_values[:2]
+        else:
+            labels = [f"Point {i + 1}" for i in range(len(money_values[:3]))]
+            title = "Financial scale"
+
+        values = money_values[: len(labels)]
+        if len(values) < 2:
+            continue
+
+        return {
+            "chart_type": "line",
+            "title": title,
+            "x_label": "Period",
+            "y_label": "Value",
+            "data": [
+                {"label": label, "value": round(value, 2)}
+                for label, value in zip(labels, values, strict=False)
+            ],
+            "description": "Extracted from monetary values in the generated report.",
+        }
+
+    return None
+
+
+def _set_metric(metrics: dict[str, float], label: str, value: float | None) -> None:
+    if value is not None and label not in metrics:
+        metrics[label] = value
+
+
+def _extract_numbers(text: str) -> list[float]:
+    values = []
+    for match in re.finditer(r"(?<![A-Za-z])[-+]?\d[\d,]*(?:\.\d+)?%?", text):
+        token = match.group(0).replace(",", "").rstrip("%")
+        try:
+            values.append(float(token))
+        except ValueError:
+            continue
+    return values
+
+
+def _extract_money_values(text: str) -> list[float]:
+    values = []
+    for match in re.finditer(r"\$\s*([-+]?\d[\d,]*(?:\.\d+)?)", text):
+        try:
+            values.append(float(match.group(1).replace(",", "")))
+        except ValueError:
+            continue
+    return values
+
+
+def _last_in_range(
+    numbers: list[float], minimum: float, maximum: float
+) -> float | None:
+    for value in reversed(numbers):
+        if minimum <= value <= maximum:
+            return value
+    return None
 
 
 def _has_useful_items(value: Any) -> bool:
