@@ -6,7 +6,7 @@ export default function KnowledgeBase() {
   const { t } = useTranslation()
 
   return (
-    <div className="p-4 lg:p-6 space-y-4">
+    <div className="app-page app-page-narrow space-y-6">
       <PageHeader
         title={t('rag.title')}
         subtitle={t('rag.subtitle')}

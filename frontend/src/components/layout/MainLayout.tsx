@@ -11,12 +11,12 @@ interface MainLayoutProps {
 export default function MainLayout({ children, showStatusBar = true }: MainLayoutProps) {
   const { t } = useTranslation()
   return (
-    <div className="flex flex-col h-screen bg-dark-bg">
+    <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-dark-bg text-primary-200">
       <TopNavBar />
-      <main className="flex-1 overflow-auto">
+      <main className="app-main flex-1 min-h-0 overflow-auto">
         {children}
       </main>
-      <div className="px-4 py-1.5 text-xs text-center text-gray-400 bg-dark-bg border-t border-gray-700/60">
+      <div className="flex-shrink-0 px-6 py-1.5 text-center text-xs text-gray-400 bg-dark-bg border-t border-gray-700/60 lg:px-8">
         {t('common.disclaimer')}
       </div>
       {showStatusBar && <StatusBar />}

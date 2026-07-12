@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 export default function SystemMonitor() {
   const { t } = useTranslation()
   return (
-    <div className="p-4 lg:p-6 space-y-4">
+    <div className="app-page app-page-narrow space-y-6">
       <PageHeader
         title={t('systemMonitor.title')}
         subtitle={t('systemMonitor.subtitle')}

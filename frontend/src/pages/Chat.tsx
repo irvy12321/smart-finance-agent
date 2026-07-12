@@ -220,10 +220,10 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="app-workspace flex min-w-0 px-5 lg:px-8">
       {/* Conversations Sidebar */}
-      <div className="w-64 bg-dark-sub border-r border-dark-border flex flex-col">
-        <div className="p-4 border-b border-dark-border">
+      <aside className="hidden w-72 flex-shrink-0 bg-dark-sub border-r border-dark-border md:flex md:flex-col min-h-0">
+        <div className="p-3 border-b border-dark-border">
           <button
             onClick={createNewConversation}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
@@ -233,7 +233,7 @@ export default function Chat() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto p-2">
+        <div className="flex-1 min-h-0 overflow-auto p-2">
           {conversations.length === 0 ? (
             <div className="text-center py-8">
               <MessageSquare className="w-8 h-8 text-primary-400 mx-auto mb-2" />
@@ -273,20 +273,25 @@ export default function Chat() {
             </div>
           )}
         </div>
-      </div>
+      </aside>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b border-dark-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-primary-50">{t('chat.title')}</h1>
-              <p className="text-sm text-primary-400 mt-1">
-                {t('chat.typeMessage')}
-              </p>
+        <div className="flex-shrink-0 border-b border-dark-border px-4 py-3">
+          <div className="chat-content flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-dark-border bg-dark-card">
+                <MessageSquare className="h-4 w-4 text-primary-500" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="truncate text-base font-semibold text-primary-50">{t('chat.title')}</h1>
+                <p className="truncate text-xs text-primary-400">
+                  {t('sidebar.title')}
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-shrink-0 items-center gap-2 rounded-full border border-dark-border bg-dark-card px-3 py-1.5">
               <div className="status-dot status-dot-success" />
               <span className="text-xs text-primary-300">{t('sidebar.apiConnected')}</span>
             </div>
@@ -294,8 +299,8 @@ export default function Chat() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-auto p-6">
-          <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex-1 min-h-0 overflow-auto px-4 py-6 lg:px-6">
+          <div className="chat-content space-y-6">
             {messages.length === 0 && !loading && (
               <div className="flex flex-col items-center justify-center h-full py-12">
                 <div className="text-center max-w-2xl">
@@ -345,9 +350,9 @@ export default function Chat() {
                 )}
 
                 <div
-                  className={`max-w-[70%] rounded-xl px-4 py-3 ${
+                  className={`chat-bubble rounded-xl ${
                     message.role === 'user'
-                      ? 'bg-accent text-[#06121f]'
+                      ? 'chat-bubble-user bg-accent text-[#06121f]'
                       : 'bg-dark-card border border-dark-border'
                   }`}
                 >
@@ -355,7 +360,7 @@ export default function Chat() {
                     const { text, reportTaskId } = extractReportLink(message.content)
                     return (
                       <>
-                        <p className="text-sm whitespace-pre-wrap">{cleanAIText(text)}</p>
+                        <p className="chat-bubble-text text-sm">{cleanAIText(text)}</p>
                         {reportTaskId && (
                           <button
                             onClick={() => navigate(`/report/${reportTaskId}`)}
@@ -368,9 +373,9 @@ export default function Chat() {
                       </>
                     )
                   })() : (
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <p className="chat-bubble-text text-sm">{message.content}</p>
                   )}
-                  <p className={`text-xs mt-2 ${
+                  <p className={`text-xs mt-1.5 ${
                     message.role === 'user' ? 'text-[#06121f]/60' : 'text-primary-400'
                   }`}>
                     {new Date(message.timestamp).toLocaleTimeString()}
@@ -390,7 +395,7 @@ export default function Chat() {
                 <div className="w-8 h-8 bg-primary-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                   <Bot className="w-4 h-4 text-primary-500" />
                 </div>
-                <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-3">
+                <div className="chat-bubble bg-dark-card border border-dark-border rounded-xl">
                   <div className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 text-primary-400 animate-spin" />
                     <p className="text-sm text-primary-400">{t('chat.thinking')}</p>
@@ -404,16 +409,16 @@ export default function Chat() {
         </div>
 
         {/* Input */}
-        <div className="p-4 border-t border-dark-border">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex gap-4">
+        <div className="flex-shrink-0 p-4 border-t border-dark-border bg-dark-bg">
+          <div className="chat-content">
+            <div className="flex gap-3">
               <div className="flex-1 relative">
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={t('chat.typeMessage')}
-                  className="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-xl text-primary-200 placeholder-primary-400 focus:outline-none focus:border-primary-500 resize-none"
+                  className="chat-input max-h-32 w-full bg-dark-card border border-dark-border rounded-xl text-primary-200 placeholder-primary-400 focus:outline-none focus:border-primary-500 resize-none"
                   rows={1}
                   disabled={loading}
                 />
@@ -421,7 +426,7 @@ export default function Chat() {
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || loading}
-                className="px-4 py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-500/50 disabled:cursor-not-allowed text-white rounded-xl transition-colors flex items-center gap-2"
+                className="h-[3.25rem] w-[3.25rem] flex-shrink-0 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-500/50 disabled:cursor-not-allowed text-white rounded-xl transition-colors flex items-center justify-center"
               >
                 {loading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />

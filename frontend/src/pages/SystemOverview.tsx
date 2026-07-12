@@ -144,7 +144,7 @@ export default function SystemOverview() {
   })) : []
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="app-page app-page-wide space-y-6">
       {/* Loading State */}
       {loading && !systemStatus && (
         <div className="flex items-center justify-center py-12">

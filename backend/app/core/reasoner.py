@@ -15,6 +15,14 @@ from app.utils.logger import get_logger
 
 logger = get_logger("reasoner")
 
+_PROMPT_EXAMPLE_RE = re.compile(
+    r"(concise step-by-step analysis|简洁的逐步分析|insight\s*\d+|洞察\s*\d+|"
+    r"what might be uncertain|可能不确定的内容|refined step-by-step analysis|"
+    r"修正后的逐步分析|specific issue description|missing analysis angle|"
+    r"具体问题描述|遗漏的重要分析角度|^Title$|^标题$)",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class ChartSpec:
@@ -286,22 +294,13 @@ class Reasoner:
             lines = [line for line in lines if not line.strip().startswith("```")]
             text = "\n".join(lines).strip()
 
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        if start >= 0 and end > start:
-            text = text[start:end]
-
-        text = re.sub(r",\s*([}\]])", r"\1", text)
-        text = re.sub(r"[\x00-\x1f\x7f]", "", text)
-
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON parse failed: {e}")
+        data = self._load_first_json_object(text)
+        if data is None:
+            logger.warning("No valid JSON object found in reasoner response")
             return ReasoningResult(
                 reasoning=text[:500],
                 critique="",
-                confidence=0.5,
+                confidence=0.0,
                 key_insights=[],
             )
 
@@ -340,10 +339,89 @@ class Reasoner:
         return ReasoningResult(
             reasoning=data.get("reasoning", ""),
             critique=data.get("critique", ""),
-            confidence=float(data.get("confidence", 0.5)),
+            confidence=self._parse_confidence(data.get("confidence")),
             key_insights=data.get("key_insights", []),
             chart_specs=chart_specs,
         )
+
+    @classmethod
+    def _load_first_json_object(cls, text: str) -> dict | None:
+        text = re.sub(r"[\x00-\x1f\x7f]", "", text or "")
+        position = 0
+        while True:
+            start = text.find("{", position)
+            if start == -1:
+                return None
+            end = cls._find_matching_object_end(text, start)
+            if end is None:
+                position = start + 1
+                continue
+            json_str = re.sub(r",\s*([}\]])", r"\1", text[start:end])
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError:
+                position = end
+                continue
+            if isinstance(data, dict) and not cls._is_prompt_example_object(data):
+                return data
+            position = end
+
+    @classmethod
+    def _is_prompt_example_object(cls, data: dict) -> bool:
+        return any(
+            _PROMPT_EXAMPLE_RE.search(value) for value in cls._collect_strings(data)
+        )
+
+    @classmethod
+    def _collect_strings(cls, value) -> list[str]:
+        if isinstance(value, str):
+            text = value.strip()
+            return [text] if text else []
+        if isinstance(value, list):
+            strings: list[str] = []
+            for item in value:
+                strings.extend(cls._collect_strings(item))
+            return strings
+        if isinstance(value, dict):
+            strings: list[str] = []
+            for item in value.values():
+                strings.extend(cls._collect_strings(item))
+            return strings
+        return []
+
+    @staticmethod
+    def _find_matching_object_end(text: str, start: int) -> int | None:
+        depth = 0
+        in_string = False
+        escaped = False
+        for i in range(start, len(text)):
+            char = text[i]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return i + 1
+        return None
+
+    @staticmethod
+    def _parse_confidence(value) -> float:
+        try:
+            confidence = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, min(1.0, confidence))
 
     # ── Self-Critique Loop ───────────────────────────────────────────────
 
