@@ -16,6 +16,7 @@ import type { ChartSpec } from '../../types/api'
 
 interface ReportData {
   title: string
+  answer: string
   summary: string
   keyFindings: string[]
   riskFactors: { text: string; severity: string }[]
@@ -56,6 +57,7 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
       const data = await reportApi.get(taskId)
       setReport({
         title: data.report_title || `${symbol} Analysis`,
+        answer: data.answer || '',
         summary: data.summary || '',
         keyFindings: data.key_findings || [],
         riskFactors: (data.risk_factors || []).map((risk: RawRiskFactor) => ({
@@ -162,7 +164,7 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-3 space-y-3">
+      <div className="flex-1 overflow-auto p-3 flex flex-col gap-3">
         <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] gap-3">
           {report.summary && (
             <div className="bg-dark-bg border border-dark-border rounded p-3">
@@ -293,7 +295,31 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
             </div>
           </div>
         )}
+
+        {report.answer && (
+          <div className="bg-dark-bg border border-dark-border rounded p-3 flex-1 min-h-[260px]">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="w-3.5 h-3.5 text-primary-400" />
+              <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">
+                Detailed Analysis
+              </h3>
+            </div>
+            <div className="h-full max-h-[520px] overflow-auto pr-2">
+              <p className="whitespace-pre-wrap text-xs text-primary-200 leading-relaxed">
+                {formatReportText(report.answer)}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
+}
+
+function formatReportText(value: string): string {
+  return value
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/\*\*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
