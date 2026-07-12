@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from app import storage
 from app.api.error_utils import safe_bad_request_detail, safe_internal_detail
+from app.api.report_content import enrich_report_result
 from app.auth.dependencies import get_current_user, require_role
 from app.auth.models import UserResponse
 from app.auth.roles import Role
@@ -322,7 +323,7 @@ async def get_task_result(
             detail=f"Task is not completed. Current status: {task['status']}",
         )
 
-    result = task.get("result", {})
+    result = enrich_report_result(task.get("result", {}))
     if not result:
         logger.warning(f"[task:{task_id}] Task completed but no result available")
         # Return a minimal result instead of 404
@@ -828,7 +829,7 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
             plan_reasoning = event.get("reasoning", "")
             break
 
-    return {
+    result = {
         "answer": answer,
         "report_markdown": report_md,
         "report_title": report_title
@@ -853,6 +854,7 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
         "events": events,
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
+    return enrich_report_result(result)
 
 
 # ============================================================
