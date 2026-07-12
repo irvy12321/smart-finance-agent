@@ -259,6 +259,83 @@ def test_process_events():
     assert "Test summary" in result["summary"]
 
 
+def test_process_events_prefers_structured_complete_report():
+    from app.api.task import process_events
+
+    events = [
+        {
+            "stage": "plan_ready",
+            "subtasks": [{"id": "t1", "tool": "stock_research"}],
+            "reasoning": "Plan",
+        },
+        {
+            "stage": "task_done",
+            "task_id": "t1",
+            "tool": "stock_research",
+            "success": True,
+            "duration_ms": 100,
+        },
+        {"stage": "reasoning_done", "confidence": 0.0, "insights": []},
+        {
+            "stage": "complete",
+            "answer": "Long synthesized answer",
+            "report_title": "研究报告：AAPL",
+            "summary": "AAPL 数据已返回，报告包含可核验内容。",
+            "key_findings": ["AAPL 当前价格为 182.52。"],
+            "risk_factors": [
+                {
+                    "factor": "模拟数据",
+                    "severity": "medium",
+                    "description": "部分输入为模拟数据。",
+                }
+            ],
+            "market_trends": ["短期趋势偏弱。"],
+            "recommendations": ["核对实时数据后再决策。"],
+            "sources": [{"tool": "stock_research", "task_id": "t1"}],
+            "confidence": 0.0,
+            "report_markdown": "# 研究报告：AAPL\n## 摘要\n旧摘要",
+        },
+    ]
+
+    result = process_events(events, "Analyze AAPL", language="zh")
+
+    assert result["report_title"] == "研究报告：AAPL"
+    assert result["summary"] == "AAPL 数据已返回，报告包含可核验内容。"
+    assert result["key_findings"] == ["AAPL 当前价格为 182.52。"]
+    assert result["sources"] == [{"tool": "stock_research", "task_id": "t1"}]
+    assert result["confidence"] == 0.6
+
+
+def test_process_events_parses_normal_chinese_markdown_headings():
+    from app.api.task import process_events
+
+    events = [
+        {
+            "stage": "complete",
+            "answer": "Final answer",
+            "report_markdown": (
+                "# 研究报告\n"
+                "## 摘要\n中文摘要\n"
+                "## 关键发现\n- 发现 A\n"
+                "## 风险因素\n- 风险 A\n"
+                "## 市场趋势\n- 趋势 A\n"
+                "## 建议\n- 建议 A\n"
+                "## 数据来源\n1. **stock_research** (task_1)\n"
+            ),
+        }
+    ]
+
+    result = process_events(events, "Analyze AAPL", language="zh")
+
+    assert result["summary"] == "中文摘要"
+    assert result["key_findings"] == ["发现 A"]
+    assert result["risk_factors"][0]["factor"] == "风险 A"
+    assert result["market_trends"] == ["趋势 A"]
+    assert result["recommendations"] == ["建议 A"]
+    assert result["sources"][0]["tool"] == "stock_research"
+    assert result["sources"][0]["task_id"] == "task_1"
+
+
 @pytest.mark.asyncio
 async def test_execute_task_background_handles_startup_failure(mock_storage):
     from app.api import task as task_api

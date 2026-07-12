@@ -39,6 +39,22 @@ _PROMPT_ECHO_RE = re.compile(
 )
 
 
+_PLACEHOLDER_TEXT_RE = re.compile(
+    r"(报告标题|来自数据的具体发现|另一个真实发现|趋势\s*\d+|建议\s*\d+|"
+    r"\bReport Title\b|specific finding from data|another real finding|trend\s*\d+|"
+    r"rec\s*\d+|finding\s*\d+|200字以内的简洁摘要|使用实际数据|"
+    r"\bName\b|名称|\bbrief\b|简述)",
+    re.IGNORECASE,
+)
+_PROMPT_ECHO_RE = re.compile(
+    r"(You are a report generator|你是一个报告生成器|报告生成器|"
+    r"Output ONLY valid JSON|只输出.*有效\s*JSON|Research question|Research data|"
+    r"Generate structured analysis as JSON|CRITICAL RULES|关键规则|"
+    r"key_findings|risk_factors|market_trends|recommendations|schema|结构)",
+    re.IGNORECASE,
+)
+
+
 @dataclass
 class StructuredAnalysis:
     """结构化分析结果"""

@@ -658,6 +658,13 @@ class Orchestrator:
             if report
             else "",
             "report_title": report.title if report else "",
+            "summary": report.summary if report else "",
+            "key_findings": report.analysis.key_findings if report else [],
+            "risk_factors": report.analysis.risk_factors if report else [],
+            "market_trends": report.analysis.market_trends if report else [],
+            "recommendations": report.analysis.recommendations if report else [],
+            "sources": report.sources if report else [],
+            "confidence": reasoning_result.confidence if reasoning_result else 0.0,
             "chart_paths": chart_paths,
             "chart_specs": [
                 {
