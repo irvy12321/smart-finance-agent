@@ -4,6 +4,7 @@ Task API routes
 
 import asyncio
 import json
+import re
 import secrets
 import time
 import uuid
@@ -605,12 +606,20 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
     task_states = {}
     dag_subtasks = []
     report_md = ""
+    report_title = ""
     answer = ""
     reasoning_confidence = 0.0
     reasoning_insights = []
     chart_specs_raw = []
     chart_paths: list[str] = []
     elapsed = 0.0
+    structured_summary = ""
+    structured_key_findings: list[str] = []
+    structured_risk_factors: list[dict[str, Any]] = []
+    structured_market_trends: list[str] = []
+    structured_recommendations: list[str] = []
+    structured_sources: list[dict[str, Any]] = []
+    structured_confidence: float | None = None
 
     for event in events:
         stage = event.get("stage", "")
@@ -641,6 +650,15 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
         elif stage == "complete":
             answer = event.get("answer", "")
             report_md = event.get("report_markdown", "")
+            report_title = event.get("report_title", "")
+            structured_summary = event.get("summary", "") or ""
+            structured_key_findings = event.get("key_findings", []) or []
+            structured_risk_factors = event.get("risk_factors", []) or []
+            structured_market_trends = event.get("market_trends", []) or []
+            structured_recommendations = event.get("recommendations", []) or []
+            structured_sources = event.get("sources", []) or []
+            if "confidence" in event:
+                structured_confidence = event.get("confidence") or 0.0
             chart_specs_raw = event.get("chart_specs", [])
             chart_paths = event.get("chart_paths", []) or []
             # Orchestrator reports total pipeline time in milliseconds.
@@ -660,6 +678,24 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
         current_section = None
         for line in lines:
             line_stripped = line.strip()
+            if line_stripped.startswith(("## 摘要", "## Summary")):
+                current_section = "summary"
+                continue
+            if line_stripped.startswith(("## 关键发现", "## Key Findings")):
+                current_section = "findings"
+                continue
+            if line_stripped.startswith(("## 风险因素", "## Risk Factors")):
+                current_section = "risks"
+                continue
+            if line_stripped.startswith(("## 市场趋势", "## Market Trends")):
+                current_section = "trends"
+                continue
+            if line_stripped.startswith(("## 建议", "## Recommendations")):
+                current_section = "recommendations"
+                continue
+            if line_stripped.startswith(("## 数据来源", "## Data Sources")):
+                current_section = "sources"
+                continue
             if line_stripped.startswith("## 摘要") or line_stripped.startswith(
                 "## Summary"
             ):
@@ -709,10 +745,35 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
                     recommendations.append(item)
                 elif current_section == "sources":
                     sources.append({"tool": item, "task_id": "", "duration_ms": 0})
+            elif current_section == "sources":
+                source_match = re.match(
+                    r"\d+\.\s+\*\*(?P<tool>[^*]+)\*\*\s*\((?P<task_id>[^)]*)\)",
+                    line_stripped,
+                )
+                if source_match:
+                    sources.append(
+                        {
+                            "tool": source_match.group("tool"),
+                            "task_id": source_match.group("task_id"),
+                            "duration_ms": 0,
+                        }
+                    )
             elif current_section == "summary" and line_stripped:
                 summary += line_stripped + " "
 
     summary = summary.strip()
+    if structured_summary:
+        summary = structured_summary
+    if structured_key_findings:
+        key_findings = structured_key_findings
+    if structured_risk_factors:
+        risk_factors = structured_risk_factors
+    if structured_market_trends:
+        market_trends = structured_market_trends
+    if structured_recommendations:
+        recommendations = structured_recommendations
+    if structured_sources:
+        sources = structured_sources
 
     # If no answer was found from events, try to extract from any available data
     if not answer and not report_md:
@@ -747,6 +808,18 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
     failed_tasks = sum(
         1 for ts in task_states.values() if ts.get("status") in ("failed", "skipped")
     )
+    confidence = (
+        structured_confidence
+        if structured_confidence is not None
+        else reasoning_confidence
+    )
+    if (
+        confidence == 0.0
+        and total_tasks > 0
+        and success_tasks > 0
+        and (summary or answer or report_md)
+    ):
+        confidence = round(min(0.6, 0.35 + 0.25 * (success_tasks / total_tasks)), 2)
 
     # Get plan reasoning
     plan_reasoning = ""
@@ -758,15 +831,14 @@ def process_events(events: list, query: str, language: str = "en") -> dict[str, 
     return {
         "answer": answer,
         "report_markdown": report_md,
-        "report_title": report_md.split("\n")[0].lstrip("# ").strip()
-        if report_md
-        else query[:60],
+        "report_title": report_title
+        or (report_md.split("\n")[0].lstrip("# ").strip() if report_md else query[:60]),
         "summary": summary,
         "key_findings": key_findings,
         "risk_factors": risk_factors,
         "market_trends": market_trends,
         "recommendations": recommendations,
-        "confidence": reasoning_confidence,
+        "confidence": confidence,
         "chart_paths": chart_paths,
         "chart_specs": chart_specs_raw,
         "sources": sources,

@@ -19,9 +19,9 @@
   - Chart types: bar, line, pie, scatter
   - You MUST reply in English
 "system_zh": |-
-  你是一个推理引擎。根据上下文和问题，生成推理和图表规格。
+  你是一个推理引擎。请根据上下文和问题，生成可验证的推理、关键洞察和可选图表规格。
 
-  只输出有效的JSON：
+  只输出有效 JSON：
   {
     "reasoning": "简洁的逐步分析",
     "key_insights": ["洞察1", "洞察2"],
@@ -33,11 +33,11 @@
   }
 
   关键规则：
-  - 禁止编造、估算或生成任何数值。只能使用上下文中原样出现的数字。
-  - charts 字段为可选。只有当上下文已包含每个数据点的具体数字时才输出图表。
-  - 如果上下文数字不足，返回空的 charts 数组（[]）。不得为了凑出图表而编造数据。
-  - 图表类型：bar（柱状图）、line（折线图）、pie（饼图）、scatter（散点图）
-  - 必须使用中文回复
+  - 禁止编造、估算或生成任何数值，只能使用上下文中原样出现的数字。
+  - charts 字段是可选的。只有当上下文已经包含每个数据点的具体数字时，才输出图表。
+  - 如果上下文数字不足，返回空的 charts 数组（[]），不得为了生成图表而编造数据。
+  - 图表类型只能是 bar、line、pie、scatter。
+  - 必须使用中文回复。
 "critique_en": |-
   You are a critical review engine. You will see a financial reasoning result, the original context, and the question.
   Your task is to find flaws in the reasoning.
@@ -60,10 +60,10 @@
   - If no issues found, return empty arrays and "low"
   - You MUST reply in English
 "critique_zh": |-
-  你是一个批判性审查引擎。你将看到一段金融推理结果、原始上下文和问题。
+  你是一个批判性审查引擎。你会看到一段金融推理结果、原始上下文和问题。
   你的任务是找出推理中的缺陷。
 
-  只输出有效的JSON：
+  只输出有效 JSON：
   {
     "issues": ["具体问题描述1", "具体问题描述2"],
     "missing_angles": ["遗漏的重要分析角度1", "遗漏的重要分析角度2"],
@@ -71,15 +71,15 @@
   }
 
   severity 取值规则：
-  - "high": 存在无数据支撑的结论，或编造了上下文中没有的数字
-  - "medium": 推理有遗漏但无事实错误
+  - "high": 存在没有数据支撑的结论，或编造了上下文中没有的数字
+  - "medium": 推理有遗漏但没有事实错误
   - "low": 推理质量良好，无需修正
 
   关键规则：
-  - 只根据上下文判断，不要引入外部知识
-  - 如果推理中出现了上下文没有的数字，severity 必须为 "high"
-  - 如果没有发现问题，返回空数组和 "low"
-  - 必须使用中文回复
+  - 只根据上下文判断，不要引入外部知识。
+  - 如果推理中出现了上下文没有的数字，severity 必须为 "high"。
+  - 如果没有发现问题，返回空数组和 "low"。
+  - 必须使用中文回复。
 "refine_en": |-
   You are a reasoning refinement engine. You will see the original reasoning, critique, context, and question.
   Please refine the reasoning based on the critique and output the corrected full reasoning result.
@@ -102,10 +102,10 @@
   - charts array is OPTIONAL, return empty array if insufficient data
   - You MUST reply in English
 "refine_zh": |-
-  你是一个推理修正引擎。你将看到原始推理、批评意见、上下文和问题。
-  请根据批评意见修正推理，输出修正后的完整推理结果。
+  你是一个推理修正引擎。你会看到原始推理、批评意见、上下文和问题。
+  请根据批评意见修正推理，并输出修正后的完整推理结果。
 
-  只输出有效的JSON：
+  只输出有效 JSON：
   {
     "reasoning": "修正后的逐步分析",
     "key_insights": ["修正后的洞察1", "修正后的洞察2"],
@@ -117,8 +117,8 @@
   }
 
   关键规则：
-  - 禁止编造、估算或生成任何数值。只能使用上下文中原样出现的数字。
-  - 必须解决批评中指出的每一个 issue
-  - 如果批评指出某个数字无来源，必须删除该数字
-  - charts 字段为可选，无足够数据时返回空数组
-  - 必须使用中文回复
+  - 禁止编造、估算或生成任何数值，只能使用上下文中原样出现的数字。
+  - 必须解决批评中指出的每一个 issue。
+  - 如果批评指出某个数字无来源，必须删除该数字。
+  - charts 字段是可选的，数据不足时返回空数组。
+  - 必须使用中文回复。

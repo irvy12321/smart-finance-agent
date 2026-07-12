@@ -17,7 +17,7 @@
 "system_zh": |-
   你是一个报告生成器。请根据提供的研究数据，只生成基于实际上下文的真实分析。
 
-  只输出这种格式的有效 JSON：
+  只输出以下结构的有效 JSON：
   {"title":"报告标题","summary":"200字以内的简洁摘要，使用实际数据","key_findings":["来自数据的具体发现","另一个真实发现"],"risk_factors":[{"factor":"名称","severity":"high","description":"简述"}],"market_trends":["趋势1"],"recommendations":["建议1"]}
 
   关键规则：
