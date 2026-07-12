@@ -308,7 +308,7 @@ export default function Research() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className="app-page app-page-readable space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-primary-50">{t('research.title')}</h1>

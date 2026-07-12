@@ -38,12 +38,161 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-width: 320px;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
 /* Tabular, monospaced numerals for any numeric/financial value */
 .num,
 .tnum {
   font-family: 'Geist Mono', ui-monospace, 'SF Mono', 'Fira Code', monospace;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
+}
+
+.app-main {
+  min-height: 0;
+}
+
+.app-page {
+  --app-page-max: 1440px;
+  width: min(calc(100% - 2rem), var(--app-page-max));
+  margin-inline: auto;
+  padding-block: 1.5rem;
+}
+
+.app-page-wide {
+  --app-page-max: 1680px;
+}
+
+.app-page-narrow {
+  --app-page-max: 1120px;
+}
+
+.app-page-readable {
+  --app-page-max: 960px;
+}
+
+@media (min-width: 768px) {
+  .app-page {
+    width: min(calc(100% - 3rem), var(--app-page-max));
+    padding-block: 2rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .app-page {
+    width: min(calc(100% - 4rem), var(--app-page-max));
+    padding-block: 2.25rem;
+  }
+}
+
+.app-workspace {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.chat-bubble {
+  max-width: min(78%, 760px);
+  min-height: 3.25rem;
+  padding: 0.875rem 1.125rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-break: anywhere;
+}
+
+.chat-bubble-user {
+  max-width: min(70%, 620px);
+}
+
+.chat-bubble-text {
+  max-width: 100%;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-break: anywhere;
+}
+
+.chat-bubble-text * {
+  max-width: 100%;
+}
+
+.chat-content {
+  width: min(100%, 1080px);
+  margin-inline: auto;
+}
+
+.chat-input {
+  min-height: 3.25rem;
+  padding: 0.85rem 1.125rem;
+  line-height: 1.55;
+}
+
+.rag-section {
+  padding: 1.5rem !important;
+}
+
+.rag-section-title {
+  margin-bottom: 1.25rem !important;
+  line-height: 1.3;
+}
+
+.rag-stat-card {
+  min-height: 8rem;
+  padding: 1.5rem !important;
+}
+
+.rag-dropzone {
+  min-height: 11rem;
+  padding: 2rem !important;
+}
+
+.rag-search-control {
+  min-height: 3rem;
+}
+
+input.rag-search-control {
+  height: 3rem !important;
+  line-height: 3rem !important;
+  padding-top: 0 !important;
+  padding-right: 1rem !important;
+  padding-bottom: 0 !important;
+  padding-left: 2.75rem !important;
+}
+
+.rag-document-row {
+  padding: 1.25rem !important;
+}
+
+@media (min-width: 640px) {
+  .rag-dropzone {
+    padding: 3rem !important;
+  }
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /* Custom scrollbar */
@@ -195,6 +344,162 @@ body {
   outline: none;
   border-color: var(--sfa-primary);
   box-shadow: 0 0 0 3px rgba(91, 157, 255, 0.12);
+}
+
+/* Auth pages: centered, viewport-aware, and independent of app shell layout. */
+.auth-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  background: var(--sfa-bg);
+  padding: 1.5rem 1rem;
+}
+
+.auth-shell {
+  width: min(100%, 24rem);
+  margin-inline: auto;
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.auth-icon {
+  width: 3rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem auto;
+  border: 1px solid var(--sfa-border);
+  border-radius: 8px;
+  background: var(--sfa-bg-card);
+}
+
+.auth-title {
+  color: var(--sfa-text);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.auth-subtitle {
+  color: var(--sfa-text-secondary);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.auth-card {
+  width: 100%;
+  border: 1px solid var(--sfa-border);
+  border-radius: 8px;
+  background: var(--sfa-bg-card);
+  padding: 1.5rem 1.25rem;
+}
+
+.auth-footer {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--sfa-border);
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  .auth-page {
+    padding: 2rem 1.5rem;
+  }
+
+  .auth-shell {
+    width: min(100%, 32rem);
+  }
+
+  .auth-header {
+    margin-bottom: 2rem;
+  }
+
+  .auth-icon {
+    width: 3.5rem;
+    height: 3.5rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .auth-title {
+    font-size: 1.875rem;
+  }
+
+  .auth-subtitle {
+    font-size: 1rem;
+    margin-top: 0.75rem;
+  }
+
+  .auth-card {
+    padding: 1.75rem;
+  }
+
+  .auth-footer {
+    margin-top: 1.75rem;
+    padding-top: 1.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .auth-page {
+    padding: 2.5rem 2rem;
+  }
+
+  .auth-shell {
+    width: min(62vw, 36rem);
+  }
+
+  .auth-header {
+    margin-bottom: 2.5rem;
+  }
+
+  .auth-icon {
+    width: 4rem;
+    height: 4rem;
+  }
+
+  .auth-title {
+    font-size: 2.25rem;
+  }
+
+  .auth-subtitle {
+    font-size: 1.125rem;
+  }
+
+  .auth-card {
+    padding: 2rem 2.25rem;
+  }
+
+  .auth-footer {
+    margin-top: 2rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .auth-shell {
+    width: min(54vw, 42rem);
+  }
+}
+
+@media (min-width: 1536px) {
+  .auth-shell {
+    width: min(46vw, 48rem);
+  }
+
+  .auth-icon {
+    width: 4.5rem;
+    height: 4.5rem;
+  }
+
+  .auth-card {
+    padding: 2.25rem 2.5rem;
+  }
 }
 
 /* Status indicator */

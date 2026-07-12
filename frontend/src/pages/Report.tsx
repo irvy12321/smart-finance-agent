@@ -121,7 +121,7 @@ ${t('research.priority')}: ${report.confidence ? `${(report.confidence * 100).to
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
+    <div className="app-page app-page-readable space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

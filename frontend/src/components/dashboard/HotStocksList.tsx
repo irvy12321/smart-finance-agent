@@ -83,7 +83,7 @@ export default function HotStocksList() {
 
   if (loading) {
     return (
-      <div className="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+      <div className="h-full bg-dark-card border border-dark-border rounded-lg overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2 border-b border-dark-border">
           <span className="text-xs font-semibold text-primary-300 uppercase tracking-wider">{t('stock.popularStocks')}</span>
         </div>
@@ -96,7 +96,7 @@ export default function HotStocksList() {
 
   if (error || stocks.length === 0) {
     return (
-      <div className="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+      <div className="h-full bg-dark-card border border-dark-border rounded-lg overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2 border-b border-dark-border">
           <span className="text-xs font-semibold text-primary-300 uppercase tracking-wider">{t('stock.popularStocks')}</span>
         </div>
@@ -108,7 +108,7 @@ export default function HotStocksList() {
   }
 
   return (
-    <div className="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+    <div className="h-full bg-dark-card border border-dark-border rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b border-dark-border">
         <span className="text-xs font-semibold text-primary-300 uppercase tracking-wider">{t('stock.popularStocks')}</span>
         <button
@@ -118,8 +118,8 @@ export default function HotStocksList() {
           {t('common.viewAll')} <ExternalLink className="w-3 h-3" />
         </button>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="min-w-0 overflow-x-auto">
+        <table className="w-full min-w-[560px]">
           <thead>
             <tr className="text-xs text-primary-500 border-b border-dark-border">
               <th className="text-left px-3 py-2 font-medium">{t('stock.symbol')}</th>

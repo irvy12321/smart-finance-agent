@@ -28,7 +28,7 @@ export default function StatusBar() {
   }, [])
 
   return (
-    <footer className="h-7 bg-dark-sub border-t border-dark-border flex items-center px-4 text-xs text-primary-500">
+    <footer className="h-7 flex-shrink-0 bg-dark-sub border-t border-dark-border flex items-center px-6 text-xs text-primary-500 min-w-0 lg:px-8">
       {/* Connection Status */}
       <div className="flex items-center gap-1.5 mr-4">
         {isConnected ? (
@@ -48,9 +48,9 @@ export default function StatusBar() {
       <div className="w-px h-3 bg-dark-border mr-4" />
 
       {/* Server */}
-      <div className="flex items-center gap-1.5 mr-4">
+      <div className="flex min-w-0 items-center gap-1.5 mr-4">
         <Server className="w-3 h-3" />
-        <span>{import.meta.env.VITE_API_URL || window.location.host}</span>
+        <span className="truncate">{import.meta.env.VITE_API_URL || window.location.host}</span>
       </div>
 
       {/* Spacer */}

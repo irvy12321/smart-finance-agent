@@ -70,9 +70,9 @@ export default function MarketOverview() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {marketSymbols.map((s) => (
-          <div key={s.symbol} className="bg-dark-card border border-dark-border rounded-lg p-3 flex items-center justify-center">
+          <div key={s.symbol} className="min-h-28 bg-dark-card border border-dark-border rounded-lg p-4 flex items-center justify-center">
             <Loader2 className="w-4 h-4 text-primary-500 animate-spin" />
           </div>
         ))}
@@ -82,11 +82,11 @@ export default function MarketOverview() {
 
   if (error || data.length === 0) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {marketSymbols.map((s) => (
-          <div key={s.symbol} className="bg-dark-card border border-dark-border rounded-lg p-3">
-            <div className="text-xs text-primary-400 font-medium">{s.name}</div>
-            <div className="text-xs text-primary-500 mt-1">{t('common.noData')}</div>
+          <div key={s.symbol} className="min-h-28 bg-dark-card border border-dark-border rounded-lg p-4">
+            <div className="text-sm text-primary-400 font-medium">{s.name}</div>
+            <div className="text-sm text-primary-500 mt-2">{t('common.noData')}</div>
           </div>
         ))}
       </div>
@@ -94,27 +94,29 @@ export default function MarketOverview() {
   }
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
       {data.map((index) => {
         const isPositive = index.change >= 0
         return (
-          <div key={index.symbol} className="bg-dark-card border border-dark-border rounded-lg p-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-primary-400 font-medium">{index.name}</span>
-              {isPositive ? (
-                <TrendingUp className="w-3.5 h-3.5 text-green-400" />
-              ) : (
-                <TrendingDown className="w-3.5 h-3.5 text-red-400" />
-              )}
+          <div key={index.symbol} className="min-h-28 bg-dark-card border border-dark-border rounded-lg p-4">
+            <div className="flex items-center justify-between gap-4 mb-2">
+              <span className="text-sm text-primary-400 font-medium">{index.name}</span>
+              <div className="w-8 h-8 rounded-lg bg-dark-bg border border-dark-border flex items-center justify-center">
+                {isPositive ? (
+                  <TrendingUp className="w-4 h-4 text-green-400" />
+                ) : (
+                  <TrendingDown className="w-4 h-4 text-red-400" />
+                )}
+              </div>
             </div>
-            <div className="text-lg font-bold text-primary-50 font-mono">
+            <div className="text-2xl font-bold text-primary-50 font-mono">
               {index.price > 0 ? index.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`text-xs font-mono ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+            <div className="flex items-center gap-2 mt-2">
+              <span className={`text-sm font-mono ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                 {isPositive ? '+' : ''}{index.change.toFixed(2)}
               </span>
-              <span className={`text-xs font-mono px-1 py-0.5 rounded ${
+              <span className={`text-sm font-mono px-2 py-0.5 rounded ${
                 isPositive ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
               }`}>
                 {isPositive ? '+' : ''}{index.changePercent.toFixed(1)}%

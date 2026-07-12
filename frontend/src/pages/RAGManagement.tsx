@@ -15,6 +15,7 @@ import {
   Brain,
 } from 'lucide-react'
 import { ragApi } from '../services/api'
+import { useToast } from '../components/ui/ToastContext'
 
 interface DocumentInfo {
   id: string
@@ -32,7 +33,6 @@ interface RAGStatsResponse {
   vector_store_size?: number
   embedding_mode?: string
 }
-import { useToast } from '../components/ui/ToastContext'
 
 export default function RAGManagement() {
   const { t } = useTranslation()
@@ -181,10 +181,9 @@ export default function RAGManagement() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="app-page app-page-wide space-y-7">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-primary-50">{t('rag.title')}</h1>
           <p className="text-sm text-primary-400 mt-1">{t('rag.subtitle')}</p>
         </div>
@@ -197,61 +196,59 @@ export default function RAGManagement() {
         </button>
       </div>
 
-      {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="card">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
-                <FileText className="w-5 h-5 text-blue-500" />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 2xl:grid-cols-4">
+          <div className="rag-stat-card min-h-32 rounded-lg border border-dark-border bg-dark-card p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center">
+                <FileText className="w-6 h-6 text-blue-500" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-primary-400 uppercase">{t('rag.totalDocuments')}</p>
-                <p className="text-2xl font-bold text-primary-50">{stats.total_documents}</p>
+                <p className="text-sm font-semibold text-primary-400 uppercase">{t('rag.totalDocuments')}</p>
+                <p className="text-3xl font-bold text-primary-50 mt-1">{stats.total_documents}</p>
               </div>
             </div>
           </div>
-          <div className="card">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-dark-hover rounded-lg flex items-center justify-center">
-                <Database className="w-5 h-5 text-primary-300" />
+          <div className="rag-stat-card min-h-32 rounded-lg border border-dark-border bg-dark-card p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-dark-hover rounded-lg flex items-center justify-center">
+                <Database className="w-6 h-6 text-primary-300" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-primary-400 uppercase">{t('rag.totalChunks')}</p>
-                <p className="text-2xl font-bold text-primary-50">{stats.total_chunks}</p>
+                <p className="text-sm font-semibold text-primary-400 uppercase">{t('rag.totalChunks')}</p>
+                <p className="text-3xl font-bold text-primary-50 mt-1">{stats.total_chunks}</p>
               </div>
             </div>
           </div>
-          <div className="card">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
-                <HardDrive className="w-5 h-5 text-green-500" />
+          <div className="rag-stat-card min-h-32 rounded-lg border border-dark-border bg-dark-card p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center">
+                <HardDrive className="w-6 h-6 text-green-500" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-primary-400 uppercase">{t('rag.vectorStore')}</p>
-                <p className="text-2xl font-bold text-primary-50">{stats.vector_store_size}</p>
+                <p className="text-sm font-semibold text-primary-400 uppercase">{t('rag.vectorStore')}</p>
+                <p className="text-3xl font-bold text-primary-50 mt-1">{stats.vector_store_size}</p>
               </div>
             </div>
           </div>
-          <div className="card">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-yellow-500/10 rounded-lg flex items-center justify-center">
-                <Brain className="w-5 h-5 text-yellow-500" />
+          <div className="rag-stat-card min-h-32 rounded-lg border border-dark-border bg-dark-card p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-yellow-500/10 rounded-lg flex items-center justify-center">
+                <Brain className="w-6 h-6 text-yellow-500" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-primary-400 uppercase">{t('rag.embeddingMode')}</p>
-                <p className="text-lg font-bold text-primary-50 capitalize">{stats.embedding_mode}</p>
+                <p className="text-sm font-semibold text-primary-400 uppercase">{t('rag.embeddingMode')}</p>
+                <p className="text-2xl font-bold text-primary-50 capitalize mt-1">{stats.embedding_mode}</p>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Upload Area */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-primary-50 mb-4">{t('rag.uploadDocument')}</h2>
+      <div className="rag-section rounded-lg border border-dark-border bg-dark-card p-6">
+        <h2 className="rag-section-title text-xl font-semibold text-primary-50 mb-5">{t('rag.uploadDocument')}</h2>
         <div
-          className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+          className={`rag-dropzone relative min-h-[11rem] border-2 border-dashed rounded-xl p-8 text-center transition-colors sm:p-12 ${
             dragActive
               ? 'border-primary-500 bg-primary-500/10'
               : 'border-dark-border hover:border-primary-500/50'
@@ -263,21 +260,21 @@ export default function RAGManagement() {
         >
           {uploading ? (
             <div className="flex flex-col items-center">
-              <Loader2 className="w-12 h-12 text-primary-500 animate-spin mb-4" />
-              <p className="text-primary-400">{t('rag.uploading')}</p>
+              <Loader2 className="w-14 h-14 text-primary-500 animate-spin mb-5" />
+              <p className="text-base text-primary-400">{t('rag.uploading')}</p>
             </div>
           ) : (
             <div className="flex flex-col items-center">
-              <Upload className="w-12 h-12 text-primary-400 mb-4" />
-              <p className="text-primary-200 mb-2">{t('rag.dragDrop')}</p>
-              <p className="text-sm text-primary-400 mb-4">{t('rag.supportedTypes')}</p>
-              <label className="flex items-center gap-2 px-5 py-2 bg-accent hover:bg-[#74acff] text-[#06121f] font-medium rounded-lg transition-colors duration-150 cursor-pointer">
+              <Upload className="w-14 h-14 text-primary-400 mb-5" />
+              <p className="text-base text-primary-200 mb-2">{t('rag.dragDrop')}</p>
+              <p className="text-sm text-primary-400 mb-5">{t('rag.supportedTypes')}</p>
+              <label className="flex items-center gap-2 px-6 py-2.5 bg-accent hover:bg-[#74acff] text-[#06121f] font-medium rounded-lg transition-colors duration-150 cursor-pointer">
                 <Upload className="w-4 h-4" />
                 <span className="font-medium">{t('rag.browseFiles')}</span>
                 <input
                   type="file"
                   className="hidden"
-                  accept=".txt,.md,.json,.csv"
+                  accept=".txt,.md,.json,.csv,.pdf,.docx"
                   onChange={(e) => handleFileUpload(e.target.files)}
                 />
               </label>
@@ -286,10 +283,9 @@ export default function RAGManagement() {
         </div>
       </div>
 
-      {/* Search Section */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-primary-50 mb-4">{t('rag.searchDocuments')}</h2>
-        <div className="flex gap-3">
+      <div className="rag-section rounded-lg border border-dark-border bg-dark-card p-6">
+        <h2 className="rag-section-title text-xl font-semibold text-primary-50 mb-5">{t('rag.searchDocuments')}</h2>
+        <div className="flex flex-col gap-4 sm:flex-row">
           <div className="flex-1 relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-primary-400 pointer-events-none" />
             <input
@@ -298,13 +294,13 @@ export default function RAGManagement() {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               placeholder={t('rag.searchPlaceholder')}
-              className="w-full py-3 pl-11 pr-4 bg-dark-card border border-dark-border rounded-lg text-primary-200 placeholder-primary-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
+              className="rag-search-control h-12 w-full pl-11 pr-4 bg-dark-card border border-dark-border rounded-lg text-primary-200 placeholder-primary-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
             />
           </div>
           <button
             onClick={handleSearch}
             disabled={searching || !searchQuery.trim()}
-            className="flex items-center gap-2 px-5 py-2 bg-accent hover:bg-[#74acff] text-[#06121f] font-medium rounded-lg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="rag-search-control h-12 flex items-center justify-center gap-2 px-6 bg-accent hover:bg-[#74acff] text-[#06121f] font-medium rounded-lg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {searching ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -315,15 +311,14 @@ export default function RAGManagement() {
           </button>
         </div>
 
-        {/* Search Results */}
         {searchResults.length > 0 && (
-          <div className="mt-4 space-y-3">
+          <div className="mt-5 space-y-4">
             <h3 className="text-sm font-semibold text-primary-400">
               {t('rag.searchResults')} ({searchResults.length})
             </h3>
             {searchResults.map((result, i) => (
-              <div key={i} className="p-3 bg-dark-bg rounded-lg border border-dark-border">
-                <div className="flex items-center justify-between mb-2">
+              <div key={i} className="p-4 bg-dark-bg rounded-lg border border-dark-border">
+                <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-semibold text-primary-400">
                     {t('rag.relevance')}: {(result.score * 100).toFixed(1)}%
                   </span>
@@ -333,17 +328,16 @@ export default function RAGManagement() {
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-primary-200">{result.text}</p>
+                <p className="text-sm text-primary-200 leading-relaxed">{result.text}</p>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Documents List */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-primary-50">{t('rag.documents')}</h2>
+      <div className="rag-section rounded-lg border border-dark-border bg-dark-card p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="rag-section-title text-xl font-semibold text-primary-50 mb-0">{t('rag.documents')}</h2>
           <span className="text-sm text-primary-400">{documents.length} {t('rag.totalDocuments')}</span>
         </div>
 
@@ -358,30 +352,30 @@ export default function RAGManagement() {
             <p className="text-sm text-primary-500 mt-1">{t('rag.uploadToStart')}</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {documents.map((doc) => (
               <div
                 key={doc.id}
-                className="flex items-center justify-between p-4 bg-dark-bg rounded-lg border border-dark-border hover:border-primary-500/30 transition-colors"
+                className="rag-document-row flex flex-col gap-4 p-5 bg-dark-bg rounded-lg border border-dark-border hover:border-primary-500/30 transition-colors sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-primary-500/10 rounded-lg flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-primary-500" />
+                <div className="flex min-w-0 items-center gap-5">
+                  <div className="w-12 h-12 flex-shrink-0 bg-primary-500/10 rounded-lg flex items-center justify-center">
+                    <FileText className="w-6 h-6 text-primary-500" />
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-primary-200">{doc.filename}</p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-primary-400">{formatFileSize(doc.file_size || 0)}</span>
-                      <span className="text-xs text-primary-400">•</span>
-                      <span className="text-xs text-primary-400">{doc.chunk_count || doc.chunks} {t('rag.chunks')}</span>
-                      <span className="text-xs text-primary-400">•</span>
-                      <span className="text-xs text-primary-400">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-medium text-primary-200">{doc.filename}</p>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                      <span className="text-sm text-primary-400">{formatFileSize(doc.file_size || 0)}</span>
+                      <span className="h-1 w-1 rounded-full bg-primary-500/60" />
+                      <span className="text-sm text-primary-400">{doc.chunk_count || doc.chunks} {t('rag.chunks')}</span>
+                      <span className="h-1 w-1 rounded-full bg-primary-500/60" />
+                      <span className="text-sm text-primary-400">
                         {new Date(doc.created_at).toLocaleDateString()}
                       </span>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-shrink-0 items-center gap-3 self-end sm:self-auto">
                   {getStatusIcon(doc.status)}
                   {getStatusBadge(doc.status)}
                   <button

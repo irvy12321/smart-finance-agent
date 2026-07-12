@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { LogIn, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react'
+import AuthLayout from '../components/auth/AuthLayout'
 
 export default function Login() {
   const { t } = useTranslation()
@@ -20,6 +21,7 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
     if (!username.trim() || !password.trim()) {
       setError(t('auth.fillAllFields'))
       return
@@ -40,102 +42,86 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-dark-bg px-4">
-      <div className="w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-lg bg-dark-card border border-dark-border flex items-center justify-center mx-auto mb-4">
-            <LogIn className="w-6 h-6 text-accent" />
+    <AuthLayout
+      icon={<LogIn className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 2xl:w-9 2xl:h-9 text-accent" />}
+      title={t('auth.welcomeBack')}
+      subtitle={t('auth.signInTo')}
+      footer={
+        <p className="text-sm sm:text-base text-primary-400">
+          {t('auth.noAccount')}{' '}
+          <Link to="/register" className="text-primary-500 hover:text-primary-400 font-medium">
+            {t('auth.register')}
+          </Link>
+        </p>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5 lg:space-y-6">
+        {error && (
+          <div className="p-3 sm:p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2.5 sm:gap-3">
+            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm sm:text-base text-red-400">{error}</p>
           </div>
-          <h1 className="text-2xl font-bold text-primary-50">{t('auth.welcomeBack')}</h1>
-          <p className="text-sm text-primary-400 mt-2">{t('auth.signInTo')}</p>
+        )}
+
+        <div>
+          <label htmlFor="username" className="block text-sm sm:text-base font-medium text-primary-300 mb-1.5 sm:mb-2">
+            {t('auth.username')}
+          </label>
+          <input
+            id="username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder={t('auth.enterUsername')}
+            className="input h-11 sm:h-12 lg:h-14 text-sm sm:text-base sm:px-4 w-full"
+            disabled={loading}
+            autoComplete="username"
+          />
         </div>
 
-        {/* Form */}
-        <div className="card">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Error */}
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                <p className="text-sm text-red-400">{error}</p>
-              </div>
-            )}
-
-            {/* Username */}
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-primary-300 mb-1.5">
-                {t('auth.username')}
-              </label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder={t('auth.enterUsername')}
-                className="input w-full"
-                disabled={loading}
-                autoComplete="username"
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-primary-300 mb-1.5">
-                {t('auth.password')}
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={t('auth.enterPassword')}
-                  className="input w-full pr-10"
-                  disabled={loading}
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-400 hover:text-primary-300"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Submit */}
+        <div>
+          <label htmlFor="password" className="block text-sm sm:text-base font-medium text-primary-300 mb-1.5 sm:mb-2">
+            {t('auth.password')}
+          </label>
+          <div className="relative">
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={t('auth.enterPassword')}
+              className="input h-11 sm:h-12 lg:h-14 text-sm sm:text-base sm:px-4 w-full pr-11 sm:pr-12"
+              disabled={loading}
+              autoComplete="current-password"
+            />
             <button
-              type="submit"
-              disabled={loading || !username.trim() || !password.trim()}
-              className="w-full flex items-center justify-center gap-2 px-6 py-2.5 bg-accent hover:bg-[#74acff] disabled:bg-accent/40 disabled:cursor-not-allowed text-[#06121f] font-semibold rounded-lg transition-colors duration-150"
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-primary-400 hover:text-primary-300"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  {t('auth.signingIn')}
-                </>
-              ) : (
-                <>
-                  <LogIn className="w-5 h-5" />
-                  {t('auth.login')}
-                </>
-              )}
+              {showPassword ? <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Eye className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
-          </form>
-
-          {/* Footer */}
-          <div className="mt-6 pt-4 border-t border-dark-border text-center">
-            <p className="text-sm text-primary-400">
-              {t('auth.noAccount')}{' '}
-              <Link to="/register" className="text-primary-500 hover:text-primary-400 font-medium">
-                {t('auth.register')}
-              </Link>
-            </p>
           </div>
         </div>
-      </div>
-    </div>
+
+        <button
+          type="submit"
+          disabled={loading || !username.trim() || !password.trim()}
+          className="w-full h-11 sm:h-12 lg:h-14 flex items-center justify-center gap-2 px-5 sm:px-6 bg-accent hover:bg-[#74acff] disabled:bg-accent/40 disabled:cursor-not-allowed text-[#06121f] text-sm sm:text-base font-semibold rounded-lg transition-colors duration-150"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+              {t('auth.signingIn')}
+            </>
+          ) : (
+            <>
+              <LogIn className="w-4 h-4 sm:w-5 sm:h-5" />
+              {t('auth.login')}
+            </>
+          )}
+        </button>
+      </form>
+    </AuthLayout>
   )
 }
