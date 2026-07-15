@@ -4,12 +4,30 @@ Fallback Manager - 降级链管理器
 所有失败必须记录 trace_id + log
 """
 
+import asyncio
+import os
+import time
 from typing import Any
 
+from app.monitoring.prometheus import (
+    tool_call_duration_seconds,
+    tool_calls_total,
+    tool_circuit_breaker_state,
+    tool_errors_total,
+)
 from app.tools.base_tool import ToolResult
+from app.utils.circuit_breaker import BreakerState, CircuitBreakerManager
+from app.utils.exceptions import CircuitBreakerOpenError
 from app.utils.logger import get_logger
 
 logger = get_logger("fallback_manager")
+
+DEFAULT_FALLBACK_STEP_TIMEOUT = 30.0
+_BREAKER_STATE_VALUES = {
+    BreakerState.CLOSED: 0,
+    BreakerState.OPEN: 1,
+    BreakerState.HALF_OPEN: 2,
+}
 
 
 class FallbackManager:
@@ -25,16 +43,38 @@ class FallbackManager:
     report   → plain_text_summary
     """
 
-    def __init__(self, tool_registry=None, llm_client=None, router=None):
+    def __init__(
+        self,
+        tool_registry=None,
+        llm_client=None,
+        router=None,
+        circuit_breaker_mgr=None,
+        step_timeout: float | None = None,
+        step_timeouts: dict[str, float] | None = None,
+    ):
         self.registry = tool_registry
         self.llm = llm_client
         self.router = router
+        self.circuit_breaker_mgr = (
+            circuit_breaker_mgr
+            if circuit_breaker_mgr is not None
+            else CircuitBreakerManager()
+        )
+        self.step_timeout = (
+            step_timeout
+            if step_timeout is not None
+            else float(
+                os.getenv("FALLBACK_STEP_TIMEOUT", str(DEFAULT_FALLBACK_STEP_TIMEOUT))
+            )
+        )
+        self.step_timeouts = step_timeouts or {}
 
     async def execute_with_fallback(
         self,
         tool_name: str,
         params: dict[str, Any],
         trace_id: str = "",
+        skip_tools: set[str] | None = None,
     ) -> tuple[ToolResult, str]:
         """
         执行工具，失败时沿降级链尝试
@@ -44,22 +84,85 @@ class FallbackManager:
         """
         chain = self._get_fallback_chain(tool_name)
         errors = []
+        skipped = skip_tools or set()
 
         for step_tool, step_fn in chain:
+            if step_tool in skipped:
+                logger.info(
+                    f"[trace:{trace_id}] Fallback step '{step_tool}' skipped "
+                    "because it was already attempted or short-circuited"
+                )
+                continue
+
+            breaker = None
+            if step_tool != "static":
+                breaker = self.circuit_breaker_mgr.get_breaker(step_tool)
+                try:
+                    breaker.check_or_raise()
+                except CircuitBreakerOpenError as exc:
+                    self._update_breaker_metric(step_tool, breaker)
+                    errors.append(f"{step_tool}: {exc}")
+                    logger.warning(
+                        f"[trace:{trace_id}] Fallback step '{step_tool}' skipped: {exc}"
+                    )
+                    continue
+
+            timeout = self.step_timeouts.get(step_tool, self.step_timeout)
+            step_start = time.perf_counter()
+            tool_calls_total.labels(tool_name=step_tool).inc()
             try:
-                result = await step_fn(params)
+                logger.info(
+                    f"[trace:{trace_id}] Fallback step '{step_tool}' starting "
+                    f"with timeout={timeout:.3g}s"
+                )
+                result = await asyncio.wait_for(step_fn(params), timeout=timeout)
                 if result.success:
+                    if breaker:
+                        breaker.record_success()
+                        self._update_breaker_metric(step_tool, breaker)
                     if step_tool != tool_name:
                         logger.info(
                             f"[trace:{trace_id}] Fallback: {tool_name} -> {step_tool} succeeded"
                         )
                     return result, step_tool
                 else:
+                    tool_errors_total.labels(
+                        tool_name=step_tool, error_type="ToolResultFailure"
+                    ).inc()
+                    if breaker:
+                        breaker.record_failure()
+                        self._update_breaker_metric(step_tool, breaker)
                     errors.append(f"{step_tool}: {result.error}")
+                    logger.warning(
+                        f"[trace:{trace_id}] Fallback step '{step_tool}' returned failure: "
+                        f"{result.error}"
+                    )
+            except (TimeoutError, asyncio.TimeoutError):
+                tool_errors_total.labels(
+                    tool_name=step_tool, error_type="TimeoutError"
+                ).inc()
+                if breaker:
+                    breaker.record_failure()
+                    self._update_breaker_metric(step_tool, breaker)
+                error = f"timed out after {timeout:.3g}s"
+                errors.append(f"{step_tool}: {error}")
+                logger.warning(
+                    f"[trace:{trace_id}] Fallback step '{step_tool}' {error}"
+                )
             except Exception as e:
+                tool_errors_total.labels(
+                    tool_name=step_tool, error_type=type(e).__name__
+                ).inc()
+                if breaker:
+                    breaker.record_failure()
+                    self._update_breaker_metric(step_tool, breaker)
                 errors.append(f"{step_tool}: {e}")
                 logger.warning(
                     f"[trace:{trace_id}] Fallback step '{step_tool}' failed: {e}"
+                )
+            finally:
+                tool_call_duration_seconds.labels(tool_name=step_tool).observe(
+                    time.perf_counter() - step_start
                 )
 
         logger.error(
@@ -67,9 +170,18 @@ class FallbackManager:
         )
         return ToolResult(
             success=False,
-            error=f"All fallbacks exhausted for '{tool_name}'",
+            error=(
+                f"All fallbacks exhausted for '{tool_name}'"
+                + (f": {'; '.join(errors)}" if errors else "")
+            ),
             tool_name=tool_name,
         ), tool_name
+
+    @staticmethod
+    def _update_breaker_metric(tool_name: str, breaker) -> None:
+        value = _BREAKER_STATE_VALUES.get(breaker.state)
+        if value is not None:
+            tool_circuit_breaker_state.labels(tool_name=tool_name).set(value)
 
     def _get_fallback_chain(self, tool_name: str) -> list[tuple[str, Any]]:
         """获取工具的降级链"""

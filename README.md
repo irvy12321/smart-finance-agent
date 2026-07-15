@@ -478,6 +478,10 @@ smart-finance-agent/
 
 编排层有三套真实的容错原语：**降级链**（`FallbackManager`：crawler → news_search → rag_retrieve → 静态兜底）、**熔断器**（`CircuitBreaker`：CLOSED/OPEN/HALF_OPEN 三态）、**死锁恢复**（`ExecutorAgent._try_resolve_deadlock`：上游失败后解锁仅被失败依赖阻塞的下游任务）。
 
+`ExecutorAgent` 进入降级链时会把已经失败、超时或被 OPEN 熔断器短路的原工具加入 `skip_tools`，因此真实执行顺序不会隐式重试原工具：`crawler → news_search → rag_retrieve → static` 中，crawler 已失败后从 news_search 开始；其他三条链同理。每个真实备用步骤先检查自己独立的熔断器，再以单步超时执行，成功或失败只更新自己的熔断状态；static 步骤不使用熔断器。主工具超时由 `TOOL_EXEC_TIMEOUT` 配置，备用步骤超时由 `FALLBACK_STEP_TIMEOUT` 配置，默认均为 30 秒；代码调用方还可通过 `step_timeouts` 为单个备用步骤覆盖超时。
+
+Prometheus 的 `tool_calls_total`、`tool_call_duration_seconds` 和 `tool_errors_total` 按实际调用的主工具或备用工具名记录，`tool_circuit_breaker_state` 按工具分别暴露 CLOSED=0、OPEN=1、HALF_OPEN=2。熔断跳过不会增加调用数，超时与异常仍会记录耗时和错误类型。
+
 为了让这些原语「能用数据说话」，`app/core/reliability.py` 提供了一个**确定性故障注入** harness：用 seeded RNG 让工具按指定概率失败，全程无网络/LLM 调用，结果可复现、可进 CI 断言。运行评测：
 
 ```bash
@@ -517,6 +521,8 @@ PYTHONPATH=. python scripts/reliability_eval.py   # 打印下列曲线并导出 
 
 解读：熔断器在 5 次失败后打开，余下 95 次调用被**直接短路**，避免对已宕机工具发起无谓重试（节省 95% 的 doomed 调用）。
 
+生产默认仍保持连续失败阈值 5、恢复等待 60 秒、HALF_OPEN 单次探测 1 次；备用工具使用相同状态机，但状态按工具名隔离。
+
 **死锁恢复**（注入失败的上游依赖，scenarios=50, seed=42）：
 
 | scenarios | recovered | recovery_rate |
@@ -529,49 +535,54 @@ PYTHONPATH=. python scripts/reliability_eval.py   # 打印下列曲线并导出 
 
 ## RAG 检索质量评测 (RAG Retrieval Evaluation)
 
-检索层提供三种 embedder（见 `backend/app/rag/embed.py`）：
+检索层明确区分词法表示与真实语义嵌入（见 `backend/app/rag/embed.py`）：
 
-| 模式 | 类 | 类型 | 说明 |
-|------|-----|------|------|
-| `dev` | `HashEmbedder` | 词法 | MD5 伪向量，无语义，仅用于本地快测 |
-| `prod` | `BM25Embedder` | 词法 | BM25 / TF-IDF（词 + 字符 n-gram），靠 token 重叠 |
-| `semantic` | `SemanticEmbedder` | **语义** | 真实稠密向量（`sentence-transformers`，或免 torch 的 `model2vec` 静态向量），按语义匹配 |
+| 模式 | 实现 | 类型 | 用途 |
+|------|------|------|------|
+| `dev` | `HashEmbedder` | 伪向量/词法 | 快速测试，不表达语义 |
+| `prod` | `BM25Embedder` | 词法 | 本地和 CI 默认，不下载模型 |
+| `semantic` | [`BAAI/bge-small-zh-v1.5`](https://huggingface.co/BAAI/bge-small-zh-v1.5) | 真实语义 | 中文金融问答生产检索 |
 
-`SemanticEmbedder` 是**可选依赖**：未安装任一后端时构造会抛出带安装提示的 `ImportError`，词法模式不受影响、CI 也不依赖它。
+生产模型固定到 revision `7999e1d3359715c523056ef9478215996d62a620`：中文模型、512 维、23,953,920 参数，本机缓存文件约 96.4 MB。查询编码会加官方建议的中文检索指令，文档编码不加。FAISS 的 `config.json` 保存模型、后端、revision、维度、归一化和查询指令组成的 SHA-256 指纹；旧索引或不匹配索引绝不会直接加载，可按 `index_mismatch_policy` 从已持久化 chunk 文本安全重建，或设为 `error` 严格拒绝。
 
-### 评测集与指标
+模型选择也做了同体量实测：`bge-small-zh-v1.0` 同为 512 维、约 96.4 MB，在本评估集的 Recall@5/MRR 为 `0.9091/0.8166`，中文改写 MRR 为 `0.8917`；v1.5 分别为 `0.9545/0.8795` 和 `0.9583`，因此选择 v1.5。当前环境无法联网下载新的多语言候选，所以未对未运行的模型填写推测数字；已有 `model2vec/potion` 默认模型也不是中文生产替代品。
 
-- 评测语料：`backend/app/rag/eval_data/`（`corpus.json` + `queries.json`），50 篇金融知识文档 + 32 条带 gold 标注的查询；查询按 `lexical`（与文档共享词汇）/`semantic`（改写、词汇重叠低）分类，便于公平对比词法 vs 语义检索。
-- 指标实现：`backend/app/rag/eval.py` —— `Recall@k`、`Precision@k`、`MRR`、`nDCG@k`（macro 平均）。
+### 启用方式
 
-### 运行评测
+本地和普通 CI 保持 `prod` 词法模式，因此不会安装 PyTorch 或下载模型。要在本地显式运行语义模式：
 
-```bash
+```powershell
 cd backend
-# 仅词法（无需额外依赖）
-python scripts/rag_eval.py --no-semantic
-# 含语义后端（推荐免 torch 的 model2vec）
-pip install model2vec
-python scripts/rag_eval.py
+python -m pip install -r requirements-semantic.txt
+$env:RAG_EMBEDDING_MODE = "semantic"
+$env:RAG_EMBEDDING_LOCAL_FILES_ONLY = "true"
+$env:RAG_SEMANTIC_FAILURE_POLICY = "error"
 ```
 
-### 实测结果（50 文档 / 32 查询）
+生产 `backend/Dockerfile` 默认安装语义依赖并在构建期预取固定 revision；运行期设置 `HF_HUB_OFFLINE=1`、`local_files_only=true` 和严格失败策略。模型或依赖缺失会使初始化明确失败。只有显式设置 `RAG_SEMANTIC_FAILURE_POLICY=lexical_fallback` 才会降级 BM25，降级原因会出现在日志、`GET /api/rag/stats` 和 `RAGTool` 的 `retrieval_status` 中。
+
+### 真实评测
+
+评测集为 62 篇金融文档、44 条 gold 查询，其中新增 12 条中文同义/口语改写；指标均为确定性 Python 计算。复现命令：
+
+```powershell
+cd backend
+$env:HF_HUB_OFFLINE = "1"
+$env:TRANSFORMERS_OFFLINE = "1"
+python scripts/rag_eval.py --local-files-only
+```
+
+2026-07-15 在 CPU 上的实际结果：
 
 | Embedder | R@1 | R@3 | R@5 | P@5 | MRR | nDCG@5 |
 |----------|-----|-----|-----|-----|-----|--------|
-| hash (dev, 词法) | 0.250 | 0.500 | 0.562 | 0.113 | 0.391 | 0.420 |
-| bm25 (prod, 词法) | 0.750 | 0.906 | 0.938 | 0.188 | 0.834 | 0.854 |
-| semantic (model2vec) | **0.844** | **1.000** | **1.000** | **0.200** | **0.917** | **0.938** |
+| hash (dev, 伪向量) | 0.1818 | 0.3409 | 0.3864 | 0.0773 | 0.2808 | 0.2938 |
+| BM25 (prod, 词法) | 0.5455 | 0.6591 | 0.6818 | 0.1364 | 0.6074 | 0.6210 |
+| BGE small zh v1.5 (语义) | **0.8182** | **0.9318** | **0.9545** | **0.1909** | **0.8795** | **0.8987** |
 
-按查询类型拆分（Recall@5 / MRR）——语义检索在「改写型」查询上的优势最明显：
+中文改写子集上，BM25 的 Recall@5/MRR 为 `0/0`，BGE 为 `1.0000/0.9583`。这反映当前 BM25 tokenizer 不处理中文词元，而不是把字符匹配称为语义能力。完整原始结果写入 `backend/data/rag_eval/results.json`（gitignored）。
 
-| Embedder | lexical 查询 | semantic 查询 |
-|----------|-------------|---------------|
-| hash | 0.667 / 0.481 | 0.522 / 0.356 |
-| bm25 | 0.889 / 0.849 | 0.957 / 0.829 |
-| semantic | 1.000 / 0.944 | 1.000 / 0.906 |
-
-结论：BM25 相对 hash 基线在 Recall@5 上 +0.376、MRR +0.443；语义向量再把改写型查询的 Recall@5 从 0.957 提到 1.000，验证了「词法 → 语义」升级路径的实际收益。指标计算正确性与「BM25 > hash」基线由 `backend/tests/test_rag_eval.py` 守护（确定性、不依赖 torch，纳入 CI）。
+本机 CPU 部署测量：冷进程导入依赖并加载模型 `6.661s`，加载后 RSS `428.8 MB`，完成 32 条批量编码后 RSS `503.9 MB`；单独的热模型构造为 `0.414s`。生产当前配置有两个 Uvicorn worker，最坏需要按约 1 GB 模型进程内存预算评估，且 `sentence-transformers`/CPU PyTorch 会显著增加镜像体积。
 
 ### 检索管线增强（查询改写 / 精排 / 语义切块）
 

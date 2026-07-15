@@ -1,18 +1,31 @@
 # RAG 基础配置
 chunk_size: 500
 chunk_overlap: 50
+# Opt-in: active only with embedding.mode "semantic" and a loaded neural backend.
+# Hash/BM25 modes explicitly fall back to fixed chunking.
+semantic_chunking_enabled: false
+semantic_chunking_threshold: 0.5
+semantic_chunking_min_chunk_size: 100
 embedding_dim: 384
+index_mismatch_policy: "rebuild"
 top_k: 5
 
 # Embedding 配置
 # mode: "dev"      = HashEmbedder (MD5 哈希伪向量, 快速, 无语义)
 #       "prod"     = BM25Embedder (BM25/TF-IDF 词法检索, 非神经语义嵌入)
-#       "semantic" = SemanticEmbedder (真实语义向量, sentence-transformers / 免-torch model2vec, 可选依赖)
+#       "semantic" = SemanticEmbedder (真实神经语义向量, sentence-transformers)
 # dev/prod 为词法模式(token 重叠)，semantic 才是语义匹配; 三种模式的 Recall@k/MRR 对比见 README「RAG 检索质量评测」。
-# model_name 在 BM25 模式下未被使用; dim 必须与实现一致 (BM25Embedder 固定输出 384 维)。
+# model_name/dim 在 BM25 模式下未被使用；生产由 Docker 环境变量启用下列 BGE 模型。
 embedding:
   mode: "prod"
-  model_name: "bm25-lexical"
-  dim: 384
+  # Local/CI default stays lexical and never downloads a model. Production
+  # overrides these values in Docker with the pinned semantic model below.
+  model_name: "BAAI/bge-small-zh-v1.5"
+  model_revision: "7999e1d3359715c523056ef9478215996d62a620"
+  backend: "sentence_transformers"
+  query_instruction: "为这个句子生成表示以用于检索相关文章："
+  local_files_only: false
+  failure_policy: "error"
+  dim: 512
   batch_size: 32
   device: "cpu"

@@ -18,7 +18,7 @@ def get_retriever() -> Retriever:
 class RAGTool(BaseTool):
     name = "rag_retrieve"
     description = (
-        "Retrieves relevant text chunks from the knowledge base using semantic search"
+        "Retrieves relevant text chunks using the configured lexical or semantic index"
     )
 
     def __init__(self, retriever: Retriever | None = None):
@@ -36,6 +36,13 @@ class RAGTool(BaseTool):
             )
 
         try:
+            embedder = getattr(self.retriever, "embedder", None)
+            status_getter = getattr(embedder, "get_runtime_status", None)
+            retrieval_status = (
+                status_getter()
+                if status_getter is not None
+                else {"semantic_enabled": False, "status": "unavailable"}
+            )
             results = self.retriever.retrieve(
                 query,
                 top_k=top_k,
@@ -53,11 +60,14 @@ class RAGTool(BaseTool):
                     data={
                         "results": [],
                         "message": message,
+                        "retrieval_status": retrieval_status,
                     },
                     tool_name=self.name,
                 )
             return ToolResult(
-                success=True, data={"results": results}, tool_name=self.name
+                success=True,
+                data={"results": results, "retrieval_status": retrieval_status},
+                tool_name=self.name,
             )
         except Exception as e:
             safe_error = redact_sensitive_text(e)

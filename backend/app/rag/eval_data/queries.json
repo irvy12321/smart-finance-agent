@@ -32,6 +32,18 @@
     {"query": "order that automatically sells when price falls to a set level", "relevant": ["stop_loss"], "type": "lexical"},
     {"query": "when short term bond rates are higher than long term rates", "relevant": ["yield_curve"], "type": "semantic"},
     {"query": "earning returns on top of previously accumulated returns", "relevant": ["compound_interest"], "type": "semantic"},
-    {"query": "restoring a portfolio to its target mix of stocks and bonds", "relevant": ["rebalancing"], "type": "semantic"}
+    {"query": "restoring a portfolio to its target mix of stocks and bonds", "relevant": ["rebalancing"], "type": "semantic"},
+    {"query": "股价相对公司每股赚到的钱到底贵不贵", "relevant": ["zh_pe_ratio"], "type": "zh_paraphrase"},
+    {"query": "市场给企业账面家底打了多少倍的价格", "relevant": ["zh_pb_ratio"], "type": "zh_paraphrase"},
+    {"query": "股东投进去的钱被管理层拿来赚钱的效率", "relevant": ["zh_roe"], "type": "zh_paraphrase"},
+    {"query": "公司经营收到的现金扣掉买厂房设备以后还剩多少", "relevant": ["zh_free_cash_flow"], "type": "zh_paraphrase"},
+    {"query": "企业借来的钱相对于股东本钱有多高", "relevant": ["zh_debt_to_equity"], "type": "zh_paraphrase"},
+    {"query": "持有一只股票每年拿到的现金分红占买入价格多少", "relevant": ["zh_dividend_yield"], "type": "zh_paraphrase"},
+    {"query": "哪个动量信号能判断股价是不是涨过头或者跌过头", "relevant": ["zh_rsi"], "type": "zh_paraphrase"},
+    {"query": "这只股票相对大盘是不是更容易大涨大跌", "relevant": ["zh_beta"], "type": "zh_paraphrase"},
+    {"query": "在某个把握程度下组合最多可能亏掉多少", "relevant": ["zh_var"], "type": "zh_paraphrase"},
+    {"query": "不要把全部资金押在同一种资产上怎样降低组合风险", "relevant": ["zh_diversification"], "type": "zh_paraphrase"},
+    {"query": "不管市场涨跌每个月都拿固定金额买入", "relevant": ["zh_dollar_cost_averaging"], "type": "zh_paraphrase"},
+    {"query": "短期国债利率反而高过长期利率意味着什么", "relevant": ["zh_yield_curve"], "type": "zh_paraphrase"}
   ]
 }

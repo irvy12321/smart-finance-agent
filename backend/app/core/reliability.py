@@ -76,6 +76,22 @@ class _DictRegistry:
         return self._tools.get(name)
 
 
+class _IsolatedBreakerRegistry:
+    """Per-trial breaker registry that keeps fallback-curve tests independent."""
+
+    def __init__(self, failure_threshold: int):
+        self.failure_threshold = failure_threshold
+        self._breakers: dict[str, CircuitBreaker] = {}
+
+    def get_breaker(self, name: str) -> CircuitBreaker:
+        if name not in self._breakers:
+            self._breakers[name] = CircuitBreaker(
+                name=name,
+                failure_threshold=self.failure_threshold,
+            )
+        return self._breakers[name]
+
+
 @dataclass
 class DegradationStats:
     """Outcome distribution of a fallback-chain trial."""
@@ -132,6 +148,7 @@ async def run_degradation_trial(
     alt_rate = failure_rate if alt_failure_rate is None else alt_failure_rate
     rng = random.Random(seed)
     stats = DegradationStats(failure_rate=failure_rate, trials=trials)
+    breaker_mgr = _IsolatedBreakerRegistry(failure_threshold=trials + 1)
 
     for _ in range(trials):
         healthy_alt = alt_failure_rate is None
@@ -145,7 +162,9 @@ async def run_degradation_trial(
             ),
         }
 
-        mgr = FallbackManager(tool_registry=_DictRegistry(tools))
+        mgr = FallbackManager(
+            tool_registry=_DictRegistry(tools), circuit_breaker_mgr=breaker_mgr
+        )
         result, used = await mgr.execute_with_fallback(
             primary, {"query": "q", "url": "u"}
         )
