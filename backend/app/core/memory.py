@@ -12,8 +12,8 @@ import re
 import threading
 from pathlib import Path
 
-from app.infrastructure.config import get_memory_config
-from app.rag.chunker import chunk_text
+from app.infrastructure.config import get_memory_config, get_rag_config
+from app.rag.chunker import chunk_document
 from app.rag.embed import create_embedder
 from app.rag.vector_store import VectorStore
 from app.utils.logger import get_logger
@@ -40,6 +40,7 @@ class LongTermMemory:
             dim=self.embedder.dim,
             persist_dir=persist_dir or _memory_persist_dir(),
             embedder=self.embedder,
+            mismatch_policy=get_rag_config().index_mismatch_policy,
         )
         self.store.load()
         logger.info(
@@ -58,7 +59,7 @@ class LongTermMemory:
         if not self.enabled or not text:
             return
         try:
-            chunks = chunk_text(text)
+            chunks = chunk_document(text, self.embedder)
             if not chunks:
                 return
             embeddings = self.embedder.embed_batch(chunks)
@@ -74,7 +75,7 @@ class LongTermMemory:
         if not self.enabled or self.store.size == 0:
             return []
         try:
-            query_vec = self.embedder.embed_text(query)
+            query_vec = self.embedder.embed_query(query)
             results = self.store.search(query_vec, top_k=top_k or self.top_k)
             return [r for r in results if r.get("score", 0) > 0]
         except Exception as e:

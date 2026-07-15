@@ -25,7 +25,8 @@ from app.api.error_utils import safe_bad_request_detail, safe_internal_detail
 from app.auth.dependencies import require_role
 from app.auth.models import UserResponse
 from app.auth.roles import Role
-from app.rag.chunker import chunk_text
+from app.infrastructure.config import get_rag_config
+from app.rag.chunker import chunk_document
 from app.rag.embed import create_embedder
 from app.rag.file_parser import FileParserError, get_supported_extensions, parse_file
 from app.rag.retriever import Retriever
@@ -72,7 +73,10 @@ def _get_vector_store() -> VectorStore:
     if _vector_store is None:
         embedder = _get_embedder()
         _vector_store = VectorStore(
-            dim=embedder.dim, persist_dir=str(VECTOR_STORE_DIR), embedder=embedder
+            dim=embedder.dim,
+            persist_dir=str(VECTOR_STORE_DIR),
+            embedder=embedder,
+            mismatch_policy=get_rag_config().index_mismatch_policy,
         )
         _vector_store.load()
     return _vector_store
@@ -235,6 +239,14 @@ class RAGStatsResponse(BaseModel):
     total_chunks: int
     vector_store_size: int
     embedding_mode: str
+    embedding_backend: str
+    embedding_model: str
+    embedding_dimension: int
+    semantic_enabled: bool
+    degraded: bool
+    degradation_reason: str
+    index_status: str
+    index_fingerprint: str
 
 
 # ============================================================
@@ -361,13 +373,13 @@ async def _process_document(
     """后台处理文档向量化"""
     try:
         # 分块
-        chunks = chunk_text(content)
+        embedder = _get_embedder()
+        chunks = chunk_document(content, embedder)
         if not chunks:
             _update_document_status(doc_id, "failed", 0)
             return
 
         # 向量化
-        embedder = _get_embedder()
         embeddings = embedder.embed_batch(chunks)
 
         # 存储到向量数据库
@@ -494,7 +506,7 @@ async def search_documents(
         vector_store = _get_vector_store()
 
         # 向量化查询
-        query_embedding = embedder.embed_text(request.query)
+        query_embedding = embedder.embed_query(request.query)
 
         # 搜索
         results = vector_store.search(
@@ -528,14 +540,24 @@ async def get_rag_stats(
     """获取 RAG 系统统计信息"""
     documents = _load_documents()
     vector_store = _get_vector_store()
+    embedder = _get_embedder()
 
     embed_config = get_embedding_config()
+    runtime = embedder.get_runtime_status()
 
     return RAGStatsResponse(
         total_documents=len(documents),
         total_chunks=sum(d.get("chunk_count", 0) for d in documents),
         vector_store_size=vector_store.size,
         embedding_mode=embed_config.mode,
+        embedding_backend=runtime["backend"],
+        embedding_model=runtime["model"],
+        embedding_dimension=runtime["dimension"],
+        semantic_enabled=runtime["semantic_enabled"],
+        degraded=runtime["degraded"],
+        degradation_reason=runtime["degradation_reason"],
+        index_status=vector_store.last_load_status,
+        index_fingerprint=runtime["index_fingerprint"],
     )
 
 

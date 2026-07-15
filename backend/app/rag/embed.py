@@ -7,15 +7,15 @@ Three modes are available (set via ``embedding.mode`` in config_rag.yaml):
 - semantic: SemanticEmbedder  (real dense semantic vectors via a neural backend)
 
 The hash and BM25 modes are lexical: similarity is token overlap, not meaning.
-The semantic mode loads an actual model (sentence-transformers, or the
-torch-free model2vec static backend) and is the only mode that captures meaning
-beyond shared words. It is an optional dependency: if neither backend is
-installed, ``SemanticEmbedder`` raises a clear error and the dev/prod lexical
-modes keep working. See ``app/rag/eval.py`` + ``scripts/rag_eval.py`` for the
-quantitative comparison between these modes.
+The production semantic mode loads the pinned Chinese BGE model through
+sentence-transformers and is the only mode that captures meaning beyond shared
+words. The optional model2vec backend remains available for experiments but is
+not treated as equivalent to the Chinese production model. See
+``app/rag/eval.py`` + ``scripts/rag_eval.py`` for measured comparisons.
 """
 
 import hashlib
+import json
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -29,6 +29,11 @@ logger = get_logger("embed")
 class BaseEmbedder(ABC):
     """Embedding 抽象基类"""
 
+    @property
+    def supports_semantic_similarity(self) -> bool:
+        """Whether vectors represent meaning rather than lexical overlap."""
+        return False
+
     @abstractmethod
     def embed_text(self, text: str) -> np.ndarray:
         pass
@@ -36,6 +41,10 @@ class BaseEmbedder(ABC):
     @abstractmethod
     def embed_batch(self, texts: list[str]) -> np.ndarray:
         pass
+
+    def embed_query(self, text: str) -> np.ndarray:
+        """Embed a retrieval query; symmetric embedders reuse text encoding."""
+        return self.embed_text(text)
 
     @property
     @abstractmethod
@@ -49,6 +58,38 @@ class BaseEmbedder(ABC):
     def load_state(self, state: dict) -> None:
         """Restore fitted state produced by :meth:`get_state` (no-op by default)."""
         return None
+
+    def get_index_config(self) -> dict:
+        """Return the complete vector-space identity persisted with FAISS."""
+        return {
+            "schema_version": 2,
+            "embedder": type(self).__name__,
+            "model": type(self).__name__,
+            "backend": "python",
+            "dim": self.dim,
+            "normalization": "l2",
+        }
+
+    def get_index_fingerprint(self) -> str:
+        payload = json.dumps(
+            self.get_index_config(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def get_runtime_status(self) -> dict:
+        return {
+            "actual_embedder": type(self).__name__,
+            "semantic_enabled": self.supports_semantic_similarity,
+            "backend": self.get_index_config()["backend"],
+            "model": self.get_index_config()["model"],
+            "dimension": self.dim,
+            "degraded": bool(getattr(self, "degradation_reason", "")),
+            "degradation_reason": getattr(self, "degradation_reason", ""),
+            "index_fingerprint": self.get_index_fingerprint(),
+        }
 
 
 class HashEmbedder(BaseEmbedder):
@@ -76,6 +117,13 @@ class HashEmbedder(BaseEmbedder):
 
     def embed_batch(self, texts: list[str]) -> np.ndarray:
         return np.array([self.embed_text(t) for t in texts], dtype=np.float32)
+
+    def get_index_config(self) -> dict:
+        return {
+            **super().get_index_config(),
+            "model": "md5-hash-v1",
+            "backend": "hash",
+        }
 
 
 class BM25Embedder(BaseEmbedder):
@@ -348,6 +396,13 @@ class BM25Embedder(BaseEmbedder):
             vecs.append(vec)
         return np.array(vecs, dtype=np.float32)
 
+    def get_index_config(self) -> dict:
+        return {
+            **super().get_index_config(),
+            "model": "bm25-tfidf-word-char-v2",
+            "backend": "lexical",
+        }
+
 
 class SemanticEmbedder(BaseEmbedder):
     """Real dense semantic embeddings from a neural backend.
@@ -356,16 +411,15 @@ class SemanticEmbedder(BaseEmbedder):
     meaning-based: paraphrases with little word overlap still match. Two
     backends are supported and tried in order (``backend="auto"``):
 
-    - ``sentence-transformers``: the canonical choice (needs torch).
-    - ``model2vec``: torch-free static embeddings distilled from
-      sentence-transformers; far lighter and CPU-friendly.
+    - ``sentence-transformers``: production backend for BGE (needs torch).
+    - ``model2vec``: optional torch-free experimental backend.
 
     Both are optional dependencies. If neither import succeeds, the constructor
     raises :class:`ImportError` with installation guidance so the lexical modes
     remain unaffected.
     """
 
-    _ST_DEFAULT = "sentence-transformers/all-MiniLM-L6-v2"
+    _ST_DEFAULT = "BAAI/bge-small-zh-v1.5"
     _M2V_DEFAULT = "minishlab/potion-base-8M"
 
     def __init__(
@@ -374,11 +428,20 @@ class SemanticEmbedder(BaseEmbedder):
         backend: str = "auto",
         device: str = "cpu",
         batch_size: int = 32,
+        model_revision: str = "",
+        query_instruction: str = "为这个句子生成表示以用于检索相关文章：",
+        local_files_only: bool = False,
     ):
+        if backend not in {"auto", "sentence_transformers", "model2vec"}:
+            raise ValueError(f"Unsupported semantic backend: {backend}")
         self._batch_size = batch_size
         self._backend = ""
         self._model = None
         self._dim_value = 0
+        self._model_name = model_name or self._ST_DEFAULT
+        self._model_revision = model_revision
+        self._query_instruction = query_instruction
+        self._local_files_only = local_files_only
 
         order = (
             ["sentence_transformers", "model2vec"]
@@ -395,11 +458,17 @@ class SemanticEmbedder(BaseEmbedder):
                     from sentence_transformers import SentenceTransformer
 
                     self._model = SentenceTransformer(
-                        model_name or self._ST_DEFAULT, device=device
+                        self._model_name,
+                        device=device,
+                        revision=model_revision or None,
+                        local_files_only=local_files_only,
                     )
-                    self._dim_value = int(
-                        self._model.get_sentence_embedding_dimension()
+                    dimension_getter = getattr(
+                        self._model,
+                        "get_embedding_dimension",
+                        self._model.get_sentence_embedding_dimension,
                     )
+                    self._dim_value = int(dimension_getter())
                     self._backend = "sentence_transformers"
                     self._encode = self._encode_st
                     break
@@ -411,6 +480,7 @@ class SemanticEmbedder(BaseEmbedder):
                         if model_name.startswith("minishlab")
                         else self._M2V_DEFAULT
                     )
+                    self._model_name = m2v_name
                     self._model = StaticModel.from_pretrained(m2v_name)
                     probe = self._model.encode(["dimension probe"])
                     self._dim_value = int(np.asarray(probe).shape[1])
@@ -424,8 +494,8 @@ class SemanticEmbedder(BaseEmbedder):
             raise ImportError(
                 "SemanticEmbedder requires a neural backend but none could be "
                 "loaded. Install one of:\n"
-                "  pip install model2vec            # torch-free, recommended\n"
-                "  pip install sentence-transformers # needs torch\n"
+                "  pip install sentence-transformers # production BGE backend\n"
+                "  pip install model2vec             # optional experiment\n"
                 f"Attempts: {'; '.join(errors)}"
             )
 
@@ -436,6 +506,10 @@ class SemanticEmbedder(BaseEmbedder):
     @property
     def dim(self) -> int:
         return self._dim_value
+
+    @property
+    def supports_semantic_similarity(self) -> bool:
+        return True
 
     def _encode_st(self, texts: list[str]) -> np.ndarray:
         return np.asarray(
@@ -453,6 +527,10 @@ class SemanticEmbedder(BaseEmbedder):
         norm = np.linalg.norm(vec)
         return vec / norm if norm > 0 else vec
 
+    def embed_query(self, text: str) -> np.ndarray:
+        query = f"{self._query_instruction}{text}" if self._query_instruction else text
+        return self.embed_text(query)
+
     def embed_batch(self, texts: list[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, self._dim_value), dtype=np.float32)
@@ -463,7 +541,20 @@ class SemanticEmbedder(BaseEmbedder):
 
     def get_state(self) -> dict:
         # Deterministic from the model name; nothing fitted to persist.
-        return {"backend": self._backend}
+        return {
+            "backend": self._backend,
+            "model": self._model_name,
+            "revision": self._model_revision,
+        }
+
+    def get_index_config(self) -> dict:
+        return {
+            **super().get_index_config(),
+            "model": self._model_name,
+            "revision": self._model_revision or "default",
+            "backend": self._backend,
+            "query_instruction": self._query_instruction,
+        }
 
 
 def create_embedder() -> BaseEmbedder:
@@ -476,12 +567,31 @@ def create_embedder() -> BaseEmbedder:
     embed_config = get_embedding_config()
     rag_config = get_rag_config()
 
+    if embed_config.mode not in {"dev", "prod", "semantic"}:
+        raise ValueError(f"Unsupported embedding mode: {embed_config.mode}")
+
     if embed_config.mode == "semantic":
-        return SemanticEmbedder(
-            model_name=embed_config.model_name,
-            device=embed_config.device,
-            batch_size=embed_config.batch_size,
-        )
+        try:
+            return SemanticEmbedder(
+                model_name=embed_config.model_name,
+                backend=embed_config.backend,
+                device=embed_config.device,
+                batch_size=embed_config.batch_size,
+                model_revision=embed_config.model_revision,
+                query_instruction=embed_config.query_instruction,
+                local_files_only=embed_config.local_files_only,
+            )
+        except Exception as exc:
+            message = (
+                "Semantic embedding requested but unavailable: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            if embed_config.failure_policy != "lexical_fallback":
+                raise RuntimeError(message) from exc
+            logger.error(f"{message}; explicitly degrading to BM25 lexical retrieval")
+            fallback = BM25Embedder()
+            fallback.degradation_reason = message
+            return fallback
     if embed_config.mode == "prod":
         logger.info(
             "Creating BM25Embedder (mode=prod, lexical BM25 retrieval - not semantic)"
@@ -506,7 +616,9 @@ class Embedder(BaseEmbedder):
         config = get_embedding_config()
         rag_config = get_rag_config()
 
-        if config.mode == "prod":
+        if config.mode == "semantic":
+            self._inner = create_embedder()
+        elif config.mode == "prod":
             self._inner = BM25Embedder(
                 model_name=config.model_name,
                 device=config.device,
@@ -525,11 +637,21 @@ class Embedder(BaseEmbedder):
     def embed_batch(self, texts: list[str]) -> np.ndarray:
         return self._inner.embed_batch(texts)
 
+    def embed_query(self, text: str) -> np.ndarray:
+        return self._inner.embed_query(text)
+
     def get_state(self) -> dict:
         return self._inner.get_state()
 
     def load_state(self, state: dict) -> None:
         self._inner.load_state(state)
+
+    @property
+    def supports_semantic_similarity(self) -> bool:
+        return self._inner.supports_semantic_similarity
+
+    def get_index_config(self) -> dict:
+        return self._inner.get_index_config()
 
 
 # Backwards-compatible alias. Historically this class was named ``BGEEmbedder``

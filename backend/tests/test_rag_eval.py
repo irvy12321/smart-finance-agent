@@ -70,7 +70,7 @@ def _rank_fn_for(embedder, corpus: dict[str, str]):
     store.add(doc_vecs, texts, [{"id": i} for i in ids])
 
     def rank_fn(query: str) -> list[str]:
-        qv = embedder.embed_text(query)
+        qv = embedder.embed_query(query)
         return [h["metadata"]["id"] for h in store.search(qv, top_k=10)]
 
     return rank_fn
@@ -78,8 +78,9 @@ def _rank_fn_for(embedder, corpus: dict[str, str]):
 
 def test_eval_set_loads_and_is_consistent():
     corpus, queries = load_eval_set(DATA_DIR)
-    assert len(corpus) >= 40
-    assert len(queries) >= 20
+    assert len(corpus) >= 60
+    assert len(queries) >= 40
+    assert sum(query.type == "zh_paraphrase" for query in queries) >= 12
     # Every gold id must exist in the corpus.
     for q in queries:
         assert q.relevant, f"query has no gold labels: {q.query}"

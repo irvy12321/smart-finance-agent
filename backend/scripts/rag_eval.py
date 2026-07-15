@@ -14,6 +14,7 @@ Use --no-semantic to skip the neural backend if it is not installed.
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -39,22 +40,35 @@ def _make_rank_fn(embedder, corpus: dict[str, str]):
     store.add(doc_vecs, texts, [{"id": i} for i in ids])
 
     def rank_fn(query: str) -> list[str]:
-        qv = embedder.embed_text(query)
+        qv = embedder.embed_query(query)
         hits = store.search(qv, top_k=SEARCH_DEPTH)
         return [h["metadata"]["id"] for h in hits]
 
     return rank_fn
 
 
-def _build_embedders(use_semantic: bool) -> dict:
+def _build_embedders(
+    use_semantic: bool,
+    semantic_model: str,
+    semantic_revision: str,
+    local_files_only: bool,
+) -> dict:
     embedders: dict[str, object] = {
         "hash (dev, lexical)": HashEmbedder(),
         "bm25 (prod, lexical)": BM25Embedder(),
     }
     if use_semantic:
         try:
-            emb = SemanticEmbedder(backend="auto")
-            embedders[f"semantic ({emb._backend})"] = emb
+            start = time.perf_counter()
+            emb = SemanticEmbedder(
+                model_name=semantic_model,
+                backend="sentence_transformers",
+                model_revision=semantic_revision,
+                query_instruction="为这个句子生成表示以用于检索相关文章：",
+                local_files_only=local_files_only,
+            )
+            emb.load_seconds = time.perf_counter() - start
+            embedders[f"semantic ({semantic_model})"] = emb
         except ImportError as e:
             print(f"[skip] semantic backend unavailable: {e}\n")
     return embedders
@@ -66,6 +80,21 @@ def main() -> None:
         "--no-semantic", action="store_true", help="skip the neural semantic backend"
     )
     parser.add_argument(
+        "--semantic-model",
+        default="BAAI/bge-small-zh-v1.5",
+        help="sentence-transformers model used for the semantic comparison",
+    )
+    parser.add_argument(
+        "--semantic-revision",
+        default="7999e1d3359715c523056ef9478215996d62a620",
+        help="pinned Hugging Face model revision",
+    )
+    parser.add_argument(
+        "--local-files-only",
+        action="store_true",
+        help="fail instead of downloading a missing semantic model",
+    )
+    parser.add_argument(
         "--out",
         default=str(_BACKEND_DIR / "data" / "rag_eval" / "results.json"),
         help="where to write the JSON results (gitignored by default)",
@@ -75,7 +104,12 @@ def main() -> None:
     corpus, queries = load_eval_set(DATA_DIR)
     print(f"corpus={len(corpus)} docs  queries={len(queries)}  ks={list(KS)}\n")
 
-    embedders = _build_embedders(use_semantic=not args.no_semantic)
+    embedders = _build_embedders(
+        use_semantic=not args.no_semantic,
+        semantic_model=args.semantic_model,
+        semantic_revision=args.semantic_revision,
+        local_files_only=args.local_files_only,
+    )
     results: dict[str, dict] = {}
 
     header = f"{'embedder':<26} {'R@1':>6} {'R@3':>6} {'R@5':>6} {'P@5':>6} {'MRR':>6} {'nDCG@5':>7}"
@@ -85,6 +119,8 @@ def main() -> None:
         rank_fn = _make_rank_fn(embedder, corpus)
         report = evaluate(rank_fn, queries, ks=KS)
         results[name] = report.to_dict()
+        if hasattr(embedder, "load_seconds"):
+            results[name]["load_seconds"] = round(embedder.load_seconds, 3)
         print(
             f"{name:<26} "
             f"{report.recall[1]:>6.3f} {report.recall[3]:>6.3f} {report.recall[5]:>6.3f} "

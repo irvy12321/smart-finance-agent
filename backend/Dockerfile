@@ -14,11 +14,18 @@ RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' \
 
 ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ENV PIP_NO_CACHE_DIR=1
+ENV HF_HOME=/opt/huggingface
 
-COPY requirements.txt .
+COPY requirements.txt requirements-semantic.txt ./
 
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install -r requirements.txt && \
+    pip install torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install -r requirements-semantic.txt
+
+ARG RAG_SEMANTIC_MODEL=BAAI/bge-small-zh-v1.5
+ARG RAG_SEMANTIC_REVISION=7999e1d3359715c523056ef9478215996d62a620
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${RAG_SEMANTIC_MODEL}', revision='${RAG_SEMANTIC_REVISION}', device='cpu')"
 
 # ============================================
 # Stage 2: Production
@@ -26,6 +33,18 @@ RUN pip install --upgrade pip && \
 FROM python:3.12-slim-bookworm AS production
 
 WORKDIR /app
+
+ARG RAG_SEMANTIC_MODEL=BAAI/bge-small-zh-v1.5
+ARG RAG_SEMANTIC_REVISION=7999e1d3359715c523056ef9478215996d62a620
+ENV HF_HOME=/opt/huggingface \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    RAG_EMBEDDING_MODE=semantic \
+    RAG_EMBEDDING_BACKEND=sentence_transformers \
+    RAG_EMBEDDING_LOCAL_FILES_ONLY=true \
+    RAG_SEMANTIC_FAILURE_POLICY=error \
+    RAG_EMBEDDING_MODEL=${RAG_SEMANTIC_MODEL} \
+    RAG_EMBEDDING_REVISION=${RAG_SEMANTIC_REVISION}
 
 RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' \
         /etc/apt/sources.list.d/debian.sources && \
@@ -35,13 +54,14 @@ RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local /usr/local
+COPY --from=builder /opt/huggingface /opt/huggingface
 
 COPY app/ ./app/
 
 RUN groupadd -r appuser && \
     useradd -r -g appuser -d /app -s /sbin/nologin appuser && \
     mkdir -p /app/data /app/output /app/logs && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app /opt/huggingface
 
 USER appuser
 

@@ -1,5 +1,5 @@
 from app.infrastructure.config import get_rag_config
-from app.rag.chunker import chunk_text
+from app.rag.chunker import chunk_document
 from app.rag.embed import BaseEmbedder, create_embedder
 from app.rag.reranker import create_reranker
 from app.rag.vector_store import VectorStore
@@ -118,7 +118,10 @@ class Retriever:
         # 使用与 RAG API 相同的持久化目录
         persist_dir = _get_persist_dir()
         self.store = VectorStore(
-            dim=self.embedder.dim, persist_dir=persist_dir, embedder=self.embedder
+            dim=self.embedder.dim,
+            persist_dir=persist_dir,
+            embedder=self.embedder,
+            mismatch_policy=config.index_mismatch_policy,
         )
         self.store.load()
         self.top_k = config.top_k
@@ -148,7 +151,7 @@ class Retriever:
         return normalized
 
     def add_document(self, text: str, metadata: dict | None = None):
-        chunks = chunk_text(text)
+        chunks = chunk_document(text, self.embedder)
         if not chunks:
             return
         embeddings = self.embedder.embed_batch(chunks)
@@ -176,7 +179,7 @@ class Retriever:
         # 先尝试向量搜索
         vector_results = []
         if self.store.size > 0:
-            query_vec = self.embedder.embed_text(query)
+            query_vec = self.embedder.embed_query(query)
             vector_results = self.store.search(
                 query_vec,
                 top_k=k,

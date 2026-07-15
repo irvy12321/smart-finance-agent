@@ -154,11 +154,16 @@ class AgentModelConfig(BaseSettings):
 
 
 class EmbeddingConfig(BaseSettings):
-    """Embedding 配置: dev=hash mock, prod=bge-m3"""
+    """Embedding modes: dev=hash, prod=BM25, semantic=pinned neural model."""
 
-    mode: str = "dev"  # "dev" or "prod"
-    model_name: str = "BAAI/bge-m3"
-    dim: int = 1024  # bge-m3 default dimension
+    mode: str = "dev"  # dev=hash, prod=BM25, semantic=neural embeddings
+    model_name: str = "BAAI/bge-small-zh-v1.5"
+    model_revision: str = "7999e1d3359715c523056ef9478215996d62a620"
+    backend: str = "sentence_transformers"
+    query_instruction: str = "为这个句子生成表示以用于检索相关文章："
+    local_files_only: bool = False
+    failure_policy: str = "error"  # error or lexical_fallback
+    dim: int = 512
     batch_size: int = 32
     device: str = "cpu"  # "cpu" or "cuda"
 
@@ -216,7 +221,12 @@ class SmartRouterConfig(BaseSettings):
 class RAGConfig(BaseSettings):
     chunk_size: int = 500
     chunk_overlap: int = 50
+    # Semantic chunking is opt-in and requires a real semantic embedder.
+    semantic_chunking_enabled: bool = False
+    semantic_chunking_threshold: float = 0.5
+    semantic_chunking_min_chunk_size: int = 100
     embedding_dim: int = 384
+    index_mismatch_policy: str = "rebuild"  # rebuild or error
     top_k: int = 5
     # Reranker (Cross-Encoder 精排). 默认关闭——需安装 sentence-transformers.
     reranker_enabled: bool = False
@@ -267,6 +277,21 @@ def get_agent_model_config() -> AgentModelConfig:
 def get_embedding_config() -> EmbeddingConfig:
     overrides = _load_yaml("config_rag.yaml")
     embedding_overrides = overrides.get("embedding", {})
+    env_overrides = {
+        "mode": os.getenv("RAG_EMBEDDING_MODE"),
+        "model_name": os.getenv("RAG_EMBEDDING_MODEL"),
+        "model_revision": os.getenv("RAG_EMBEDDING_REVISION"),
+        "backend": os.getenv("RAG_EMBEDDING_BACKEND"),
+        "query_instruction": os.getenv("RAG_QUERY_INSTRUCTION"),
+        "local_files_only": os.getenv("RAG_EMBEDDING_LOCAL_FILES_ONLY"),
+        "failure_policy": os.getenv("RAG_SEMANTIC_FAILURE_POLICY"),
+        "batch_size": os.getenv("RAG_EMBEDDING_BATCH_SIZE"),
+        "device": os.getenv("RAG_EMBEDDING_DEVICE"),
+    }
+    embedding_overrides = {
+        **embedding_overrides,
+        **{key: value for key, value in env_overrides.items() if value is not None},
+    }
     valid_fields = set(EmbeddingConfig.model_fields.keys())
     return EmbeddingConfig(
         **{k: v for k, v in embedding_overrides.items() if k in valid_fields}

@@ -50,6 +50,18 @@
     {"id": "blue_chip", "text": "A blue-chip stock is a share of a large, well-established and financially sound company with a history of reliable earnings and often steady dividends."},
     {"id": "earnings_report", "text": "An earnings report is a company's quarterly disclosure of revenue, profit and guidance. Stock prices often move sharply when results beat or miss analyst expectations."},
     {"id": "hedge", "text": "Hedging takes an offsetting position, often using options or futures, to reduce the risk of adverse price moves in an existing investment, similar to buying insurance."},
-    {"id": "compound_interest", "text": "Compound interest earns returns not only on the original principal but also on previously accumulated interest, causing investments to grow faster the longer they are held."}
+    {"id": "compound_interest", "text": "Compound interest earns returns not only on the original principal but also on previously accumulated interest, causing investments to grow faster the longer they are held."},
+    {"id": "zh_pe_ratio", "text": "市盈率用股票价格除以每股收益，表示投资者愿意为公司每一元盈利支付多少价格，常用于比较股票估值水平。"},
+    {"id": "zh_pb_ratio", "text": "市净率用每股股价除以每股净资产，反映市场价格相对于公司账面净资产的倍数。"},
+    {"id": "zh_roe", "text": "净资产收益率用净利润除以股东权益，衡量企业运用股东投入资本创造利润的效率。"},
+    {"id": "zh_free_cash_flow", "text": "自由现金流是经营活动产生的现金扣除资本性支出后的余额，可用于偿债、分红、回购或业务扩张。"},
+    {"id": "zh_debt_to_equity", "text": "资产负债结构中的产权比率比较企业负债与股东权益；比率较高意味着企业更依赖借款，财务风险通常更大。"},
+    {"id": "zh_dividend_yield", "text": "股息率等于每股年度现金分红除以股票价格，用百分比表示持有股票获得的现金回报。"},
+    {"id": "zh_rsi", "text": "相对强弱指标是零到一百之间的动量振荡指标，读数过高可能代表超买，过低可能代表超卖。"},
+    {"id": "zh_beta", "text": "贝塔系数衡量个股价格相对于整体市场的波动敏感度；数值大于一通常表示个股波动比大盘更剧烈。"},
+    {"id": "zh_var", "text": "风险价值估计在给定持有期和置信水平下，投资组合可能遭受的最大预期损失。"},
+    {"id": "zh_diversification", "text": "分散投资把资金配置到多种相关性较低的资产，使单一资产亏损不至于主导整个组合，从而降低总体风险。"},
+    {"id": "zh_dollar_cost_averaging", "text": "定期定额投资是不考虑短期价格涨跌，按固定时间间隔投入固定金额的策略，可降低一次性择时错误的影响。"},
+    {"id": "zh_yield_curve", "text": "收益率曲线描述不同期限债券利率；当短期利率高于长期利率时称为曲线倒挂，历史上常被视为经济衰退预警。"}
   ]
 }

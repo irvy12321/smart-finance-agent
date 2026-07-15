@@ -18,11 +18,12 @@ from app.infrastructure.otel import traced
 from app.monitoring.prometheus import (
     tool_call_duration_seconds,
     tool_calls_total,
+    tool_circuit_breaker_state,
     tool_errors_total,
 )
 from app.tools.base_tool import ToolResult
 from app.tools.registry import ToolRegistry
-from app.utils.circuit_breaker import CircuitBreakerManager
+from app.utils.circuit_breaker import BreakerState, CircuitBreakerManager
 from app.utils.exceptions import CircuitBreakerOpenError
 from app.utils.logger import get_logger
 from app.utils.tracing import TraceContext
@@ -35,6 +36,11 @@ StatusCallback = Callable[[str, TaskStatus, dict], Coroutine[Any, Any, None]]
 # 单个工具调用的超时上限 (秒)。超时即记为失败并走降级链，
 # 避免某个 hang 住的工具阻塞整轮 asyncio.gather。
 DEFAULT_TOOL_TIMEOUT = 30.0
+_BREAKER_STATE_VALUES = {
+    BreakerState.CLOSED: 0,
+    BreakerState.OPEN: 1,
+    BreakerState.HALF_OPEN: 2,
+}
 
 
 @dataclass
@@ -75,6 +81,7 @@ class ExecutorAgent:
         llm_client: LLMClient | None = None,
         router: LiteLLMRouter | None = None,
         tool_timeout: float | None = None,
+        fallback_step_timeout: float | None = None,
     ):
         self.registry = tool_registry or ToolRegistry()
         self.tool_timeout = (
@@ -91,6 +98,8 @@ class ExecutorAgent:
             tool_registry=self.registry,
             llm_client=self.llm,
             router=self.router,
+            circuit_breaker_mgr=self.circuit_breaker_mgr,
+            step_timeout=fallback_step_timeout,
         )
         self._current_language = "en"
 
@@ -318,6 +327,7 @@ class ExecutorAgent:
             try:
                 breaker.check_or_raise()
             except CircuitBreakerOpenError as e:
+                self._update_breaker_metric(task.tool_name, breaker)
                 logger.warning(
                     f"[trace:{trace.trace_id}] Circuit breaker OPEN for {task.tool_name}: {e}"
                 )
@@ -328,15 +338,12 @@ class ExecutorAgent:
 
             # === 正常执行 + 降级 ===
             with trace.span(f"tool_{task.tool_name}", task_id=task.task_id):
+                tool_start = time.perf_counter()
+                tool_error_recorded = False
                 try:
                     tool_calls_total.labels(tool_name=task.tool_name).inc()
-                    tool_start = time.perf_counter()
                     tool_result = await asyncio.wait_for(
                         tool.execute(**params), timeout=self.tool_timeout
-                    )
-                    tool_duration = time.perf_counter() - tool_start
-                    tool_call_duration_seconds.labels(tool_name=task.tool_name).observe(
-                        tool_duration
                     )
                 except (TimeoutError, asyncio.TimeoutError):
                     logger.error(
@@ -346,6 +353,7 @@ class ExecutorAgent:
                     tool_errors_total.labels(
                         tool_name=task.tool_name, error_type="TimeoutError"
                     ).inc()
+                    tool_error_recorded = True
                     tool_result = ToolResult(
                         success=False,
                         error=(
@@ -361,12 +369,18 @@ class ExecutorAgent:
                     tool_errors_total.labels(
                         tool_name=task.tool_name, error_type=type(e).__name__
                     ).inc()
+                    tool_error_recorded = True
                     tool_result = ToolResult(
                         success=False, error=str(e), tool_name=task.tool_name
+                    )
+                finally:
+                    tool_call_duration_seconds.labels(tool_name=task.tool_name).observe(
+                        time.perf_counter() - tool_start
                     )
 
             if tool_result.success:
                 breaker.record_success()
+                self._update_breaker_metric(task.tool_name, breaker)
                 result = TaskResult(
                     task_id=task.task_id,
                     tool_name=task.tool_name,
@@ -375,7 +389,12 @@ class ExecutorAgent:
                     status=TaskStatus.SUCCESS,
                 )
             else:
+                if not tool_error_recorded:
+                    tool_errors_total.labels(
+                        tool_name=task.tool_name, error_type="ToolResultFailure"
+                    ).inc()
                 breaker.record_failure()
+                self._update_breaker_metric(task.tool_name, breaker)
                 logger.info(
                     f"[trace:{trace.trace_id}] Tool {task.tool_name} failed, trying fallback..."
                 )
@@ -393,6 +412,7 @@ class ExecutorAgent:
                 task.tool_name,
                 params,
                 trace_id=trace.trace_id,
+                skip_tools={task.tool_name},
             )
             if fallback_result.success:
                 is_degraded = used_tool != task.tool_name
@@ -422,6 +442,12 @@ class ExecutorAgent:
                 error=f"Primary + fallback failed: {e}",
                 status=TaskStatus.FAILED,
             )
+
+    @staticmethod
+    def _update_breaker_metric(tool_name: str, breaker) -> None:
+        value = _BREAKER_STATE_VALUES.get(breaker.state)
+        if value is not None:
+            tool_circuit_breaker_state.labels(tool_name=tool_name).set(value)
 
     async def _run_synthesize(
         self, task: SubTask, completed: dict[str, TaskResult], trace: TraceContext

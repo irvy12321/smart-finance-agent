@@ -592,6 +592,9 @@ async def test_executor_tool_timeout_routes_to_fallback():
         t1 = next(r for r in result.task_results if r.task_id == "t1")
         assert t1.success is False
         mock_fb.execute_with_fallback.assert_awaited()
+        assert mock_fb.execute_with_fallback.await_args.kwargs["skip_tools"] == {
+            "stock_price"
+        }
 
 
 @pytest.mark.asyncio

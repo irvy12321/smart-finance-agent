@@ -15,7 +15,15 @@ logger = get_logger("vector_store")
 
 
 class VectorStore:
-    def __init__(self, dim: int, persist_dir: str | None = None, embedder=None):
+    def __init__(
+        self,
+        dim: int,
+        persist_dir: str | None = None,
+        embedder=None,
+        mismatch_policy: str = "error",
+    ):
+        if mismatch_policy not in {"error", "rebuild"}:
+            raise ValueError("mismatch_policy must be 'error' or 'rebuild'")
         self.dim = dim
         self.index = faiss.IndexFlatIP(dim)
         self.texts: list[str] = []
@@ -25,8 +33,44 @@ class VectorStore:
         # persisted so reloaded vectors and freshly embedded queries share the
         # same lexical space.
         self.embedder = embedder
+        self.mismatch_policy = mismatch_policy
+        self.last_load_status = "not_loaded"
         self._loaded = False
         self._lock = threading.RLock()
+
+    def _index_manifest(self) -> dict:
+        embedder_config = (
+            self.embedder.get_index_config()
+            if self.embedder is not None
+            else {
+                "schema_version": 2,
+                "embedder": "external",
+                "model": "external",
+                "backend": "external",
+                "dim": self.dim,
+                "normalization": "l2",
+            }
+        )
+        fingerprint = (
+            self.embedder.get_index_fingerprint()
+            if self.embedder is not None
+            else self._fingerprint(embedder_config)
+        )
+        return {
+            "schema_version": 2,
+            "dim": self.dim,
+            "embedder": embedder_config,
+            "fingerprint": fingerprint,
+        }
+
+    @staticmethod
+    def _fingerprint(payload: dict) -> str:
+        import hashlib
+
+        encoded = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
     def add(
         self,
@@ -145,15 +189,16 @@ class VectorStore:
                 os.path.join(save_dir, "metadata.json"), self.metadata
             )
             self._write_json_atomic(
-                os.path.join(save_dir, "config.json"), {"dim": self.dim}
+                os.path.join(save_dir, "config.json"), self._index_manifest()
             )
 
             if self.embedder is not None:
                 state = self.embedder.get_state()
+                state_path = os.path.join(save_dir, "embedder_state.json")
                 if state:
-                    self._write_json_atomic(
-                        os.path.join(save_dir, "embedder_state.json"), state
-                    )
+                    self._write_json_atomic(state_path, state)
+                elif os.path.exists(state_path):
+                    os.remove(state_path)
             total = self.index.ntotal
 
         logger.info(f"VectorStore saved to {save_dir}: {total} vectors")
@@ -171,19 +216,13 @@ class VectorStore:
 
         required_paths = [index_path, texts_path, meta_path, config_path]
         if not all(os.path.exists(p) for p in required_paths):
+            self.last_load_status = "empty"
             logger.info(f"No existing data at {load_dir}, starting fresh")
             return False
 
         try:
             with open(config_path, encoding="utf-8") as f:
                 config = json.load(f)
-            if config.get("dim") != self.dim:
-                logger.warning(
-                    f"Dimension mismatch: stored={config.get('dim')}, current={self.dim}"
-                )
-                return False
-
-            index = faiss.read_index(index_path)
             with open(texts_path, encoding="utf-8") as f:
                 texts = json.load(f)
             with open(meta_path, encoding="utf-8") as f:
@@ -191,10 +230,40 @@ class VectorStore:
 
             if not isinstance(texts, list) or not isinstance(metadata, list):
                 raise ValueError("VectorStore persistence payload is not list-shaped")
-            if index.ntotal != len(texts) or len(texts) != len(metadata):
+            if len(texts) != len(metadata):
                 raise ValueError(
                     "VectorStore persistence is inconsistent: "
-                    f"index={index.ntotal}, texts={len(texts)}, metadata={len(metadata)}"
+                    f"texts={len(texts)}, metadata={len(metadata)}"
+                )
+
+            expected = self._index_manifest()
+            stored_fingerprint = config.get("fingerprint")
+            if stored_fingerprint != expected["fingerprint"]:
+                reason = (
+                    "RAG index fingerprint mismatch: "
+                    f"stored={stored_fingerprint or 'legacy/unversioned'}, "
+                    f"expected={expected['fingerprint']}, "
+                    f"stored_dim={config.get('dim')}, current_dim={self.dim}"
+                )
+                if self.mismatch_policy != "rebuild" or self.embedder is None:
+                    self.last_load_status = "incompatible"
+                    logger.error(f"{reason}; refusing to mix vector spaces")
+                    return False
+
+                logger.warning(f"{reason}; rebuilding from persisted chunk texts")
+                embeddings = self.embedder.embed_batch(texts)
+                self.rebuild(embeddings, texts, metadata)
+                self._loaded = True
+                self.last_load_status = "rebuilt"
+                self.save(load_dir)
+                return True
+
+            index = faiss.read_index(index_path)
+            if index.d != self.dim or index.ntotal != len(texts):
+                raise ValueError(
+                    "VectorStore persistence is inconsistent: "
+                    f"index_dim={index.d}, expected_dim={self.dim}, "
+                    f"index={index.ntotal}, texts={len(texts)}"
                 )
 
             state_path = os.path.join(load_dir, "embedder_state.json")
@@ -207,11 +276,13 @@ class VectorStore:
                 self.texts = texts
                 self.metadata = metadata
                 self._loaded = True
+                self.last_load_status = "loaded"
                 total = self.index.ntotal
 
             logger.info(f"VectorStore loaded from {load_dir}: {total} vectors")
             return True
         except Exception as e:
+            self.last_load_status = "load_error"
             logger.error(f"Failed to load VectorStore: {e}")
             return False
 
