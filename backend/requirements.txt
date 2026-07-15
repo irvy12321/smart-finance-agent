@@ -6,7 +6,7 @@ python-multipart>=0.0.32
 # Existing dependencies (from original requirements.txt)
 litellm>=1.87.0
 openai>=2.0.0
-faiss-cpu>=1.7.0
+faiss-cpu>=1.14.3
 numpy>=2.5.0
 pydantic>=2.13.4
 pydantic-settings>=2.14.2
