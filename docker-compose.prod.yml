@@ -5,6 +5,7 @@ services:
   # Backend Service (FastAPI) - Production
   # ============================================
   backend:
+    image: sfa-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -17,6 +18,15 @@ services:
       - PYTHONUNBUFFERED=1
       - ALLOW_MOCK_DATA=${ALLOW_MOCK_DATA:-false}
       - LITELLM_LOCAL_MODEL_COST_MAP=${LITELLM_LOCAL_MODEL_COST_MAP:-true}
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - RAG_EMBEDDING_MODE=semantic
+      - RAG_EMBEDDING_BACKEND=sentence_transformers
+      - RAG_EMBEDDING_LOCAL_FILES_ONLY=true
+      - RAG_SEMANTIC_FAILURE_POLICY=error
+      - RAG_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+      - RAG_EMBEDDING_REVISION=7999e1d3359715c523056ef9478215996d62a620
+      - RAG_EMBEDDING_DEVICE=cpu
     expose:
       - "8000"
     volumes:
