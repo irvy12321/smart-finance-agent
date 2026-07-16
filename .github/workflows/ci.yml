@@ -332,7 +332,7 @@ jobs:
     name: Docker Build
     runs-on: ubuntu-latest
     needs: [frontend-build, backend-lint]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')) || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -347,9 +347,21 @@ jobs:
           file: ./backend/Dockerfile
           target: production
           push: false
-          tags: sfa-backend:${{ github.sha }}
+          tags: sfa-backend:latest
+          outputs: type=docker,dest=/tmp/sfa-backend.tar
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
+
+      - name: Package backend image for ECS
+        run: gzip -1 /tmp/sfa-backend.tar
+
+      - name: Upload backend image for deploy
+        uses: actions/upload-artifact@v7
+        with:
+          name: sfa-backend-image
+          path: /tmp/sfa-backend.tar.gz
+          compression-level: 0
+          retention-days: 1
 
       - name: Build frontend image
         uses: docker/build-push-action@v7
@@ -366,9 +378,9 @@ jobs:
 
   # ============================================================
   # Auto-deploy to ECS
-  # The ECS host cannot reach github.com (common in mainland-China
-  # Aliyun networks), so instead of pulling on the host we SHIP the
-  # source from the runner over SSH, then build + restart on the host.
+  # The ECS host cannot reliably reach GitHub, Hugging Face, or the PyTorch
+  # package index. The runner therefore ships the source plus the already
+  # validated backend image; ECS only loads it, builds the frontend, and restarts.
   # The build runs detached (nohup) and a polling step waits for it,
   # which is resilient to the host's sshd briefly stalling under load.
   #
@@ -384,7 +396,7 @@ jobs:
   deploy:
     name: Deploy to ECS
     runs-on: ubuntu-latest
-    needs: [frontend-lint, frontend-test, frontend-build, backend-lint, backend-test]
+    needs: [frontend-lint, frontend-test, frontend-build, backend-lint, backend-test, docker-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.DEPLOY_ENABLED == 'true'
     env:
       ECS_HOST: ${{ secrets.ECS_HOST }}
@@ -398,6 +410,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+
+      - name: Download validated backend image
+        uses: actions/download-artifact@v8
+        with:
+          name: sfa-backend-image
+          path: /tmp
 
       - name: Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
@@ -419,6 +437,7 @@ jobs:
           } > "$APP_ENV_FILE"
           export SSHPASS="$ECS_SSH_PASSWORD"
           sshpass -e scp $SSH_OPTS -P "$PORT" /tmp/src.tar.gz "$ECS_SSH_USER@$ECS_HOST:/tmp/src.tar.gz"
+          sshpass -e scp $SSH_OPTS -P "$PORT" /tmp/sfa-backend.tar.gz "$ECS_SSH_USER@$ECS_HOST:/tmp/sfa-backend.tar.gz"
           sshpass -e scp $SSH_OPTS -P "$PORT" "$APP_ENV_FILE" "$ECS_SSH_USER@$ECS_HOST:$APP_ENV_FILE"
           rm -f "$APP_ENV_FILE"
           REMOTE_ENV=$(printf "PROJECT_DIR=%q OK_FILE=%q FAIL_FILE=%q LOG_FILE=%q APP_ENV_FILE=%q" "$ECS_PROJECT_DIR" "$OK_FILE" "$FAIL_FILE" "$LOG_FILE" "$APP_ENV_FILE")
@@ -455,16 +474,14 @@ jobs:
               echo 'DEFAULT_ADMIN_PASSWORD is missing or too short in backend/.env. Set repository secret SFA_DEFAULT_ADMIN_PASSWORD.'
               exit 1
             fi
-            # Each image build is retried up to 3x: the ECS host's Docker registry
-            # mirror occasionally fails DNS resolution (transient), which used to
-            # fail the whole deploy and require a manual re-run.
             nohup sh -c '
-              ( docker compose -f docker-compose.prod.yml build backend || { sleep 10; docker compose -f docker-compose.prod.yml build backend; } || { sleep 15; docker compose -f docker-compose.prod.yml build backend; } ) &&
+              gzip -dc /tmp/sfa-backend.tar.gz | docker load &&
+              rm -f /tmp/sfa-backend.tar.gz &&
               if [ "${RESET_ADMIN_PASSWORD_ON_DEPLOY:-false}" = "true" ]; then
                 docker compose -f docker-compose.prod.yml run --rm --no-deps backend python -m app.ops.reset_admin_password;
               fi &&
               ( docker compose -f docker-compose.prod.yml build frontend || { sleep 10; docker compose -f docker-compose.prod.yml build frontend; } || { sleep 15; docker compose -f docker-compose.prod.yml build frontend; } ) &&
-              docker compose -f docker-compose.prod.yml up -d &&
+              docker compose -f docker-compose.prod.yml up -d --no-build &&
               touch "$OK_FILE" || touch "$FAIL_FILE"
             ' > "$LOG_FILE" 2>&1 &
             echo 'Build started on ECS'

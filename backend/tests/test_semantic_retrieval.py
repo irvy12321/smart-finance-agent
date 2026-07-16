@@ -1,13 +1,17 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import yaml
 
 from app.rag import embed as embed_module
 from app.rag.embed import BaseEmbedder, SemanticEmbedder
 from app.rag.retriever import Retriever
 from app.rag.vector_store import VectorStore
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class _NamedEmbedder(BaseEmbedder):
@@ -27,6 +31,31 @@ class _NamedEmbedder(BaseEmbedder):
 
     def get_index_config(self) -> dict:
         return {**super().get_index_config(), "model": self.model, "backend": "fake"}
+
+
+def test_production_deploy_uses_prebuilt_semantic_backend_image():
+    compose = yaml.safe_load(
+        (PROJECT_ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    )
+    backend = compose["services"]["backend"]
+    environment = dict(item.split("=", 1) for item in backend["environment"])
+
+    assert backend["image"] == "sfa-backend:latest"
+    assert environment["RAG_EMBEDDING_MODE"] == "semantic"
+    assert environment["RAG_EMBEDDING_LOCAL_FILES_ONLY"] == "true"
+    assert environment["RAG_SEMANTIC_FAILURE_POLICY"] == "error"
+    assert environment["RAG_EMBEDDING_MODEL"] == "BAAI/bge-small-zh-v1.5"
+
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    deploy_section = workflow.split("\n  deploy:\n", 1)[1]
+    assert "name: sfa-backend-image" in workflow
+    assert "outputs: type=docker,dest=/tmp/sfa-backend.tar" in workflow
+    assert "gzip -dc /tmp/sfa-backend.tar.gz | docker load" in deploy_section
+    assert (
+        "docker compose -f docker-compose.prod.yml build backend" not in deploy_section
+    )
 
 
 def test_semantic_embedder_applies_instruction_to_queries_only():
