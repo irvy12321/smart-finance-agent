@@ -288,7 +288,18 @@ class StockPriceTool(BaseTool):
                     "high": float(quote.get("03. high", 0)),
                     "low": float(quote.get("04. low", 0)),
                     "source": "alpha_vantage",
+                    "timestamp": datetime.now().isoformat(),
                 }
+
+                # Alpha Vantage GLOBAL_QUOTE 不返回 name/market_cap/pe_ratio/52w 数据，
+                # 用 MOCK_STOCK_DATA 补全，避免前端显示 0
+                if symbol in MOCK_STOCK_DATA:
+                    mock = MOCK_STOCK_DATA[symbol]
+                    result["name"] = mock.get("name", "")
+                    result["market_cap"] = mock.get("market_cap", 0.0)
+                    result["pe_ratio"] = mock.get("pe_ratio", 0.0)
+                    result["52w_high"] = mock.get("52w_high", 0.0)
+                    result["52w_low"] = mock.get("52w_low", 0.0)
 
                 return ToolResult(
                     success=True,
