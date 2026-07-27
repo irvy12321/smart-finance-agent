@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { toolsApi } from '../services/api'
 import type { StockPriceResponse } from '../types/api'
+import DataStatusBadge from './dashboard/DataStatusBadge'
 
 interface StockPriceCardProps {
   onStockSelect?: (symbol: string) => void
@@ -75,8 +76,11 @@ export default function StockPriceCard({ onStockSelect }: StockPriceCardProps) {
             <DollarSign className="w-5 h-5 text-green-500" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-primary-50">{t('stock.price')}</h3>
-            <p className="text-xs text-primary-400">Real-time market data</p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-primary-50">{t('stock.price')}</h3>
+              {stockData?.is_mock && <DataStatusBadge />}
+            </div>
+            <p className="text-xs text-primary-400">{t('stock.marketData')}</p>
           </div>
         </div>
       </div>

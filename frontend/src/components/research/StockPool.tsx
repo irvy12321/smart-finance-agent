@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Search, Star, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import { toolsApi } from '../../services/api'
+import DataStatusBadge from '../dashboard/DataStatusBadge'
 
 interface Stock {
   symbol: string
   name: string
-  price: number
-  change: number
-  changePercent: number
+  price: number | null
+  change: number | null
+  changePercent: number | null
+  isMock: boolean
   isFavorite: boolean
 }
 
@@ -41,36 +43,34 @@ export default function StockPool({ selectedSymbol, onSelect }: StockPoolProps) 
       setLoading(true)
       setError(null)
 
-      const stockData = await Promise.allSettled(
+      const stockData = await Promise.all(
         defaultStocks.map(async (s) => {
           try {
             const data = await toolsApi.getStockPrice(s.symbol)
             return {
               symbol: s.symbol,
               name: s.name,
-              price: data.price || 0,
-              change: data.change || 0,
-              changePercent: data.change_percent || 0,
+              price: data.price,
+              change: data.change,
+              changePercent: data.change_percent,
+              isMock: Boolean(data.is_mock),
               isFavorite: s.isFavorite,
             }
           } catch {
             return {
               symbol: s.symbol,
               name: s.name,
-              price: 0,
-              change: 0,
-              changePercent: 0,
+              price: null,
+              change: null,
+              changePercent: null,
+              isMock: false,
               isFavorite: s.isFavorite,
             }
           }
         })
       )
 
-      const validStocks = stockData
-        .filter((r): r is PromiseFulfilledResult<Stock> => r.status === 'fulfilled')
-        .map(r => r.value)
-
-      setStocks(validStocks)
+      setStocks(stockData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch stock data')
     } finally {
@@ -152,7 +152,8 @@ export default function StockPool({ selectedSymbol, onSelect }: StockPoolProps) 
           </div>
         ) : (
           filteredStocks.map((stock) => {
-            const isPositive = stock.change >= 0
+            const hasQuote = stock.price !== null && stock.change !== null && stock.changePercent !== null
+            const isPositive = hasQuote && stock.change! >= 0
             const isSelected = selectedSymbol === stock.symbol
             return (
               <button
@@ -165,18 +166,27 @@ export default function StockPool({ selectedSymbol, onSelect }: StockPoolProps) 
                 <div className="flex items-center gap-2">
                   {stock.isFavorite && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />}
                   <div className="text-left">
-                    <div className="text-xs font-bold text-primary-200">{stock.symbol}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-primary-200">{stock.symbol}</span>
+                      {stock.isMock && <DataStatusBadge />}
+                    </div>
                     <div className="text-xs text-primary-500 truncate max-w-[100px]">{stock.name}</div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs font-mono text-primary-200">${stock.price.toFixed(2)}</div>
-                  <div className={`text-xs font-mono flex items-center justify-end gap-0.5 ${
-                    isPositive ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    {isPositive ? '+' : ''}{stock.changePercent.toFixed(1)}%
-                  </div>
+                  {hasQuote ? (
+                    <>
+                      <div className="text-xs font-mono text-primary-200">${stock.price!.toFixed(2)}</div>
+                      <div className={`text-xs font-mono flex items-center justify-end gap-0.5 ${
+                        isPositive ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                        {isPositive ? '+' : ''}{stock.changePercent!.toFixed(1)}%
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-xs text-primary-500">{t('common.dataUnavailable')}</span>
+                  )}
                 </div>
               </button>
             )

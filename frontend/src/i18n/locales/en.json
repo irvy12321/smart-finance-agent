@@ -21,6 +21,9 @@
     "refresh": "Refresh",
     "viewAll": "View All",
     "noData": "No data available",
+    "dataUnavailable": "Data unavailable",
+    "simulatedData": "Simulated",
+    "simulatedDataNotice": "Reproducible simulated data for product demonstration, not live market data",
     "actions": "Actions",
     "status": "Status",
     "date": "Date",
@@ -257,6 +260,7 @@
   "stock": {
     "symbol": "Symbol",
     "price": "Price",
+    "marketData": "Market data",
     "change": "Change",
     "volume": "Volume",
     "marketCap": "Market Cap",

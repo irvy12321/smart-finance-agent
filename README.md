@@ -7,7 +7,7 @@
 
 一个基于 Multi-Agent 架构的智能金融分析平台，使用 FastAPI 后端 + React 前端。
 
-**项目规模**：后端 15k+ / 前端 10k+ 行，51 个 REST 接口，182 个单元测试（后端 137 pytest / 前端 45 Vitest，CI 全绿）；注册 10 个取数 / 分析工具，覆盖行情、财务、新闻、知识库（RAG）、网页爬虫 5 类数据源。
+**项目规模**：后端 15k+ / 前端 10k+ 行，51 个 REST 接口，340 项测试通过（后端 287 passed / 2 skipped，前端 53 passed，CI 全绿）；注册 10 个取数 / 分析工具，覆盖行情、财务、新闻、知识库（RAG）、网页爬虫 5 类数据源。
 
 **核心链路**：用户一句自然语言 → Planner 拆解为带依赖的任务 DAG（Kahn 拓扑排序 + 成环拒绝）→ Executor 按拓扑批次 asyncio 并行执行（超时隔离 / 熔断 / 四级降级 / 死锁恢复）→ Reasoner 综合推理（低置信度触发 Self-Critique）→ 输出带数据溯源与可信度标注的研究报告。
 
@@ -172,7 +172,7 @@ smart-finance-agent/
 │   ├── prompts/               # Agent prompt 模板 (planner/reasoner/report.yaml)
 │   ├── data/                  # SQLite 数据 + golden_dataset.json + memory/（长期记忆）
 │   ├── scripts/               # 评测脚本（rag_eval.py / reliability_eval.py）
-│   ├── tests/                 # 148 个后端单测（pytest）
+│   ├── tests/                 # 289 个后端测试（pytest）
 │   └── requirements.txt       # Python 依赖
 │
 ├── frontend/                   # React 前端 (唯一前端)
@@ -181,7 +181,7 @@ smart-finance-agent/
 │   │   ├── components/        # UI 组件
 │   │   ├── services/          # API 服务
 │   │   ├── hooks/             # 自定义 Hooks
-│   │   └── test/              # 45 个前端测试（Vitest）
+│   │   └── test/              # 53 个前端测试（Vitest）
 │   ├── package.json           # Node 依赖
 │   └── vite.config.ts         # Vite 配置
 │
@@ -191,6 +191,7 @@ smart-finance-agent/
 ├── Dockerfile                  # 后端 Docker 镜像
 ├── docker-compose.yml          # 开发环境编排
 ├── docker-compose.prod.yml     # 生产环境编排
+├── docker-compose.demo.yml     # 公开作品演示覆盖（启用带标记模拟数据）
 ├── docker-compose.monitoring.yml # Prometheus/Grafana 监控栈
 ├── start-all.bat               # Windows 一键启动
 └── README.md
@@ -683,7 +684,8 @@ Dependabot 会每周一自动检查并创建依赖更新 PR。
    CORS_ORIGINS=https://你的域名          # ⚠️ 默认是 localhost，不改前端会被 CORS 拦截
    MIMO_API_KEY=<你的 key>                # 或 DEEPSEEK_API_KEY，二选一
    ALPHA_VANTAGE_API_KEY=<可选，真实股价>
-   ALLOW_MOCK_DATA=true                   # 缺真实数据时回退带标记的模拟数据；严格模式设 false
+   DEMO_MODE=false                        # 正式生产必须保持 false
+   ALLOW_MOCK_DATA=false                  # 正式生产禁止模拟数据
    ```
 
 2. **拉起服务**（在 ECS 项目根目录）：
@@ -693,13 +695,21 @@ Dependabot 会每周一自动检查并创建依赖更新 PR。
    docker-compose -f docker-compose.prod.yml up -d --build
    ```
 
+   公开作品演示站需要在真实接口限流时稳定展示，可显式叠加演示配置：
+
+   ```bash
+   docker compose -f docker-compose.prod.yml -f docker-compose.demo.yml up -d --build
+   ```
+
+   演示配置仍保留生产环境的 JWT、管理员密码和 CORS 校验；所有模拟工具结果必须携带 `source=mock`、`is_mock=true` 和 `SIMULATED DATA` 警告。不要把该覆盖文件用于真实金融生产服务。
+
 3. **验证**：`curl http://localhost:8000/ping` 返回 `{"status":"ok"}`；前端默认经 nginx 暴露在宿主机 80，按 Docker 文档配置 TLS 后再开放 443。
 
 4. **首次创建管理员后**：用上面「ECS 部署后创建用户」的接口添加其它账号，并尽快修改 admin 口令。
 
 ### 自动部署到 ECS（CI/CD：push → SSH 送源码 → ECS 构建）
 
-仓库已内置自动部署流水线（`.github/workflows/ci.yml` 的 `deploy` 任务）：**push 到 `master` 且测试全绿后**，自动「在 runner 上打包源码 → SSH 把源码传到 ECS → 在 ECS 上 `docker compose -f docker-compose.prod.yml build` 并重启」。
+仓库已内置自动部署流水线（`.github/workflows/ci.yml` 的 `deploy` 任务）：**push 到 `master` 且测试全绿后**，自动「在 runner 上打包源码 → SSH 把源码传到 ECS → 在 ECS 上叠加 `docker-compose.demo.yml` 构建并重启公开作品演示站」。真实生产部署只使用 `docker-compose.prod.yml`。
 
 > 为什么不在 ECS 上 `git pull`？国内阿里云 ECS 通常无法稳定连接 github.com（443 超时），所以这里改为由 GitHub runner 把源码经 SSH 直接送到 ECS（ECS 访问 PyPI/npm/DockerHub 正常，构建不受影响）。构建在 ECS 上以 `nohup` 后台运行，流水线轮询其结果，对构建期间 sshd 短暂卡顿有容错。
 

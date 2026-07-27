@@ -22,6 +22,11 @@ def is_production() -> bool:
     return os.getenv("ENVIRONMENT", "development").strip().lower() in _PRODUCTION_ENVS
 
 
+def is_demo_mode() -> bool:
+    """Whether this public deployment is explicitly serving labelled demo data."""
+    return _env_bool("DEMO_MODE", default=False)
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -69,10 +74,19 @@ def check_production_settings():
     if not is_production():
         return True
 
-    if _env_bool("ALLOW_MOCK_DATA", default=False):
+    allow_mock_data = _env_bool("ALLOW_MOCK_DATA", default=False)
+    demo_mode = is_demo_mode()
+
+    if allow_mock_data and not demo_mode:
         raise RuntimeError(
             "FATAL: ALLOW_MOCK_DATA must be false in production. "
-            "Mock financial data cannot be enabled for a production deployment."
+            "Set DEMO_MODE=true only for a public portfolio/demo deployment."
+        )
+
+    if demo_mode and not allow_mock_data:
+        raise RuntimeError(
+            "FATAL: DEMO_MODE=true requires ALLOW_MOCK_DATA=true so the "
+            "deployment mode and data policy cannot disagree."
         )
 
     cors_origins = [
@@ -112,7 +126,13 @@ def check_production_settings():
             "Set a unique production admin password."
         )
 
-    print("[STARTUP] production safety settings check passed")
+    if demo_mode:
+        print(
+            "[STARTUP] DEMO MODE enabled: simulated financial data is allowed "
+            "and must remain visibly labelled"
+        )
+    else:
+        print("[STARTUP] production safety settings check passed")
     return True
 
 

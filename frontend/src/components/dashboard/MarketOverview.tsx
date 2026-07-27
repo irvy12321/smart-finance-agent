@@ -1,14 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
+import { TrendingUp, TrendingDown, Loader2, CircleAlert } from 'lucide-react'
 import { toolsApi } from '../../services/api'
+import DataStatusBadge from './DataStatusBadge'
 
 interface MarketIndex {
   symbol: string
   name: string
-  price: number
-  change: number
-  changePercent: number
+  price: number | null
+  change: number | null
+  changePercent: number | null
+  isMock: boolean
+}
+
+interface MarketOverviewProps {
+  refreshKey?: number
 }
 
 const marketSymbols = [
@@ -18,7 +24,7 @@ const marketSymbols = [
   { symbol: 'VIX', name: 'VIX' },
 ]
 
-export default function MarketOverview() {
+export default function MarketOverview({ refreshKey = 0 }: MarketOverviewProps) {
   const { t } = useTranslation()
   const [data, setData] = useState<MarketIndex[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,34 +35,32 @@ export default function MarketOverview() {
       setLoading(true)
       setError(null)
 
-      const results = await Promise.allSettled(
+      const results = await Promise.all(
         marketSymbols.map(async (s) => {
           try {
             const stock = await toolsApi.getStockPrice(s.symbol)
             return {
               symbol: s.symbol,
               name: s.name,
-              price: stock.price || 0,
-              change: stock.change || 0,
-              changePercent: stock.change_percent || 0,
+              price: stock.price,
+              change: stock.change,
+              changePercent: stock.change_percent,
+              isMock: Boolean(stock.is_mock),
             }
           } catch {
             return {
               symbol: s.symbol,
               name: s.name,
-              price: 0,
-              change: 0,
-              changePercent: 0,
+              price: null,
+              change: null,
+              changePercent: null,
+              isMock: false,
             }
           }
         })
       )
 
-      const validData = results
-        .filter((r): r is PromiseFulfilledResult<MarketIndex> => r.status === 'fulfilled')
-        .map(r => r.value)
-
-      setData(validData)
+      setData(results)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch market data')
     } finally {
@@ -66,7 +70,7 @@ export default function MarketOverview() {
 
   useEffect(() => {
     fetchMarketData()
-  }, [fetchMarketData])
+  }, [fetchMarketData, refreshKey])
 
   if (loading) {
     return (
@@ -96,13 +100,19 @@ export default function MarketOverview() {
   return (
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
       {data.map((index) => {
-        const isPositive = index.change >= 0
+        const hasQuote = index.price !== null && index.change !== null && index.changePercent !== null
+        const isPositive = hasQuote && index.change! >= 0
         return (
           <div key={index.symbol} className="min-h-28 bg-dark-card border border-dark-border rounded-lg p-4">
             <div className="flex items-center justify-between gap-4 mb-2">
-              <span className="text-sm text-primary-400 font-medium">{index.name}</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="truncate text-sm text-primary-400 font-medium">{index.name}</span>
+                {index.isMock && <DataStatusBadge />}
+              </div>
               <div className="w-8 h-8 rounded-lg bg-dark-bg border border-dark-border flex items-center justify-center">
-                {isPositive ? (
+                {!hasQuote ? (
+                  <CircleAlert className="w-4 h-4 text-primary-500" />
+                ) : isPositive ? (
                   <TrendingUp className="w-4 h-4 text-green-400" />
                 ) : (
                   <TrendingDown className="w-4 h-4 text-red-400" />
@@ -110,18 +120,22 @@ export default function MarketOverview() {
               </div>
             </div>
             <div className="text-2xl font-bold text-primary-50 font-mono">
-              {index.price > 0 ? index.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}
+              {hasQuote ? index.price!.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}
             </div>
-            <div className="flex items-center gap-2 mt-2">
-              <span className={`text-sm font-mono ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                {isPositive ? '+' : ''}{index.change.toFixed(2)}
-              </span>
-              <span className={`text-sm font-mono px-2 py-0.5 rounded ${
-                isPositive ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-              }`}>
-                {isPositive ? '+' : ''}{index.changePercent.toFixed(1)}%
-              </span>
-            </div>
+            {hasQuote ? (
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`text-sm font-mono ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                  {isPositive ? '+' : ''}{index.change!.toFixed(2)}
+                </span>
+                <span className={`text-sm font-mono px-2 py-0.5 rounded ${
+                  isPositive ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                }`}>
+                  {isPositive ? '+' : ''}{index.changePercent!.toFixed(1)}%
+                </span>
+              </div>
+            ) : (
+              <div className="mt-2 text-xs text-primary-500">{t('common.dataUnavailable')}</div>
+            )}
           </div>
         )
       })}
