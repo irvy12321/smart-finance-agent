@@ -16,10 +16,11 @@ import {
   FileText
 } from 'lucide-react'
 import { chatApi } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import { cleanAIText } from '../utils/utils'
 import type { ChatMessage, ConversationListItem } from '../types/api'
 
-const CHAT_STORAGE_KEY = 'chat_state'
+const CHAT_STORAGE_KEY_PREFIX = 'chat_state'
 
 const REPORT_LINK_RE = /\n*(?:完整研究报告|Full research report):\s*\/report\/([0-9a-f-]{4,})\s*$/i
 
@@ -34,32 +35,49 @@ interface SavedChatState {
   messages: ChatMessage[]
 }
 
-function saveChatState(state: SavedChatState) {
+function getChatStorageKey(userId: number | undefined): string | null {
+  return userId === undefined ? null : `${CHAT_STORAGE_KEY_PREFIX}:${userId}`
+}
+
+function saveChatState(userId: number | undefined, state: SavedChatState) {
+  const key = getChatStorageKey(userId)
+  if (!key) return
   try {
-    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(state))
+    localStorage.setItem(key, JSON.stringify(state))
   } catch { /* ignore */ }
 }
 
-function loadChatState(): SavedChatState | null {
+function loadChatState(userId: number | undefined): SavedChatState | null {
+  const key = getChatStorageKey(userId)
+  if (!key) return null
   try {
-    const raw = localStorage.getItem(CHAT_STORAGE_KEY)
+    const raw = localStorage.getItem(key)
     if (raw) return JSON.parse(raw)
   } catch { /* ignore */ }
   return null
 }
 
-function clearChatState() {
+function clearChatState(userId: number | undefined) {
+  const key = getChatStorageKey(userId)
+  if (!key) return
   try {
-    localStorage.removeItem(CHAT_STORAGE_KEY)
+    localStorage.removeItem(key)
   } catch { /* ignore */ }
+}
+
+function getResponseStatus(error: unknown): number | undefined {
+  return (error as { response?: { status?: number } })?.response?.status
 }
 
 export default function Chat() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const userId = user?.id
 
-  // Initialize from localStorage
-  const saved = loadChatState()
+  // Conversation state is user-scoped so account switches cannot reuse a
+  // conversation owned by another user.
+  const saved = loadChatState(userId)
   const [messages, setMessages] = useState<ChatMessage[]>(saved?.messages || [])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -70,9 +88,9 @@ export default function Chat() {
   // Persist state when it changes
   useEffect(() => {
     if (conversationId && messages.length > 0) {
-      saveChatState({ conversationId, messages })
+      saveChatState(userId, { conversationId, messages })
     }
-  }, [conversationId, messages])
+  }, [conversationId, messages, userId])
 
   useEffect(() => {
     fetchConversations()
@@ -101,7 +119,7 @@ export default function Chat() {
       const data = await chatApi.createConversation()
       setConversationId(data.conversation_id)
       setMessages([])
-      clearChatState()
+      clearChatState(userId)
       fetchConversations()
     } catch (error) {
       console.error('Failed to create conversation:', error)
@@ -113,7 +131,7 @@ export default function Chat() {
       const data = await chatApi.getHistory(convId)
       setConversationId(convId)
       setMessages(data.messages || [])
-      saveChatState({ conversationId: convId, messages: data.messages || [] })
+      saveChatState(userId, { conversationId: convId, messages: data.messages || [] })
     } catch (error) {
       console.error('Failed to load conversation:', error)
     }
@@ -125,7 +143,7 @@ export default function Chat() {
       if (conversationId === convId) {
         setConversationId(null)
         setMessages([])
-        clearChatState()
+        clearChatState(userId)
       }
       fetchConversations()
     } catch (error) {
@@ -136,9 +154,10 @@ export default function Chat() {
   const handleSend = async () => {
     if (!input.trim() || loading) return
 
+    const messageText = input.trim()
     const userMessage: ChatMessage = {
       role: 'user',
-      content: input,
+      content: messageText,
       timestamp: new Date().toISOString(),
     }
 
@@ -155,7 +174,21 @@ export default function Chat() {
         fetchConversations()
       }
 
-      const data = await chatApi.sendMessage(convId!, input)
+      let data
+      try {
+        data = await chatApi.sendMessage(convId!, messageText)
+      } catch (error) {
+        if (getResponseStatus(error) !== 403) throw error
+
+        // A pre-fix browser may still hold a conversation ID from another
+        // account. Recover once with a fresh, correctly owned conversation.
+        const convData = await chatApi.createConversation()
+        convId = convData.conversation_id
+        setConversationId(convId)
+        clearChatState(userId)
+        fetchConversations()
+        data = await chatApi.sendMessage(convId, messageText)
+      }
 
       const assistantMessage: ChatMessage = {
         role: 'assistant',
