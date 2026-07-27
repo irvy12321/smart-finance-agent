@@ -114,6 +114,7 @@ MIMO_API_KEY=your-api-key
 LLM_PROVIDER=mimo
 
 # Production reliability defaults
+DEMO_MODE=false
 ALLOW_MOCK_DATA=false
 LITELLM_LOCAL_MODEL_COST_MAP=true
 CORS_ORIGINS=https://your-domain.example
@@ -125,9 +126,23 @@ ENVIRONMENT=production
 
 Production startup fails fast when `JWT_SECRET_KEY` is missing, weak, or still a
 placeholder; when `DEFAULT_ADMIN_PASSWORD` is missing, weak, or still a
-placeholder; when `ALLOW_MOCK_DATA=true`; or when `CORS_ORIGINS` contains
-wildcard/localhost origins. Production startup also fails if the active LLM
-provider API key is missing or still a placeholder.
+placeholder; when mock data is enabled without explicit demo mode; or when
+`CORS_ORIGINS` contains wildcard/localhost origins. Production startup also
+fails if the active LLM provider API key is missing or still a placeholder.
+
+### Public portfolio demo
+
+The public demo may use deterministic simulated data when a market-data provider
+is unavailable or rate-limited. Apply the demo override explicitly:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.demo.yml up -d --build
+```
+
+This sets `DEMO_MODE=true` and `ALLOW_MOCK_DATA=true`. Simulated tool responses
+remain tagged with `source=mock`, `is_mock=true`, and the `SIMULATED DATA`
+warning; the dashboard also shows a visible simulated-data badge. Do not apply
+this override to a real financial production service.
 
 ### Frontend (build args)
 

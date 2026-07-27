@@ -31,9 +31,29 @@ def test_jwt_secret_rejects_placeholder(monkeypatch):
 def test_production_rejects_mock_data(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("ALLOW_MOCK_DATA", "true")
+    monkeypatch.delenv("DEMO_MODE", raising=False)
     monkeypatch.setenv("CORS_ORIGINS", "https://finance.example.com")
 
     with pytest.raises(RuntimeError, match="ALLOW_MOCK_DATA"):
+        check_production_settings()
+
+
+def test_production_demo_allows_labelled_mock_data(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("DEMO_MODE", "true")
+    monkeypatch.setenv("ALLOW_MOCK_DATA", "true")
+    monkeypatch.setenv("CORS_ORIGINS", "https://finance.example.com")
+    monkeypatch.setenv("DEFAULT_ADMIN_PASSWORD", "safe-admin-password-123")
+
+    assert check_production_settings() is True
+
+
+def test_production_demo_requires_mock_data(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("DEMO_MODE", "true")
+    monkeypatch.setenv("ALLOW_MOCK_DATA", "false")
+
+    with pytest.raises(RuntimeError, match="DEMO_MODE=true requires"):
         check_production_settings()
 
 
@@ -78,6 +98,7 @@ def test_development_allows_mock_and_local_cors(monkeypatch):
 
 def test_run_startup_checks_accepts_safe_production(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("DEMO_MODE", raising=False)
     monkeypatch.setenv("JWT_SECRET_KEY", "safe-production-secret-value-1234567890")
     monkeypatch.setenv("ALLOW_MOCK_DATA", "false")
     monkeypatch.setenv("CORS_ORIGINS", "https://finance.example.com")

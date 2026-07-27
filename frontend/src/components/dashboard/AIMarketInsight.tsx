@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Brain, AlertTriangle, Calendar } from 'lucide-react'
+import DataStatusBadge from './DataStatusBadge'
 
 export default function AIMarketInsight() {
   const { t } = useTranslation()
@@ -47,7 +48,7 @@ export default function AIMarketInsight() {
             {t('dashboard.aiInsights')}
           </span>
         </div>
-        <span className="text-xs text-primary-500 whitespace-nowrap">{t('dashboard.updatedAgo')}</span>
+        <DataStatusBadge />
       </div>
 
       <div className="min-h-0 flex-1 p-4 sm:p-5 space-y-4 overflow-auto">

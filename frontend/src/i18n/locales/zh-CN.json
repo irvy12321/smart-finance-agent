@@ -21,6 +21,9 @@
     "refresh": "刷新",
     "viewAll": "查看全部",
     "noData": "暂无数据",
+    "dataUnavailable": "数据暂不可用",
+    "simulatedData": "模拟数据",
+    "simulatedDataNotice": "用于功能演示的可复现模拟数据，不代表真实市场行情",
     "actions": "操作",
     "status": "状态",
     "date": "日期",
@@ -257,6 +260,7 @@
   "stock": {
     "symbol": "代码",
     "price": "价格",
+    "marketData": "市场数据",
     "change": "涨跌",
     "volume": "成交量",
     "marketCap": "市值",

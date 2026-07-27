@@ -76,6 +76,31 @@ describe('StockPriceCard', () => {
     })
   })
 
+  it('labels a simulated quote', async () => {
+    vi.mocked(toolsApi.getStockPrice).mockResolvedValueOnce({
+      symbol: 'AAPL',
+      name: 'Apple Inc.',
+      price: 182.52,
+      change: 1.25,
+      change_percent: 0.69,
+      volume: 50000000,
+      market_cap: 2800000000000,
+      pe_ratio: 28.5,
+      high_52w: 199.62,
+      low_52w: 124.17,
+      timestamp: '',
+      source: 'mock',
+      is_mock: true,
+      warning: 'SIMULATED DATA - NOT FOR INVESTMENT',
+    })
+
+    const user = userEvent.setup()
+    render(<StockPriceCard />)
+    await user.click(screen.getByText('AAPL'))
+
+    expect(await screen.findByText('Simulated')).toBeInTheDocument()
+  })
+
   it('calls onStockSelect when button clicked', async () => {
     const mockStock = {
       symbol: 'AAPL',

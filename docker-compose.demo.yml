@@ -1,0 +1,7 @@
+services:
+  backend:
+    environment:
+      # Only the public portfolio demo uses this override. Tool results remain
+      # visibly tagged with source=mock/is_mock=true/SIMULATED DATA.
+      DEMO_MODE: "true"
+      ALLOW_MOCK_DATA: "true"

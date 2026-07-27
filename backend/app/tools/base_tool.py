@@ -15,7 +15,14 @@ def mock_enabled() -> bool:
     data_confidence. Set ``ALLOW_MOCK_DATA=false`` for strict real-data-only mode
     where unavailable sources surface an explicit error instead.
     """
-    return os.getenv("ALLOW_MOCK_DATA", "true").lower() in ("1", "true", "yes")
+    configured = os.getenv("ALLOW_MOCK_DATA")
+    if configured is not None:
+        return configured.strip().lower() in ("1", "true", "yes", "on")
+
+    # Development stays easy to run, while production fails closed even when
+    # Compose or an operator forgets to define the flag explicitly.
+    environment = os.getenv("ENVIRONMENT", "development").strip().lower()
+    return environment not in ("prod", "production")
 
 
 @dataclass

@@ -478,10 +478,10 @@ jobs:
               gzip -dc /tmp/sfa-backend.tar.gz | docker load &&
               rm -f /tmp/sfa-backend.tar.gz &&
               if [ "${RESET_ADMIN_PASSWORD_ON_DEPLOY:-false}" = "true" ]; then
-                docker compose -f docker-compose.prod.yml run --rm --no-deps backend python -m app.ops.reset_admin_password;
+                docker compose -f docker-compose.prod.yml -f docker-compose.demo.yml run --rm --no-deps backend python -m app.ops.reset_admin_password;
               fi &&
-              ( docker compose -f docker-compose.prod.yml build frontend || { sleep 10; docker compose -f docker-compose.prod.yml build frontend; } || { sleep 15; docker compose -f docker-compose.prod.yml build frontend; } ) &&
-              docker compose -f docker-compose.prod.yml up -d --no-build &&
+              ( docker compose -f docker-compose.prod.yml -f docker-compose.demo.yml build frontend || { sleep 10; docker compose -f docker-compose.prod.yml -f docker-compose.demo.yml build frontend; } || { sleep 15; docker compose -f docker-compose.prod.yml -f docker-compose.demo.yml build frontend; } ) &&
+              docker compose -f docker-compose.prod.yml -f docker-compose.demo.yml up -d --no-build &&
               touch "$OK_FILE" || touch "$FAIL_FILE"
             ' > "$LOG_FILE" 2>&1 &
             echo 'Build started on ECS'

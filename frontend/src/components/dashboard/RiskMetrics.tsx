@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Shield, TrendingDown, BarChart3, PieChart } from 'lucide-react'
+import DataStatusBadge from './DataStatusBadge'
 
 export default function RiskMetrics() {
   const { t } = useTranslation()
@@ -48,6 +49,7 @@ export default function RiskMetrics() {
           <Shield className="w-3.5 h-3.5 text-primary-500" />
           <span className="text-xs font-semibold text-primary-300 uppercase tracking-wider">{t('dashboard.riskMetrics')}</span>
         </div>
+        <DataStatusBadge />
       </div>
       <div className="p-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {metrics.map((metric) => {

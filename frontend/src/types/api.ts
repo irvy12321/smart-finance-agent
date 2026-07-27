@@ -253,6 +253,8 @@ export interface StockPriceResponse {
   low_52w: number
   timestamp: string
   source: string
+  is_mock?: boolean
+  warning?: string
 }
 
 export interface StockHistoryResponse {

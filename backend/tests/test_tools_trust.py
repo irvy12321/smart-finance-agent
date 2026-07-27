@@ -1,6 +1,6 @@
 import pytest
 
-from app.tools.base_tool import MOCK_WARNING
+from app.tools.base_tool import MOCK_WARNING, mock_enabled
 from app.tools.financial_report_tool import FinancialReportTool
 from app.tools.news_summary_tool import NewsSummaryTool
 from app.tools.stock_price_tool import (
@@ -37,6 +37,20 @@ def test_parse_percent_handles_alpha_vantage_string():
     assert _parse_percent(0.69) == pytest.approx(0.69)
     assert _parse_percent(None) == 0.0
     assert _parse_percent("n/a") == 0.0
+
+
+def test_mock_defaults_off_in_production(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("ALLOW_MOCK_DATA", raising=False)
+
+    assert mock_enabled() is False
+
+
+def test_mock_defaults_on_in_development(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("ALLOW_MOCK_DATA", raising=False)
+
+    assert mock_enabled() is True
 
 
 @pytest.mark.asyncio

@@ -2,14 +2,20 @@ import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TrendingUp, TrendingDown, ExternalLink, Loader2 } from 'lucide-react'
 import { toolsApi } from '../../services/api'
+import DataStatusBadge from './DataStatusBadge'
 
 interface Stock {
   symbol: string
   name: string
-  price: number
-  change: number
-  changePercent: number
-  volume: number
+  price: number | null
+  change: number | null
+  changePercent: number | null
+  volume: number | null
+  isMock: boolean
+}
+
+interface HotStocksListProps {
+  refreshKey?: number
 }
 
 const stockSymbols = [
@@ -23,7 +29,7 @@ const stockSymbols = [
   { symbol: 'JPM', name: 'JPMorgan Chase' },
 ]
 
-export default function HotStocksList() {
+export default function HotStocksList({ refreshKey = 0 }: HotStocksListProps) {
   const { t } = useTranslation()
   const [stocks, setStocks] = useState<Stock[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,36 +40,34 @@ export default function HotStocksList() {
       setLoading(true)
       setError(null)
 
-      const results = await Promise.allSettled(
+      const results = await Promise.all(
         stockSymbols.map(async (s) => {
           try {
             const data = await toolsApi.getStockPrice(s.symbol)
             return {
               symbol: s.symbol,
               name: s.name,
-              price: data.price || 0,
-              change: data.change || 0,
-              changePercent: data.change_percent || 0,
-              volume: data.volume || 0,
+              price: data.price,
+              change: data.change,
+              changePercent: data.change_percent,
+              volume: data.volume,
+              isMock: Boolean(data.is_mock),
             }
           } catch {
             return {
               symbol: s.symbol,
               name: s.name,
-              price: 0,
-              change: 0,
-              changePercent: 0,
-              volume: 0,
+              price: null,
+              change: null,
+              changePercent: null,
+              volume: null,
+              isMock: false,
             }
           }
         })
       )
 
-      const validStocks = results
-        .filter((r): r is PromiseFulfilledResult<Stock> => r.status === 'fulfilled')
-        .map(r => r.value)
-
-      setStocks(validStocks)
+      setStocks(results)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch stocks')
     } finally {
@@ -73,7 +77,7 @@ export default function HotStocksList() {
 
   useEffect(() => {
     fetchStocks()
-  }, [fetchStocks])
+  }, [fetchStocks, refreshKey])
 
   const formatVolume = (vol: number) => {
     if (vol >= 1000000) return `${(vol / 1000000).toFixed(0)}M`
@@ -130,35 +134,41 @@ export default function HotStocksList() {
           </thead>
           <tbody>
             {stocks.map((stock) => {
-              const isPositive = stock.change >= 0
+              const hasQuote = stock.price !== null && stock.change !== null && stock.changePercent !== null
+              const isPositive = hasQuote && stock.change! >= 0
               return (
                 <tr key={stock.symbol} className="border-b border-dark-border hover:bg-dark-bg/50 cursor-pointer transition-colors">
                   <td className="px-3 py-2">
-                    <div>
+                    <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-primary-200">{stock.symbol}</span>
                       <span className="text-xs text-primary-500 ml-2 hidden lg:inline">{stock.name}</span>
+                      {stock.isMock && <DataStatusBadge />}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right">
                     <span className="text-xs font-mono text-primary-200">
-                      {stock.price > 0 ? `$${stock.price.toFixed(2)}` : '--'}
+                      {hasQuote ? `$${stock.price!.toFixed(2)}` : '--'}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    {hasQuote ? (
+                      <div className="flex items-center justify-end gap-1">
                       {isPositive ? (
                         <TrendingUp className="w-3 h-3 text-green-400" />
                       ) : (
                         <TrendingDown className="w-3 h-3 text-red-400" />
                       )}
                       <span className={`text-xs font-mono ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                        {isPositive ? '+' : ''}{stock.changePercent.toFixed(1)}%
+                        {isPositive ? '+' : ''}{stock.changePercent!.toFixed(1)}%
                       </span>
-                    </div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-primary-500">{t('common.dataUnavailable')}</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <span className="text-xs font-mono text-primary-400">
-                      {stock.volume > 0 ? formatVolume(stock.volume) : '--'}
+                      {stock.volume !== null && stock.volume > 0 ? formatVolume(stock.volume) : '--'}
                     </span>
                   </td>
                 </tr>
