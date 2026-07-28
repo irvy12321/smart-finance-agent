@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import ReactMarkdown from 'react-markdown'
+import rehypeSanitize from 'rehype-sanitize'
+import remarkGfm from 'remark-gfm'
 import {
   Send,
   Bot,
@@ -17,7 +21,6 @@ import {
 } from 'lucide-react'
 import { chatApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
-import { cleanAIText } from '../utils/utils'
 import type { ChatMessage, ConversationListItem } from '../types/api'
 
 const CHAT_STORAGE_KEY_PREFIX = 'chat_state'
@@ -28,6 +31,37 @@ function extractReportLink(content: string): { text: string; reportTaskId: strin
   const match = content.match(REPORT_LINK_RE)
   if (!match) return { text: content, reportTaskId: null }
   return { text: content.replace(REPORT_LINK_RE, '').trimEnd(), reportTaskId: match[1] }
+}
+
+const chatMarkdownComponents = {
+  h1: ({ children }: { children?: ReactNode }) => <h1 className="mb-2 text-base font-semibold text-primary-100">{children}</h1>,
+  h2: ({ children }: { children?: ReactNode }) => <h2 className="mb-2 mt-3 text-sm font-semibold text-primary-100">{children}</h2>,
+  h3: ({ children }: { children?: ReactNode }) => <h3 className="mb-1 mt-3 text-sm font-semibold text-primary-100">{children}</h3>,
+  p: ({ children }: { children?: ReactNode }) => <p className="mb-2 text-sm leading-relaxed last:mb-0">{children}</p>,
+  ul: ({ children }: { children?: ReactNode }) => <ul className="mb-2 list-disc space-y-1 pl-5 text-sm">{children}</ul>,
+  ol: ({ children }: { children?: ReactNode }) => <ol className="mb-2 list-decimal space-y-1 pl-5 text-sm">{children}</ol>,
+  table: ({ children }: { children?: ReactNode }) => <div className="my-3 overflow-x-auto"><table className="min-w-full border border-dark-border text-xs">{children}</table></div>,
+  th: ({ children }: { children?: ReactNode }) => <th className="border border-dark-border bg-dark-hover px-2 py-1.5 text-left text-primary-100">{children}</th>,
+  td: ({ children }: { children?: ReactNode }) => <td className="border border-dark-border px-2 py-1.5 align-top text-primary-200">{children}</td>,
+  code: ({ children }: { children?: ReactNode }) => <code className="rounded bg-dark-bg px-1 py-0.5 text-primary-200">{children}</code>,
+}
+
+function ChatMarkdown({ content }: { content: string }) {
+  const normalized = content
+    .replace(/<br\s*\/?>/gi, '；')
+    .replace(/<\/?[^>]+>/g, '')
+
+  return (
+    <div className="chat-bubble-text min-w-0">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeSanitize]}
+        components={chatMarkdownComponents}
+      >
+        {normalized}
+      </ReactMarkdown>
+    </div>
+  )
 }
 
 interface SavedChatState {
@@ -393,7 +427,7 @@ export default function Chat() {
                     const { text, reportTaskId } = extractReportLink(message.content)
                     return (
                       <>
-                        <p className="chat-bubble-text text-sm">{cleanAIText(text)}</p>
+                        <ChatMarkdown content={text} />
                         {reportTaskId && (
                           <button
                             onClick={() => navigate(`/report/${reportTaskId}`)}

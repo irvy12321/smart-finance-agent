@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -149,3 +150,90 @@ def test_clean_json_response():
     plain_text = "This is a plain text response"
     result = _clean_json_response(plain_text)
     assert result == plain_text
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_timeout_persists_degraded_report_with_link():
+    from app.api import chat
+
+    captured_timeouts = []
+
+    async def raise_timeout(awaitable, timeout):
+        captured_timeouts.append(timeout)
+        if len(captured_timeouts) == 1:
+            awaitable.close()
+            raise asyncio.TimeoutError
+        return await awaitable
+
+    with (
+        patch("app.api.chat.asyncio.wait_for", side_effect=raise_timeout),
+        patch(
+            "app.api.chat.generate_chat_response",
+            new=AsyncMock(return_value="完整的降级分析。"),
+        ),
+        patch("app.api.chat.storage") as mock_report_storage,
+    ):
+        (
+            response,
+            sources,
+            confidence,
+            report_task_id,
+        ) = await chat.generate_orchestrator_response(
+            "分析 MSFT 财务表现", AsyncMock(), "zh", user_id=7
+        )
+
+    assert (
+        captured_timeouts
+        == [
+            chat.CHAT_ORCHESTRATOR_TIMEOUT_SECONDS,
+            chat.CHAT_FALLBACK_TIMEOUT_SECONDS,
+        ]
+        == [240, 60]
+    )
+    assert sources == []
+    assert confidence == 0.5
+    assert report_task_id
+    assert f"/report/{report_task_id}" in response
+    mock_report_storage.create_task.assert_called_once()
+    persisted_result = mock_report_storage.update_task_result.call_args.args[1]
+    assert persisted_result["answer"] == "完整的降级分析。"
+    assert persisted_result["is_fallback"] is True
+
+
+def test_complete_text_after_token_limit_removes_partial_sentence_only():
+    from app.api.chat import _complete_text_after_token_limit
+
+    assert (
+        _complete_text_after_token_limit("第一句完整。最后一句被截断") == "第一句完整。"
+    )
+    assert _complete_text_after_token_limit("两句都完整。") == "两句都完整。"
+    assert (
+        _complete_text_after_token_limit("没有标点但内容可用") == "没有标点但内容可用"
+    )
+
+
+@pytest.mark.asyncio
+async def test_direct_chat_uses_larger_budget_and_removes_token_limited_tail():
+    from app.api import chat
+
+    mock_direct_llm = MagicMock()
+    mock_direct_llm.chat = AsyncMock(
+        return_value=MagicMock(
+            content="完整结论。最后一句被截断",
+            usage={"completion_tokens": chat.DIRECT_CHAT_MAX_TOKENS},
+        )
+    )
+    mock_retriever = MagicMock()
+    mock_retriever.doc_count = 0
+
+    with (
+        patch(
+            "app.infrastructure.llm_client.LLMClient.get_instance",
+            return_value=mock_direct_llm,
+        ),
+        patch("app.rag.retriever.Retriever", return_value=mock_retriever),
+    ):
+        response = await chat.generate_chat_response("分析微软", "", language="zh")
+
+    assert response == "完整结论。"
+    assert mock_direct_llm.chat.await_args.kwargs["max_tokens"] == 2048

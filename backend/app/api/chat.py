@@ -6,6 +6,7 @@ Chat API routes - 提供聊天接口
 """
 
 import asyncio
+import os
 import re
 import uuid
 from datetime import datetime
@@ -30,6 +31,12 @@ from app.utils.logger import get_logger
 logger = get_logger("api.chat")
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+CHAT_ORCHESTRATOR_TIMEOUT_SECONDS = float(
+    os.getenv("CHAT_ORCHESTRATOR_TIMEOUT_SECONDS", "240")
+)
+DIRECT_CHAT_MAX_TOKENS = int(os.getenv("DIRECT_CHAT_MAX_TOKENS", "2048"))
+CHAT_FALLBACK_TIMEOUT_SECONDS = float(os.getenv("CHAT_FALLBACK_TIMEOUT_SECONDS", "60"))
 
 # 金融关键词，匹配时走 orchestrator 全流水线
 FINANCIAL_KEYWORDS = re.compile(
@@ -398,6 +405,112 @@ def _persist_chat_report(
         return None
 
 
+def _complete_text_after_token_limit(text: str) -> str:
+    """Drop only a trailing partial sentence from a token-limited response."""
+    stripped = (text or "").rstrip()
+    if not stripped or stripped.endswith(tuple("。！？.!?）)]】\"'")):
+        return stripped
+
+    last_boundary = max(stripped.rfind(mark) for mark in "。！？.!?")
+    if last_boundary >= 0:
+        return stripped[: last_boundary + 1].rstrip()
+    return stripped
+
+
+def _fallback_report_summary(response: str, max_chars: int = 500) -> str:
+    compact = re.sub(r"\s+", " ", response or "").strip()
+    if len(compact) <= max_chars:
+        return compact
+    excerpt = compact[:max_chars]
+    last_boundary = max(excerpt.rfind(mark) for mark in "。！？.!?")
+    return excerpt[: last_boundary + 1].strip() if last_boundary >= 0 else excerpt
+
+
+def _persist_degraded_chat_report(
+    query: str,
+    response: str,
+    user_id: int | None,
+    language: str,
+    reason: str,
+) -> str | None:
+    """Persist a readable report even when the full Agent pipeline times out."""
+    try:
+        symbol_match = re.search(r"\b[A-Z]{1,5}\b", query)
+        symbol = symbol_match.group(0) if symbol_match else "AI"
+        title = (
+            f"{symbol} 研究报告（降级生成）"
+            if language == "zh"
+            else f"{symbol} Research Report (Degraded)"
+        )
+        result_dict = {
+            "answer": response,
+            "report_markdown": response,
+            "report_title": title,
+            "summary": _fallback_report_summary(response),
+            "key_findings": [],
+            "risk_factors": [],
+            "market_trends": [],
+            "recommendations": [],
+            "confidence": 0.5,
+            "chart_paths": [],
+            "chart_specs": [],
+            "sources": [],
+            "dag_subtasks": [
+                {
+                    "id": "direct_fallback",
+                    "tool": "llm_synthesize",
+                    "desc": "Generate a degraded report after pipeline timeout",
+                    "priority": 1,
+                    "depends_on": [],
+                }
+            ],
+            "task_states": {
+                "direct_fallback": {
+                    "status": "degraded",
+                    "tool": "llm_synthesize",
+                    "error": reason,
+                }
+            },
+            "elapsed": CHAT_ORCHESTRATOR_TIMEOUT_SECONDS,
+            "total_tasks": 1,
+            "success_tasks": 1,
+            "failed_tasks": 0,
+            "plan_reasoning": reason,
+            "reasoning_insights": [],
+            "is_fallback": True,
+            "fallback_reason": reason,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+
+        task_id = str(uuid.uuid4())[:8]
+        storage.create_task(task_id, query, priority=1, user_id=user_id)
+        storage.update_task_result(task_id, result_dict, [])
+        logger.info(f"[orchestrator] Degraded chat report persisted as {task_id}")
+        return task_id
+    except Exception as e:
+        logger.warning(f"[orchestrator] Failed to persist degraded report: {e}")
+        return None
+
+
+def _attach_report_link(text: str, task_id: str | None, language: str) -> str:
+    if not task_id:
+        return text
+    label = "完整研究报告" if language == "zh" else "Full research report"
+    return f"{text.rstrip()}\n\n{label}: /report/{task_id}"
+
+
+async def _generate_degraded_response(message: str, language: str) -> str:
+    try:
+        return await asyncio.wait_for(
+            generate_chat_response(message, "", language),
+            timeout=CHAT_FALLBACK_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        if language == "zh":
+            return "本次研究与降级生成均已超时，请稍后重试。"
+        return "The research and fallback generation both timed out. Please try again."
+
+
 async def generate_orchestrator_response(
     message: str, orchestrator, language: str = "en", user_id: int | None = None
 ) -> tuple[str, list, float, str | None]:
@@ -410,7 +523,9 @@ async def generate_orchestrator_response(
 
     try:
         logger.info(f"[orchestrator] Processing financial query: {message[:80]}...")
-        result = await asyncio.wait_for(orchestrator.run(message), timeout=90)
+        result = await asyncio.wait_for(
+            orchestrator.run(message), timeout=CHAT_ORCHESTRATOR_TIMEOUT_SECONDS
+        )
 
         sources = []
         if result.exec_result:
@@ -446,24 +561,34 @@ async def generate_orchestrator_response(
         confidence = 0.9 if result.reasoning_result else 0.75
 
         report_task_id = _persist_chat_report(result, message, user_id, language)
-        if report_task_id:
-            if language == "zh":
-                response_text += f"\n\n完整研究报告: /report/{report_task_id}"
-            else:
-                response_text += f"\n\nFull research report: /report/{report_task_id}"
+        response_text = _attach_report_link(response_text, report_task_id, language)
 
         return response_text, sources, confidence, report_task_id
 
     except asyncio.TimeoutError:
         logger.warning(
-            "[orchestrator] Pipeline timed out (90s), falling back to direct LLM"
+            "[orchestrator] Pipeline timed out after %.0fs; generating degraded report",
+            CHAT_ORCHESTRATOR_TIMEOUT_SECONDS,
         )
-        fallback = await generate_chat_response(message, "", language)
-        return fallback, [], 0.5, None
+        fallback = await _generate_degraded_response(message, language)
+        report_task_id = _persist_degraded_chat_report(
+            message,
+            fallback,
+            user_id,
+            language,
+            reason="Agent pipeline timeout",
+        )
+        fallback = _attach_report_link(fallback, report_task_id, language)
+        return fallback, [], 0.5, report_task_id
     except Exception as e:
         logger.error(f"[orchestrator] Error: {type(e).__name__}: {e}")
-        fallback = await generate_chat_response(message, "", language)
-        return fallback, [], 0.5, None
+        fallback = await _generate_degraded_response(message, language)
+        reason = f"Agent pipeline error: {type(e).__name__}"
+        report_task_id = _persist_degraded_chat_report(
+            message, fallback, user_id, language, reason=reason
+        )
+        fallback = _attach_report_link(fallback, report_task_id, language)
+        return fallback, [], 0.5, report_task_id
 
 
 def _clean_json_response(text: str, language: str = "en") -> str:
@@ -571,16 +696,25 @@ async def generate_chat_response(
     if profile_ctx:
         system_content += f"\n\n{profile_ctx}"
 
+    if language == "zh":
+        system_content += (
+            "\n请在1500字以内完整作答，优先保留结论和数据来源，不要在句子中途结束。"
+        )
+
     system_msg = {"role": "system", "content": system_content}
     llm_messages = [system_msg, *messages, {"role": "user", "content": message}]
 
     try:
-        resp = await llm.chat(llm_messages, max_tokens=1024)
-        return resp.content or (
+        resp = await llm.chat(llm_messages, max_tokens=DIRECT_CHAT_MAX_TOKENS)
+        content = resp.content or (
             "抱歉，无法生成回复。请尝试重新表述您的问题。"
             if language == "zh"
             else "I apologize, but I couldn't generate a response. Please try rephrasing your question."
         )
+        completion_tokens = int(resp.usage.get("completion_tokens", 0))
+        if completion_tokens >= int(DIRECT_CHAT_MAX_TOKENS * 0.95):
+            content = _complete_text_after_token_limit(content)
+        return content
     except Exception as e:
         logger.error(f"LLM chat error: {e}")
         if language == "zh":

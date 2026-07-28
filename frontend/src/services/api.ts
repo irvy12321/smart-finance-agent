@@ -45,7 +45,7 @@ const api = axios.create({
   },
 })
 
-const CHAT_REQUEST_TIMEOUT_MS = 180000
+const CHAT_REQUEST_TIMEOUT_MS = 360000
 
 // Token refresh state
 let isRefreshing = false

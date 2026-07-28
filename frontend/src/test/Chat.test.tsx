@@ -88,4 +88,22 @@ describe('Chat conversation ownership recovery', () => {
     expect(chatApi.sendMessage).toHaveBeenNthCalledWith(2, 'owned-2', 'analyze Tesla')
     expect(chatApi.createConversation).toHaveBeenCalledTimes(1)
   })
+
+  it('renders assistant markdown tables and removes raw break tags', async () => {
+    localStorage.setItem('chat_state:7', JSON.stringify({
+      conversationId: 'owned-2',
+      messages: [{
+        role: 'assistant',
+        content: '| 指标 | 说明 |\n| --- | --- |\n| 市盈率 | 估值指标<br>需要结合盈利 |',
+        timestamp: '2026-07-27T14:00:01',
+      }],
+    }))
+
+    renderChat()
+
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(screen.getByText('市盈率')).toBeInTheDocument()
+    expect(screen.getByText('估值指标；需要结合盈利')).toBeInTheDocument()
+    expect(screen.queryByText(/<br>/)).not.toBeInTheDocument()
+  })
 })
