@@ -1,6 +1,12 @@
 from app.core.executor import ExecutionResult
 from app.core.planner import Plan
-from app.core.report_agent import ReportAgent
+from app.core.report_agent import (
+    ReportAgent,
+    ResearchReport,
+    StructuredAnalysis,
+    _extract_rag_document_names,
+    get_source_document_names,
+)
 
 
 def test_report_agent_removes_numbers_not_present_in_context():
@@ -152,3 +158,40 @@ def test_report_agent_skips_valid_prompt_example_json():
 
     assert parsed["title"] == "AAPL Report"
     assert parsed["summary"] == "AAPL price is 182.52."
+
+
+def test_rag_document_names_are_preserved_in_report_sources():
+    data = {
+        "results": [
+            {
+                "text": "chunk one",
+                "metadata": {"filename": "财经研究与基本面分析入门_RAG测试.docx"},
+            },
+            {
+                "text": "chunk two",
+                "metadata": {"source": "人工智能学习路线与工程实践_RAG测试.docx"},
+            },
+            {
+                "text": "duplicate",
+                "metadata": {"filename": "财经研究与基本面分析入门_RAG测试.docx"},
+            },
+        ]
+    }
+
+    documents = _extract_rag_document_names(data)
+    sources = [{"tool": "rag_retrieve", "task_id": "rag_1", "documents": documents}]
+    report = ResearchReport(
+        title="知识库研究",
+        summary="摘要",
+        analysis=StructuredAnalysis(),
+        sources=sources,
+    )
+
+    assert documents == [
+        "财经研究与基本面分析入门_RAG测试.docx",
+        "人工智能学习路线与工程实践_RAG测试.docx",
+    ]
+    assert get_source_document_names(sources) == documents
+    markdown = report.to_markdown(language="zh")
+    assert "财经研究与基本面分析入门_RAG测试.docx" in markdown
+    assert "人工智能学习路线与工程实践_RAG测试.docx" in markdown

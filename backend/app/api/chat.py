@@ -26,6 +26,7 @@ from app.core.memory import (
     get_user_profile,
     update_user_profile,
 )
+from app.core.report_agent import get_source_document_names
 from app.utils.logger import get_logger
 
 logger = get_logger("api.chat")
@@ -551,6 +552,12 @@ async def generate_orchestrator_response(
                     response_text += "\n\nKey Findings:\n"
                 for f in result.report.analysis.key_findings[:5]:
                     response_text += f"- {f}\n"
+            document_names = get_source_document_names(result.report.sources)
+            if document_names:
+                heading = "知识库来源" if language == "zh" else "Knowledge Sources"
+                response_text += f"\n{heading}:\n"
+                for name in document_names:
+                    response_text += f"- {name}\n"
         elif result.answer and len(result.answer) > 30:
             response_text = _clean_json_response(result.answer)
         else:

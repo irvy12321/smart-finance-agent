@@ -57,9 +57,17 @@ async def test_send_financial_message(client: AsyncClient, mock_storage):
     mock_result.exec_result = MagicMock()
     mock_result.exec_result.task_results = []
     mock_result.report = MagicMock()
-    mock_result.report.summary = "AAPL stock analysis report"
+    mock_result.report.summary = (
+        "AAPL stock analysis report with grounded research context"
+    )
     mock_result.report.analysis = MagicMock()
     mock_result.report.analysis.key_findings = ["Price increased 5%"]
+    mock_result.report.sources = [
+        {
+            "tool": "rag_retrieve",
+            "documents": ["财经研究与基本面分析入门_RAG测试.docx"],
+        }
+    ]
     mock_result.answer = "Apple stock analysis"
     mock_result.reasoning_result = True
     mock_orchestrator.run.return_value = mock_result
@@ -74,6 +82,8 @@ async def test_send_financial_message(client: AsyncClient, mock_storage):
     assert response.status_code == 200
     data = response.json()
     assert data["confidence"] == 0.9
+    assert "知识库来源" in data["response"]
+    assert "财经研究与基本面分析入门_RAG测试.docx" in data["response"]
     mock_orchestrator.run.assert_awaited_once_with(
         "What is the stock price of AAPL?", language="zh"
     )
