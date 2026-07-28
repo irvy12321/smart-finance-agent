@@ -55,6 +55,54 @@ _PROMPT_ECHO_RE = re.compile(
 )
 
 
+def _extract_rag_document_names(data: object) -> list[str]:
+    if not isinstance(data, dict):
+        return []
+
+    results = data.get("results")
+    if not isinstance(results, list):
+        return []
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        metadata = item.get("metadata")
+        if not isinstance(metadata, dict):
+            continue
+        raw_name = metadata.get("filename") or metadata.get("source")
+        if not isinstance(raw_name, str):
+            continue
+        name = " ".join(raw_name.split())[:200]
+        if not name or name.lower() == "unknown" or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    return names
+
+
+def get_source_document_names(sources: object) -> list[str]:
+    """Return de-duplicated RAG document names stored in report sources."""
+    if not isinstance(sources, list):
+        return []
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        documents = source.get("documents")
+        if not isinstance(documents, list):
+            continue
+        for document in documents:
+            if not isinstance(document, str) or document in seen:
+                continue
+            seen.add(document)
+            names.append(document)
+    return names
+
+
 @dataclass
 class StructuredAnalysis:
     """结构化分析结果"""
@@ -88,8 +136,13 @@ class ResearchReport:
         """生成 Markdown 格式报告"""
         sources_md = ""
         for i, src in enumerate(self.sources, 1):
+            documents = src.get("documents", [])
+            document_text = (
+                f" - {', '.join(documents)}" if isinstance(documents, list) else ""
+            )
             sources_md += (
-                f"{i}. **{src.get('tool', 'N/A')}** ({src.get('task_id', '')})\n"
+                f"{i}. **{src.get('tool', 'N/A')}** "
+                f"({src.get('task_id', '')}){document_text}\n"
             )
 
         findings_md = "\n".join(f"- {f}" for f in self.analysis.key_findings)
@@ -237,13 +290,16 @@ class ReportAgent:
         data_parts = []
         for tr in exec_result.task_results:
             if tr.success and tr.data:
-                sources.append(
-                    {
-                        "task_id": tr.task_id,
-                        "tool": tr.tool_name,
-                        "duration_ms": tr.duration_ms,
-                    }
-                )
+                source = {
+                    "task_id": tr.task_id,
+                    "tool": tr.tool_name,
+                    "duration_ms": tr.duration_ms,
+                }
+                if tr.tool_name == "rag_retrieve":
+                    documents = _extract_rag_document_names(tr.data)
+                    if documents:
+                        source["documents"] = documents
+                sources.append(source)
                 data_parts.append(f"[{tr.tool_name}] {self._format_data(tr.data)}")
 
         # 推理上下文
