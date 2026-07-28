@@ -41,7 +41,8 @@ def test_production_deploy_uses_prebuilt_semantic_backend_image():
     environment = dict(item.split("=", 1) for item in backend["environment"])
 
     assert backend["image"] == "sfa-backend:latest"
-    assert backend["healthcheck"]["start_period"] == "360s"
+    assert backend["healthcheck"]["timeout"] == "30s"
+    assert backend["healthcheck"]["start_period"] == "1200s"
     assert environment["RAG_EMBEDDING_MODE"] == "semantic"
     assert environment["RAG_EMBEDDING_LOCAL_FILES_ONLY"] == "true"
     assert environment["RAG_SEMANTIC_FAILURE_POLICY"] == "error"
