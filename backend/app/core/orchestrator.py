@@ -135,11 +135,11 @@ class Orchestrator:
             f"Orchestrator initialized (3-layer, router={'enabled' if use_router else 'disabled'})"
         )
 
-    async def run(self, query: str) -> RunResult:
+    async def run(self, query: str, language: str = "en") -> RunResult:
         trace = TraceContext()
         trace_token = set_current_trace_id(trace.trace_id)
         try:
-            result = await self._run_with_trace(query, trace)
+            result = await self._run_with_trace(query, trace, language)
             await self._safe_emit_pipeline_end(
                 trace,
                 result.plan,
@@ -164,7 +164,9 @@ class Orchestrator:
         finally:
             reset_current_trace_id(trace_token)
 
-    async def _run_with_trace(self, query: str, trace: TraceContext) -> RunResult:
+    async def _run_with_trace(
+        self, query: str, trace: TraceContext, language: str
+    ) -> RunResult:
         """3-Layer 流水线: SmartRoute → Plan → Execute → Synthesize"""
         tracker = PipelineTracker(trace.trace_id, query)
         LogContext.set(trace_id=trace.trace_id, agent_name="orchestrator")
@@ -230,7 +232,7 @@ class Orchestrator:
         ):
             await self._emit_stage(AgentStage.EXECUTING)
             try:
-                exec_result = await self.executor.execute(plan)
+                exec_result = await self.executor.execute(plan, language=language)
                 agent_calls_total.labels(agent_name="executor").inc()
             except Exception as e:
                 logger.error(f"[trace:{trace.trace_id}] Execution failed: {e}")
@@ -282,7 +284,7 @@ class Orchestrator:
                     reasoning_result = await self.reasoner.reason_with_critique(
                         context=reasoning_context,
                         question=query,
-                        language=getattr(self, "_current_language", "en"),
+                        language=language,
                     )
                     agent_calls_total.labels(agent_name="reasoner").inc()
                 except Exception as e:
@@ -306,6 +308,7 @@ class Orchestrator:
                     exec_result=exec_result,
                     reasoning_result=reasoning_result,
                     trace_id=trace.trace_id,
+                    language=language,
                 )
                 agent_calls_total.labels(agent_name="reporter").inc()
             except Exception as e:
@@ -348,7 +351,9 @@ class Orchestrator:
                     chart_paths = []
 
             # No-external-data fallback: cap confidence + prepend disclaimer
-            self._apply_fallback_disclaimer(plan, report, reasoning_result)
+            self._apply_fallback_disclaimer(
+                plan, report, reasoning_result, language=language
+            )
         synthesizer_ms = (time.perf_counter() - t0) * 1000
         tracker.record_stage(
             "synthesizer", "reasoner+report", synthesizer_ms, status="ok"
@@ -414,8 +419,6 @@ class Orchestrator:
         self, query: str, language: str, trace: TraceContext
     ):
         """流式输出 (供 UI 使用) - 带容错"""
-        self._current_language = language  # Store language for later use
-
         self.memory.add_user_message(query)
         self.state_tracker.reset()
 
@@ -518,16 +521,13 @@ class Orchestrator:
         self.event_bus.subscribe("task_complete", _on_task_complete)
 
         try:
-            # Set executor language
-            self.executor._current_language = getattr(self, "_current_language", "en")
-
             with (
                 _bound_route_model(self.router, route.selected_model),
                 trace.span("execution"),
                 otel_span("orchestrator.execution"),
             ):
                 try:
-                    exec_result = await self.executor.execute(plan)
+                    exec_result = await self.executor.execute(plan, language=language)
                 except Exception as e:
                     logger.error(f"Execution failed: {e}")
                     exec_result = ExecutionResult(
@@ -573,7 +573,7 @@ class Orchestrator:
                     reasoning_result = await self.reasoner.reason_with_critique(
                         context=reasoning_context,
                         question=query,
-                        language=getattr(self, "_current_language", "en"),
+                        language=language,
                     )
                 if plan.is_fallback:
                     reasoning_result.confidence = min(
@@ -606,7 +606,7 @@ class Orchestrator:
                     exec_result=exec_result,
                     reasoning_result=reasoning_result,
                     trace_id=trace.trace_id,
-                    language=getattr(self, "_current_language", "en"),
+                    language=language,
                 )
         except Exception as e:
             logger.error(f"Report generation failed, using fallback: {e}")
@@ -630,7 +630,9 @@ class Orchestrator:
             yield {"stage": "report_fallback", "message": f"Report failed: {e}"}
 
         # No-external-data fallback: cap confidence + prepend disclaimer
-        self._apply_fallback_disclaimer(plan, report, reasoning_result)
+        self._apply_fallback_disclaimer(
+            plan, report, reasoning_result, language=language
+        )
 
         # Chart rendering (带容错)
         chart_paths = []
@@ -662,11 +664,7 @@ class Orchestrator:
         yield {
             "stage": "complete",
             "answer": exec_result.final_answer,
-            "report_markdown": report.to_markdown(
-                language=getattr(self, "_current_language", "en")
-            )
-            if report
-            else "",
+            "report_markdown": report.to_markdown(language=language) if report else "",
             "report_title": report.title if report else "",
             "summary": report.summary if report else "",
             "key_findings": report.analysis.key_findings if report else [],
@@ -824,7 +822,9 @@ class Orchestrator:
             is_fallback=True,
         )
 
-    def _apply_fallback_disclaimer(self, plan, report, reasoning_result) -> None:
+    def _apply_fallback_disclaimer(
+        self, plan, report, reasoning_result, language: str = "en"
+    ) -> None:
         """Cap confidence and prepend a disclaimer when no external data exists.
 
         Applies when planning fell back to a knowledge-only plan, or when every
@@ -832,7 +832,6 @@ class Orchestrator:
         """
         if not getattr(plan, "is_fallback", False):
             return
-        language = getattr(self, "_current_language", "en")
         disclaimer = self._FALLBACK_DISCLAIMER.get(
             language, self._FALLBACK_DISCLAIMER["en"]
         )

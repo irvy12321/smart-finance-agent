@@ -192,10 +192,10 @@ async def test_orchestrator_run_pipeline():
 
         orch = Orchestrator(use_router=False)
 
-        result = await orch.run("Analyze AAPL stock price")
+        result = await orch.run("分析 AAPL 股票", language="zh")
 
         assert result is not None
-        assert result.query == "Analyze AAPL stock price"
+        assert result.query == "分析 AAPL 股票"
         assert result.answer == "AAPL analysis complete"
         assert result.plan is not None
         assert result.exec_result is not None
@@ -204,6 +204,9 @@ async def test_orchestrator_run_pipeline():
         assert result.subtask_count == 2
         assert result.successful_tasks == 2
         assert result.failed_tasks == 0
+        mock_executor.execute.assert_awaited_once_with(plan, language="zh")
+        assert mock_reasoner.reason_with_critique.await_args.kwargs["language"] == "zh"
+        assert mock_report_agent.generate.await_args.kwargs["language"] == "zh"
         event_types = [
             call.args[0].event_type for call in event_bus.emit.await_args_list
         ]
@@ -259,7 +262,7 @@ async def test_streaming_unsubscribes_task_events_when_execution_is_cancelled():
             self.reset_tokens.append(token)
 
     class _Executor:
-        async def execute(self, plan):
+        async def execute(self, plan, language="en"):
             raise asyncio.CancelledError
 
     bus = EventBus()
@@ -527,10 +530,11 @@ async def test_executor_agent():
         )
         plan = Plan(original_query="Test", subtasks=[subtask])
 
-        result = await executor.execute(plan)
+        result = await executor.execute(plan, language="zh")
 
         assert result is not None
         assert len(result.task_results) > 0
+        assert "必须使用中文回复" in mock_llm.complete.await_args.kwargs["system"]
 
 
 @pytest.mark.asyncio
