@@ -20,6 +20,7 @@ from app.monitoring.prometheus import (
     http_request_duration_seconds,
     http_requests_total,
 )
+from app.monitoring.request_stats import record_http_request
 
 
 class PrometheusMiddleware(BaseHTTPMiddleware):
@@ -80,6 +81,8 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
                     status_code=status_code,
                 ).inc()
 
+            record_http_request(response.status_code, duration * 1000)
+
             return response
 
         except Exception as exc:
@@ -102,6 +105,8 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
                 method=method,
                 status_code="500",
             ).inc()
+
+            record_http_request(500, duration * 1000)
 
             raise exc
 

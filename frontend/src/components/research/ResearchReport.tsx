@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import ReactMarkdown from 'react-markdown'
+import rehypeSanitize from 'rehype-sanitize'
+import remarkGfm from 'remark-gfm'
 import {
   AlertTriangle,
   BarChart3,
@@ -41,6 +45,19 @@ type RawRiskFactor =
       description?: string
       severity?: string
     }
+
+const compactMarkdownComponents = {
+  h1: ({ children }: { children?: ReactNode }) => <h1 className="text-base font-semibold text-primary-100 mb-2">{children}</h1>,
+  h2: ({ children }: { children?: ReactNode }) => <h2 className="text-sm font-semibold text-primary-100 mt-3 mb-2">{children}</h2>,
+  h3: ({ children }: { children?: ReactNode }) => <h3 className="text-xs font-semibold text-primary-100 mt-3 mb-1">{children}</h3>,
+  p: ({ children }: { children?: ReactNode }) => <p className="text-xs text-primary-200 leading-relaxed mb-2">{children}</p>,
+  ul: ({ children }: { children?: ReactNode }) => <ul className="list-disc pl-5 text-xs text-primary-200 mb-2 space-y-1">{children}</ul>,
+  ol: ({ children }: { children?: ReactNode }) => <ol className="list-decimal pl-5 text-xs text-primary-200 mb-2 space-y-1">{children}</ol>,
+  table: ({ children }: { children?: ReactNode }) => <div className="overflow-x-auto my-2"><table className="min-w-full text-xs border border-dark-border">{children}</table></div>,
+  th: ({ children }: { children?: ReactNode }) => <th className="px-2 py-1.5 text-left text-primary-200 bg-dark-card border border-dark-border">{children}</th>,
+  td: ({ children }: { children?: ReactNode }) => <td className="px-2 py-1.5 text-primary-300 border border-dark-border align-top">{children}</td>,
+  code: ({ children }: { children?: ReactNode }) => <code className="px-1 py-0.5 bg-dark-card rounded text-primary-200">{children}</code>,
+}
 
 export default function ResearchReport({ symbol, taskId, isLoading, errorMessage }: ResearchReportProps) {
   const { t } = useTranslation()
@@ -185,7 +202,7 @@ export default function ResearchReport({ symbol, taskId, isLoading, errorMessage
               <div className="flex items-center gap-2 mb-3">
                 <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
                 <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">
-                  Visuals
+                  {t('report.visuals')}
                 </h3>
               </div>
               <div className="grid grid-cols-1 gap-3">
@@ -306,25 +323,21 @@ export default function ResearchReport({ symbol, taskId, isLoading, errorMessage
             <div className="flex items-center gap-2 mb-2">
               <FileText className="w-3.5 h-3.5 text-primary-400" />
               <h3 className="text-xs font-semibold text-primary-300 uppercase tracking-wider">
-                Detailed Analysis
+                {t('report.detailedAnalysis')}
               </h3>
             </div>
             <div className="h-full max-h-[520px] overflow-auto pr-2">
-              <p className="whitespace-pre-wrap text-xs text-primary-200 leading-relaxed">
-                {formatReportText(report.answer)}
-              </p>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeSanitize]}
+                components={compactMarkdownComponents}
+              >
+                {report.answer}
+              </ReactMarkdown>
             </div>
           </div>
         )}
       </div>
     </div>
   )
-}
-
-function formatReportText(value: string): string {
-  return value
-    .replace(/#{1,6}\s*/g, '')
-    .replace(/\*\*/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
 }

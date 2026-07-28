@@ -38,13 +38,26 @@ const RESEARCH_TIMEOUT_MS = 16 * 60 * 1000
 
 function createInitialSteps(): TaskStep[] {
   return [
-    { name: 'Planner', status: 'running', icon: null, color: 'text-primary-300' },
-    { name: 'News Search', status: 'pending', icon: null, color: 'text-blue-400' },
-    { name: 'RAG Retrieve', status: 'pending', icon: null, color: 'text-cyan-400' },
-    { name: 'Financial Report', status: 'pending', icon: null, color: 'text-green-400' },
-    { name: 'Synthesizer', status: 'pending', icon: null, color: 'text-yellow-400' },
-    { name: 'Report', status: 'pending', icon: null, color: 'text-emerald-400' },
+    { name: 'planner', status: 'running', icon: null, color: 'text-primary-300' },
+    { name: 'newsSearch', status: 'pending', icon: null, color: 'text-blue-400' },
+    { name: 'ragRetrieve', status: 'pending', icon: null, color: 'text-cyan-400' },
+    { name: 'financialReport', status: 'pending', icon: null, color: 'text-green-400' },
+    { name: 'synthesizer', status: 'pending', icon: null, color: 'text-yellow-400' },
+    { name: 'report', status: 'pending', icon: null, color: 'text-emerald-400' },
   ]
+}
+
+const LEGACY_STEP_NAMES: Record<string, string> = {
+  planner: 'Planner',
+  newsSearch: 'News Search',
+  ragRetrieve: 'RAG Retrieve',
+  financialReport: 'Financial Report',
+  synthesizer: 'Synthesizer',
+  report: 'Report',
+}
+
+function isStep(step: TaskStep, name: string): boolean {
+  return step.name === name || step.name === LEGACY_STEP_NAMES[name]
 }
 
 function loadResearchState(): SavedResearchState | null {
@@ -64,10 +77,9 @@ function saveResearchState(state: SavedResearchState) {
   }
 }
 
-function updateStepsForStage(prev: TaskStep[], status: TaskStatusResponse, elapsed: number): TaskStep[] {
+function updateStepsForStage(prev: TaskStep[], status: TaskStatusResponse, _elapsed: number): TaskStep[] {
   if (status.status === 'completed') {
-    const duration = elapsed / Math.max(prev.length, 1)
-    return prev.map((step) => ({ ...step, status: 'completed', duration }))
+    return prev.map((step) => ({ ...step, status: 'completed', duration: undefined }))
   }
 
   if (status.status === 'failed') {
@@ -75,32 +87,32 @@ function updateStepsForStage(prev: TaskStep[], status: TaskStatusResponse, elaps
   }
 
   if (status.current_stage === 'planning') {
-    return prev.map((step) => (step.name === 'Planner' ? { ...step, status: 'running' } : step))
+    return prev.map((step) => (isStep(step, 'planner') ? { ...step, status: 'running' } : step))
   }
 
   if (status.current_stage === 'executing') {
     return prev.map((step) =>
-      step.name === 'Planner' ? { ...step, status: 'completed', duration: elapsed * 0.2 } :
-      step.name === 'News Search' ? { ...step, status: 'running' } :
-      step.name === 'RAG Retrieve' ? { ...step, status: 'running' } :
-      step.name === 'Financial Report' ? { ...step, status: 'running' } :
+      isStep(step, 'planner') ? { ...step, status: 'completed', duration: undefined } :
+      isStep(step, 'newsSearch') ? { ...step, status: 'running' } :
+      isStep(step, 'ragRetrieve') ? { ...step, status: 'running' } :
+      isStep(step, 'financialReport') ? { ...step, status: 'running' } :
       step
     )
   }
 
   if (status.current_stage === 'reasoning') {
     return prev.map((step) =>
-      step.name !== 'Synthesizer' && step.name !== 'Report' && step.status !== 'completed'
-        ? { ...step, status: 'completed', duration: elapsed * 0.15 } :
-      step.name === 'Synthesizer' ? { ...step, status: 'running' } :
+      !isStep(step, 'synthesizer') && !isStep(step, 'report') && step.status !== 'completed'
+        ? { ...step, status: 'completed', duration: undefined } :
+      isStep(step, 'synthesizer') ? { ...step, status: 'running' } :
       step
     )
   }
 
   if (status.current_stage === 'reporting') {
     return prev.map((step) =>
-      step.name === 'Synthesizer' ? { ...step, status: 'completed', duration: elapsed * 0.1 } :
-      step.name === 'Report' ? { ...step, status: 'running' } :
+      isStep(step, 'synthesizer') ? { ...step, status: 'completed', duration: undefined } :
+      isStep(step, 'report') ? { ...step, status: 'running' } :
       step
     )
   }
@@ -276,7 +288,7 @@ export default function ResearchCenter() {
       setTotalDuration(undefined)
       setSteps(initialSteps)
 
-      const query = `Analyze ${selectedSymbol} stock performance and provide comprehensive research report`
+      const query = t('research.defaultQuery', { symbol: selectedSymbol })
       const task = await taskApi.create(query, 1)
 
       setTaskId(task.task_id)

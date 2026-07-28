@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { TrendingUp, TrendingDown, BarChart3, Activity } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 interface DataPoint {
   label: string
@@ -24,6 +25,7 @@ export default function SimpleChart({
   showLabels = true,
   showValues = true
 }: SimpleChartProps) {
+  const { t } = useTranslation()
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   if (!data || data.length === 0) {
@@ -32,7 +34,7 @@ export default function SimpleChart({
         <div className="flex items-center justify-center py-8">
           <div className="text-center">
             <BarChart3 className="w-8 h-8 text-primary-400 mx-auto mb-2" />
-            <p className="text-sm text-primary-400">No data available</p>
+            <p className="text-sm text-primary-400">{t('common.noData')}</p>
           </div>
         </div>
       </div>
@@ -227,13 +229,13 @@ export default function SimpleChart({
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-green-500" />
             <span className="text-xs text-primary-400">
-              Max: {maxValue.toLocaleString()}
+              {t('common.max')}: {maxValue.toLocaleString()}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <TrendingDown className="w-4 h-4 text-red-500" />
             <span className="text-xs text-primary-400">
-              Min: {minValue.toLocaleString()}
+              {t('common.min')}: {minValue.toLocaleString()}
             </span>
           </div>
         </div>

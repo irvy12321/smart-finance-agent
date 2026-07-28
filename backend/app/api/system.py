@@ -14,6 +14,8 @@ from app.api.error_utils import safe_internal_detail
 from app.auth.dependencies import require_role
 from app.auth.models import UserResponse
 from app.auth.roles import Role
+from app.core.observability.metrics import get_metrics_summary
+from app.monitoring.request_stats import get_http_stats, record_http_request
 from app.utils.logger import get_logger
 
 logger = get_logger("api.system")
@@ -80,13 +82,6 @@ class SystemConfigResponse(BaseModel):
 # System start time
 system_start_time = time.time()
 
-# Request tracking
-request_count = 0
-successful_requests = 0
-failed_requests = 0
-total_latency = 0.0
-
-
 # ============================================================
 # API Routes
 # ============================================================
@@ -97,16 +92,15 @@ async def get_system_status():
     """Get system status"""
     try:
         uptime = time.time() - system_start_time
+        http_stats = get_http_stats()
 
         return SystemStatusResponse(
             status="healthy",
             version="1.0.0",
             uptime=uptime,
-            total_requests=request_count,
-            success_rate=100.0
-            if request_count == 0
-            else (successful_requests / request_count) * 100,
-            avg_latency_ms=0.0 if request_count == 0 else total_latency / request_count,
+            total_requests=http_stats.total_requests,
+            success_rate=http_stats.success_rate,
+            avg_latency_ms=http_stats.avg_latency_ms,
             timestamp=datetime.now().isoformat(),
         )
     except Exception as e:
@@ -123,6 +117,7 @@ async def get_system_metrics(
     """Get system metrics"""
     try:
         tasks = storage.list_tasks()
+        http_stats = get_http_stats()
 
         # Count tasks by status
         total_tasks = len(tasks)
@@ -132,13 +127,11 @@ async def get_system_metrics(
         failed_tasks = sum(1 for t in tasks if t["status"] == "failed")
 
         return SystemMetricsResponse(
-            total_requests=request_count,
-            successful_requests=successful_requests,
-            failed_requests=failed_requests,
-            success_rate=100.0
-            if request_count == 0
-            else (successful_requests / request_count) * 100,
-            avg_latency_ms=0.0 if request_count == 0 else total_latency / request_count,
+            total_requests=http_stats.total_requests,
+            successful_requests=http_stats.successful_requests,
+            failed_requests=http_stats.failed_requests,
+            success_rate=http_stats.success_rate,
+            avg_latency_ms=http_stats.avg_latency_ms,
             total_tasks=total_tasks,
             completed_tasks=completed_tasks,
             pending_tasks=pending_tasks,
@@ -159,37 +152,43 @@ async def get_agent_status(
 ):
     """Get agent status"""
     try:
-        # In a real implementation, this would query the actual agent status
-        # For now, return mock data
-        return AgentStatusResponse(
-            planner={
+        agent_summary = get_metrics_summary().get("agent_summary", {})
+        http_stats = get_http_stats()
+        tasks = storage.list_tasks()
+
+        def summary(name: str) -> dict[str, Any]:
+            data = agent_summary.get(name, {})
+            calls = int(data.get("calls", 0))
+            errors = int(data.get("errors", 0))
+            total_ms = float(data.get("total_ms", 0))
+            return {
                 "status": "ready",
-                "total_calls": 0,
-                "avg_latency_ms": 0.0,
-                "success_rate": 100.0,
-            },
+                "total_calls": calls,
+                "avg_latency_ms": total_ms / calls if calls else 0.0,
+                "success_rate": ((calls - errors) / calls * 100) if calls else 100.0,
+            }
+
+        executor_calls = int(
+            get_metrics_summary().get("counters", {}).get("task_result", 0)
+        )
+        completed_runs = sum(1 for task in tasks if task.get("status") == "completed")
+        return AgentStatusResponse(
+            planner=summary("planner"),
             executor={
                 "status": "ready",
-                "total_calls": 0,
+                "total_calls": executor_calls,
                 "avg_latency_ms": 0.0,
                 "success_rate": 100.0,
                 "active_tasks": 0,
             },
-            reasoner={
-                "status": "ready",
-                "total_calls": 0,
-                "avg_latency_ms": 0.0,
-                "success_rate": 100.0,
-            },
-            report_agent={
-                "status": "ready",
-                "total_calls": 0,
-                "avg_latency_ms": 0.0,
-                "success_rate": 100.0,
-            },
+            reasoner=summary("reasoner"),
+            report_agent=summary("report"),
             orchestrator={
                 "status": "ready",
-                "total_requests": request_count,
+                "total_calls": completed_runs,
+                "total_requests": http_stats.total_requests,
+                "avg_latency_ms": 0.0,
+                "success_rate": 100.0,
                 "uptime": time.time() - system_start_time,
             },
         )
@@ -263,21 +262,17 @@ async def get_version():
 
 def increment_request_count():
     """Increment request count"""
-    global request_count
-    request_count += 1
+    record_http_request(200, 0.0)
 
 
 def record_request_success(latency_ms: float):
     """Record successful request"""
-    global successful_requests, total_latency
-    successful_requests += 1
-    total_latency += latency_ms
+    record_http_request(200, latency_ms)
 
 
 def record_request_failure():
     """Record failed request"""
-    global failed_requests
-    failed_requests += 1
+    record_http_request(500, 0.0)
 
 
 @router.get("/cache")

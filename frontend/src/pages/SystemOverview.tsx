@@ -23,6 +23,14 @@ import type {
   TaskListItem
 } from '../types/api'
 
+const AGENT_TRANSLATION_KEYS: Record<string, string> = {
+  planner: 'planner',
+  executor: 'executor',
+  reasoner: 'reasoner',
+  report_agent: 'reportAgent',
+  orchestrator: 'orchestrator',
+}
+
 export default function SystemOverview() {
   const { t } = useTranslation()
   const { hasAnyRole } = useAuth()
@@ -92,7 +100,7 @@ export default function SystemOverview() {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     const secs = Math.floor(seconds % 60)
-    return `${hours}h ${minutes}m ${secs}s`
+    return `${hours}${t('system.hours')} ${minutes}${t('system.minutes')} ${secs}${t('system.seconds')}`
   }
 
   const getStatusIcon = (status: string) => {
@@ -138,7 +146,7 @@ export default function SystemOverview() {
   ]
 
   const agentPerformanceData = agentStatus ? Object.entries(agentStatus).map(([name, status]: [string, { avg_latency_ms?: number }]) => ({
-    label: name.charAt(0).toUpperCase() + name.slice(1),
+    label: t(`system.${AGENT_TRANSLATION_KEYS[name] || name}`, { defaultValue: name }),
     value: status.avg_latency_ms || 0,
     color: '#5b9dff',
   })) : []
@@ -192,7 +200,7 @@ export default function SystemOverview() {
             }`}
           >
             <Wifi className={`w-4 h-4 ${autoRefresh ? 'animate-pulse' : ''}`} />
-            {autoRefresh ? 'Live' : t('common.refresh')}
+            {autoRefresh ? t('common.live') : t('common.refresh')}
           </button>
           <button
             onClick={handleRefresh}
@@ -264,7 +272,7 @@ export default function SystemOverview() {
                 {t('system.successRate')}
               </p>
               <p className="text-lg font-bold text-green-500">
-                {metrics?.success_rate ? `${metrics.success_rate.toFixed(1)}%` : '100%'}
+                {metrics ? `${metrics.success_rate.toFixed(1)}%` : '-'}
               </p>
             </div>
           </div>
@@ -306,7 +314,7 @@ export default function SystemOverview() {
                     status.status === 'ready' ? 'bg-green-500' : 'bg-yellow-500'
                   }`} />
                   <h3 className="text-sm font-semibold text-primary-200 capitalize">
-                    {agent.replace('_', ' ')}
+                    {t(`system.${AGENT_TRANSLATION_KEYS[agent] || agent}`, { defaultValue: agent.replace('_', ' ') })}
                   </h3>
                 </div>
                 <Zap className="w-4 h-4 text-primary-400" />
@@ -317,7 +325,7 @@ export default function SystemOverview() {
                   <span className={`text-xs font-medium ${
                     status.status === 'ready' ? 'text-green-500' : 'text-yellow-500'
                   }`}>
-                    {status.status}
+                    {t(`system.${status.status}`, { defaultValue: status.status })}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -335,7 +343,7 @@ export default function SystemOverview() {
                 <div className="flex justify-between">
                   <span className="text-xs text-primary-400">{t('system.successRate')}</span>
                   <span className="text-xs font-medium text-primary-200">
-                    {status.success_rate ? `${status.success_rate.toFixed(0)}%` : '100%'}
+                    {`${status.success_rate.toFixed(0)}%`}
                   </span>
                 </div>
               </div>

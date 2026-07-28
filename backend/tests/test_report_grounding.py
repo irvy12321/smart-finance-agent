@@ -8,7 +8,7 @@ def test_report_agent_removes_numbers_not_present_in_context():
         "AAPL price is 182.52 and the daily change is -1.26%."
     )
     report_data = {
-        "summary": "AAPL trades at 182.52 with a fabricated 999.99 target.",
+        "summary": "AAPL trades at 182.52, fabricated target is 999.99.",
         "key_findings": ["Daily change was -1.260%, not 12%."],
         "risk_factors": [
             {
@@ -27,7 +27,7 @@ def test_report_agent_removes_numbers_not_present_in_context():
     assert "999.99" not in combined
     assert "12%" not in combined
     assert "33.3" not in combined
-    assert "[unsupported number removed]" in combined
+    assert "[unsupported number removed]" not in combined
 
 
 def test_report_agent_normalizes_equivalent_number_formats():
@@ -35,12 +35,32 @@ def test_report_agent_normalizes_equivalent_number_formats():
 
     assert "1230.5" in allowed
     cleaned = ReportAgent._remove_unsupported_numbers(
-        {"summary": "Revenue was 1230.500 and unsupported value was 1231."},
+        {"summary": "Revenue was 1230.500, unsupported value was 1231."},
         allowed,
     )
 
     assert "1230.500" in cleaned["summary"]
     assert "1231" not in cleaned["summary"]
+
+
+def test_report_agent_treats_hyphens_in_compact_ranges_as_separators():
+    allowed = ReportAgent._extract_number_tokens("Expected horizon is 3-6 months.")
+
+    cleaned = ReportAgent._remove_unsupported_numbers(
+        {"summary": "Expected horizon is 3–6 months."},
+        allowed,
+    )
+
+    assert cleaned["summary"] == "Expected horizon is 3–6 months."
+
+
+def test_report_agent_removes_empty_list_items_after_grounding():
+    cleaned = ReportAgent._remove_unsupported_numbers(
+        ["Price is 182.52.", "Unsupported price is 999.99."],
+        {"182.52"},
+    )
+
+    assert cleaned == ["Price is 182.52."]
 
 
 def test_report_agent_filters_prompt_placeholders():

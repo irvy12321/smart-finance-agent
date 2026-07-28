@@ -35,16 +35,17 @@ export default function Chart({
   values,
   title,
   type = "line",
-  color = "rgba(99,102,241,1)",
+  color = "#5b9dff",
 }: Props) {
+  const barColors = ["#5b9dff", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899"];
   const data = {
     labels,
     datasets: [
       {
         label: title || "Series",
         data: values,
-        borderColor: color,
-        backgroundColor: type === "bar" ? color + "88" : color + "20",
+        borderColor: type === "bar" ? barColors : color,
+        backgroundColor: type === "bar" ? labels.map((_, index) => barColors[index % barColors.length]) : color,
         fill: type === "line",
         tension: 0.3,
         pointRadius: 4,

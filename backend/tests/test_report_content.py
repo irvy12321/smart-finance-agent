@@ -91,3 +91,18 @@ def test_enrich_report_result_adds_chart_specs_from_grounded_numbers():
         "ROE %",
         "RSI",
     }
+
+
+def test_enrich_report_result_removes_legacy_grounding_markers():
+    result = {
+        "answer": "AAPL price is 182.52, target is [unsupported number removed].",
+        "key_findings": [
+            "Price is 182.52.",
+            "Target is [unsupported number removed].",
+        ],
+    }
+
+    enriched = enrich_report_result(result)
+
+    assert enriched["answer"] == "AAPL price is 182.52"
+    assert enriched["key_findings"] == ["Price is 182.52."]

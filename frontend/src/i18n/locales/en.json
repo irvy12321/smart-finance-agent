@@ -19,8 +19,11 @@
     "yes": "Yes",
     "no": "No",
     "refresh": "Refresh",
+    "live": "Live",
     "viewAll": "View All",
     "noData": "No data available",
+    "max": "Max",
+    "min": "Min",
     "dataUnavailable": "Data unavailable",
     "simulatedData": "Simulated",
     "simulatedDataNotice": "Reproducible simulated data for product demonstration, not live market data",
@@ -147,7 +150,16 @@
     "reasoning": "Reasoning",
     "reporting": "Reporting",
     "completed": "Completed",
-    "confirmDelete": "Are you sure you want to delete this research task and report?"
+    "confirmDelete": "Are you sure you want to delete this research task and report?",
+    "defaultQuery": "Analyze {{symbol}} stock performance and generate a comprehensive report using market, news, knowledge-base, and financial data",
+    "agentSteps": {
+      "planner": "Planner",
+      "newsSearch": "News Search",
+      "ragRetrieve": "RAG Retrieve",
+      "financialReport": "Financial Report",
+      "synthesizer": "Synthesizer",
+      "report": "Report"
+    }
   },
   "chat": {
     "title": "Chat",
@@ -179,6 +191,15 @@
     "download": "Download",
     "share": "Share",
     "loadingReport": "Loading report...",
+    "loadingChart": "Loading chart...",
+    "chartLoadsWhenVisible": "Chart loads when visible",
+    "visuals": "Visuals",
+    "detailedAnalysis": "Detailed Analysis",
+    "severity": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
     "noReport": "No report available",
     "backToDashboard": "Back to Dashboard",
     "viewFullReport": "View Full Report"
@@ -204,7 +225,10 @@
     "activeTasks": "Active Tasks",
     "ready": "Ready",
     "busy": "Busy",
-    "offline": "Offline"
+    "offline": "Offline",
+    "hours": "h",
+    "minutes": "m",
+    "seconds": "s"
   },
   "workflow": {
     "title": "Agent Workflow",
@@ -323,6 +347,11 @@
     "totalChunks": "Chunks",
     "vectorStore": "Vector Store",
     "embeddingMode": "Embedding Mode",
+    "embeddingModes": {
+      "semantic": "Semantic",
+      "prod": "Production",
+      "dev": "Development"
+    },
     "uploadDocument": "Upload Document",
     "dragDrop": "Drag and drop files here",
     "supportedTypes": "Supported: .txt, .md, .json, .csv, .pdf, .docx",

@@ -30,4 +30,23 @@ describe('ResearchReport', () => {
     expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
     await waitFor(() => expect(mocks.getReport).not.toHaveBeenCalled())
   })
+
+  it('renders markdown tables as accessible tables', async () => {
+    mocks.getReport.mockResolvedValue({
+      report_title: 'AAPL Report',
+      answer: '| Metric | Value |\n| --- | --- |\n| P/E | 34.09 |',
+      summary: '',
+      key_findings: [],
+      risk_factors: [],
+      market_trends: [],
+      recommendations: [],
+      chart_specs: [],
+      confidence: 0.9,
+    })
+
+    render(<ResearchReport symbol="AAPL" taskId="completed-task" />)
+
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(screen.getByText('P/E')).toBeInTheDocument()
+  })
 })
