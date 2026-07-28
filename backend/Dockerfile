@@ -68,12 +68,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 
 ENTRYPOINT ["tini", "--"]
 
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "2", \
-     "--limit-concurrency", "100", \
-     "--limit-max-requests", "10000", \
-     "--timeout-keep-alive", "65", \
-     "--access-log", \
-     "--log-level", "info"]
+CMD ["python", "-m", "app.ops.run_server"]

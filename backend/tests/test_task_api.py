@@ -58,6 +58,22 @@ def test_fail_interrupted_running_tasks(temp_db):
     assert "backend restart" in recovered["message"]
 
 
+def test_interrupted_task_recovery_runs_once_per_server_boot(temp_db):
+    first = temp_db.create_task("first-task", "Analyze AAPL", user_id=1)
+    temp_db.update_task(first["task_id"], status="running", current_stage="executing")
+
+    assert temp_db.fail_interrupted_running_tasks_once("boot-a") == 1
+
+    second = temp_db.create_task("second-task", "Analyze MSFT", user_id=1)
+    temp_db.update_task(second["task_id"], status="running", current_stage="reasoning")
+
+    assert temp_db.fail_interrupted_running_tasks_once("boot-a") is None
+    assert temp_db.get_task(second["task_id"])["status"] == "running"
+
+    assert temp_db.fail_interrupted_running_tasks_once("boot-b") == 1
+    assert temp_db.get_task(second["task_id"])["current_stage"] == "interrupted"
+
+
 @pytest.fixture
 def auth_app(test_app, mock_current_user):
     """Override auth dependency for testing."""

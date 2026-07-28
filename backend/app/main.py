@@ -278,8 +278,12 @@ async def lifespan(app: FastAPI):
 
     # Fail fast on unsafe deployment settings.
     run_startup_checks()
-    interrupted_count = storage.fail_interrupted_running_tasks()
-    if interrupted_count:
+    interrupted_count = storage.fail_interrupted_running_tasks_once(
+        os.getenv("SFA_BOOT_ID")
+    )
+    if interrupted_count is None:
+        logger.info("Startup task recovery already completed for this server boot")
+    elif interrupted_count:
         logger.warning(
             "Marked %s interrupted running task(s) as failed after startup",
             interrupted_count,
