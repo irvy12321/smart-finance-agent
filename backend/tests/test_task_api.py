@@ -15,6 +15,7 @@ def mock_storage():
         mock.get_task_owner.return_value = 1
         mock.create_task.return_value = None
         mock.update_task.return_value = None
+        mock.claim_pending_task.return_value = True
         mock.list_tasks.return_value = []
         yield mock
 
@@ -110,6 +111,43 @@ async def test_get_task_status_not_found(auth_client: AsyncClient, mock_storage)
 
     response = await auth_client.get("/api/task/nonexistent/status")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("task_status", ["running", "completed"])
+async def test_run_task_is_idempotent_for_started_tasks(
+    auth_client: AsyncClient, mock_storage, task_status: str
+):
+    mock_storage.get_task.return_value = {
+        "task_id": "test-123",
+        "status": task_status,
+    }
+
+    with patch("app.api.task.asyncio.create_task") as create_background_task:
+        response = await auth_client.post("/api/task/test-123/run")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == task_status
+    create_background_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_task_claims_pending_task_before_scheduling(
+    auth_client: AsyncClient, mock_storage, auth_app
+):
+    mock_storage.get_task.return_value = {
+        "task_id": "test-123",
+        "status": "pending",
+    }
+    auth_app.state.orchestrator = object()
+
+    with patch("app.api.task.asyncio.create_task") as create_background_task:
+        response = await auth_client.post("/api/task/test-123/run")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "running"
+    mock_storage.claim_pending_task.assert_called_once_with("test-123")
+    create_background_task.assert_called_once()
 
 
 @pytest.mark.asyncio

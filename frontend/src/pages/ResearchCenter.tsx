@@ -28,7 +28,9 @@ interface SavedResearchState {
 
 const STORAGE_KEY = 'research_center_state'
 const POLL_INTERVAL = 2000
-const RESEARCH_TIMEOUT_MS = 300000
+// Backend task execution is capped at 15 minutes. Leave one minute for the
+// final status/result request so the UI never declares a live task failed.
+const RESEARCH_TIMEOUT_MS = 16 * 60 * 1000
 
 function createInitialSteps(): TaskStep[] {
   return [
@@ -109,6 +111,7 @@ export default function ResearchCenter() {
   const [searchParams] = useSearchParams()
   const [initialState] = useState(() => loadResearchState())
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollInFlightRef = useRef(false)
 
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(initialState?.selectedSymbol || null)
   const [taskId, setTaskId] = useState<string | null>(initialState?.taskId || null)
@@ -125,6 +128,8 @@ export default function ResearchCenter() {
   }, [])
 
   const pollTaskStatus = useCallback(async (id: string, startTime: number) => {
+    if (pollInFlightRef.current) return
+    pollInFlightRef.current = true
     try {
       const status = await taskApi.getStatus(id)
       const elapsed = Date.now() - startTime
@@ -154,6 +159,8 @@ export default function ResearchCenter() {
       }
     } catch (err) {
       console.error('Polling error:', err)
+    } finally {
+      pollInFlightRef.current = false
     }
   }, [stopPolling, t, toast])
 
@@ -211,8 +218,17 @@ export default function ResearchCenter() {
       const task = await taskApi.create(query, 1)
 
       setTaskId(task.task_id)
-      await taskApi.run(task.task_id)
+
+      // The server may have accepted the task even if this response times out.
+      // Start status polling first and only stop for a definite HTTP failure.
       startPolling(task.task_id, startTime)
+      try {
+        await taskApi.run(task.task_id)
+      } catch (runError: unknown) {
+        const responseStatus = (runError as { response?: { status?: number } }).response?.status
+        if (responseStatus && responseStatus !== 400) throw runError
+        console.warn('Task start response was ambiguous; continuing status polling.', runError)
+      }
     } catch (err) {
       stopPolling()
       setIsResearching(false)

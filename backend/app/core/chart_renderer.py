@@ -3,12 +3,14 @@ Chart Renderer - 纯渲染，无 LLM 调用
 接收 Reasoner 输出的 ChartSpec，生成 matplotlib 图表
 """
 
+import threading
 from pathlib import Path
 
 from app.core.reasoner import ChartSpec
 from app.utils.logger import get_logger
 
 logger = get_logger("chart_renderer")
+_RENDER_LOCK = threading.Lock()
 
 # High-contrast color palette for dark UI
 CHART_COLORS = [
@@ -53,6 +55,11 @@ class ChartRenderer:
         return plt
 
     def render(self, chart: ChartSpec, filename: str | None = None) -> str:
+        """Render one chart while protecting matplotlib's global state."""
+        with _RENDER_LOCK:
+            return self._render(chart, filename)
+
+    def _render(self, chart: ChartSpec, filename: str | None = None) -> str:
         """渲染单个图表，返回文件路径"""
         try:
             plt = self._setup_style()

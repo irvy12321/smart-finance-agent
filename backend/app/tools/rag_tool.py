@@ -1,3 +1,5 @@
+import asyncio
+
 from app.rag.retriever import Retriever
 from app.tools.base_tool import BaseTool, ToolResult
 from app.utils.logger import get_logger
@@ -43,7 +45,8 @@ class RAGTool(BaseTool):
                 if status_getter is not None
                 else {"semantic_enabled": False, "status": "unavailable"}
             )
-            results = self.retriever.retrieve(
+            results = await asyncio.to_thread(
+                self.retriever.retrieve,
                 query,
                 top_k=top_k,
                 metadata_filter=metadata_filter,

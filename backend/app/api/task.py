@@ -283,8 +283,30 @@ async def run_task(
     if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    if task["status"] in {"running", "completed"}:
+        return {
+            "message": f"Task is already {task['status']}",
+            "task_id": task_id,
+            "status": task["status"],
+        }
     if task["status"] != "pending":
         raise HTTPException(status_code=400, detail=f"Task is already {task['status']}")
+
+    # Multiple browser retries or workers may reach this endpoint together.
+    # Only the request that atomically claims the pending row may schedule work.
+    if not storage.claim_pending_task(task_id):
+        current = storage.get_task(task_id)
+        current_status = current["status"] if current else "unknown"
+        if current_status in {"running", "completed"}:
+            return {
+                "message": f"Task is already {current_status}",
+                "task_id": task_id,
+                "status": current_status,
+            }
+        raise HTTPException(
+            status_code=409,
+            detail=f"Task could not be started. Current status: {current_status}",
+        )
 
     # Get language from Accept-Language header
     language = request.headers.get("accept-language", "en")
@@ -300,7 +322,11 @@ async def run_task(
     _background_tasks.add(bg_task)
     bg_task.add_done_callback(_background_tasks.discard)
 
-    return {"message": "Task execution started", "task_id": task_id}
+    return {
+        "message": "Task execution started",
+        "task_id": task_id,
+        "status": "running",
+    }
 
 
 @router.get("/{task_id}/result", response_model=TaskResultResponse)

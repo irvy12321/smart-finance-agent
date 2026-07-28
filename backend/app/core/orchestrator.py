@@ -274,10 +274,13 @@ class Orchestrator:
             await self._emit_stage(AgentStage.REASONING)
             if exec_result.final_answer:
                 try:
+                    reasoning_context = await asyncio.to_thread(
+                        self._build_reasoning_context,
+                        query,
+                        exec_result.final_answer,
+                    )
                     reasoning_result = await self.reasoner.reason_with_critique(
-                        context=self._build_reasoning_context(
-                            query, exec_result.final_answer
-                        ),
+                        context=reasoning_context,
                         question=query,
                         language=getattr(self, "_current_language", "en"),
                     )
@@ -333,8 +336,9 @@ class Orchestrator:
             # 3c: Chart Rendering (no LLM call, already safe)
             if reasoning_result and reasoning_result.chart_specs:
                 try:
-                    chart_paths = self.chart_renderer.render_all(
-                        reasoning_result.chart_specs
+                    chart_paths = await asyncio.to_thread(
+                        self.chart_renderer.render_all,
+                        reasoning_result.chart_specs,
                     )
                     logger.info(f"Rendered {len(chart_paths)} charts")
                 except Exception as e:
@@ -353,7 +357,8 @@ class Orchestrator:
         # 归档记忆
         if report:
             self.memory.add_assistant_message(report.summary, {"title": report.title})
-            self.memory.archive_to_long_term(
+            await asyncio.to_thread(
+                self.memory.archive_to_long_term,
                 f"Q: {query}\n\nSummary: {report.summary}\n\nFindings: {', '.join(report.analysis.key_findings)}",
                 {"source": "report", "trace_id": trace.trace_id},
             )
@@ -560,10 +565,13 @@ class Orchestrator:
         if exec_result.final_answer:
             try:
                 with _bound_route_model(self.router, route.selected_model):
+                    reasoning_context = await asyncio.to_thread(
+                        self._build_reasoning_context,
+                        query,
+                        exec_result.final_answer,
+                    )
                     reasoning_result = await self.reasoner.reason_with_critique(
-                        context=self._build_reasoning_context(
-                            query, exec_result.final_answer
-                        ),
+                        context=reasoning_context,
                         question=query,
                         language=getattr(self, "_current_language", "en"),
                     )
@@ -628,8 +636,9 @@ class Orchestrator:
         chart_paths = []
         if reasoning_result and reasoning_result.chart_specs:
             try:
-                chart_paths = self.chart_renderer.render_all(
-                    reasoning_result.chart_specs
+                chart_paths = await asyncio.to_thread(
+                    self.chart_renderer.render_all,
+                    reasoning_result.chart_specs,
                 )
             except Exception as e:
                 logger.warning(f"Chart rendering failed: {e}")
@@ -637,7 +646,8 @@ class Orchestrator:
         # Memory archival
         if report:
             self.memory.add_assistant_message(report.summary, {"title": report.title})
-            self.memory.archive_to_long_term(
+            await asyncio.to_thread(
+                self.memory.archive_to_long_term,
                 f"Q: {query}\n\n{report.summary}",
                 {"source": "report"},
             )
