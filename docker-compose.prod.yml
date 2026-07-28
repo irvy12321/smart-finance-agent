@@ -16,6 +16,7 @@ services:
     environment:
       - ENVIRONMENT=production
       - PYTHONUNBUFFERED=1
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-1}
       - ALLOW_MOCK_DATA=${ALLOW_MOCK_DATA:-false}
       - LITELLM_LOCAL_MODEL_COST_MAP=${LITELLM_LOCAL_MODEL_COST_MAP:-true}
       - HF_HUB_OFFLINE=1
@@ -43,8 +44,8 @@ services:
       interval: 30s
       timeout: 30s
       retries: 5
-      # Two workers each initialize semantic models on first boot. Small demo
-      # hosts can take 15+ minutes while the model files are cold.
+      # Semantic models can take several minutes to initialize while their
+      # files are cold, especially on a small demo host.
       start_period: 1200s
     networks:
       - sfa-network
