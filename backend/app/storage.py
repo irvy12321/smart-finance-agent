@@ -484,7 +484,15 @@ def claim_pending_task(task_id: str) -> bool:
             SET status = ?, progress = ?, current_stage = ?, message = ?, updated_at = ?
             WHERE task_id = ? AND status = ?
             """,
-            ("running", 1.0, "queued", "Task execution queued.", now, task_id, "pending"),
+            (
+                "running",
+                1.0,
+                "queued",
+                "Task execution queued.",
+                now,
+                task_id,
+                "pending",
+            ),
         )
         conn.commit()
         return cursor.rowcount == 1
