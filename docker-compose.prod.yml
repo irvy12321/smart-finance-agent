@@ -41,9 +41,11 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
       interval: 30s
-      timeout: 10s
+      timeout: 30s
       retries: 5
-      start_period: 360s
+      # Two workers each initialize semantic models on first boot. Small demo
+      # hosts can take 15+ minutes while the model files are cold.
+      start_period: 1200s
     networks:
       - sfa-network
     logging:
