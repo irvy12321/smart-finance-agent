@@ -129,7 +129,7 @@ export default function StockPool({ selectedSymbol, onSelect }: StockPoolProps) 
             }`}
           >
             <Star className="w-3 h-3 inline mr-1" />
-            Favorites
+            {t('stock.favorites')}
           </button>
         </div>
         <div className="relative">

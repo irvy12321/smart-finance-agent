@@ -238,7 +238,9 @@ export default function RAGManagement() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-primary-400 uppercase">{t('rag.embeddingMode')}</p>
-                <p className="text-2xl font-bold text-primary-50 capitalize mt-1">{stats.embedding_mode}</p>
+                <p className="text-2xl font-bold text-primary-50 mt-1">
+                  {t(`rag.embeddingModes.${stats.embedding_mode}`, { defaultValue: stats.embedding_mode })}
+                </p>
               </div>
             </div>
           </div>

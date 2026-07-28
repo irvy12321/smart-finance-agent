@@ -36,11 +36,12 @@ _DISCLAIMER_RE = re.compile(
 _BULLET_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)]|[一二三四五六七八九十]+[、.])\s+")
 _HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*$")
 _MARKDOWN_TOKEN_RE = re.compile(r"[*_`>#]")
+_UNSUPPORTED_NUMBER_MARKER = "[unsupported number removed]"
 
 
 def enrich_report_result(result: dict[str, Any]) -> dict[str, Any]:
     """Replace low-value fallback cards with grounded excerpts from answer text."""
-    enriched = copy.deepcopy(result)
+    enriched = _remove_legacy_number_markers(copy.deepcopy(result))
     answer = str(enriched.get("answer") or "")
     if not answer.strip():
         return enriched
@@ -73,6 +74,31 @@ def enrich_report_result(result: dict[str, Any]) -> dict[str, Any]:
         enriched["chart_specs"] = extracted["chart_specs"]
 
     return enriched
+
+
+def _remove_legacy_number_markers(value: Any) -> Any:
+    """Hide internal grounding markers persisted by older report runs."""
+    if isinstance(value, str):
+        if _UNSUPPORTED_NUMBER_MARKER not in value:
+            return value
+        parts = re.split(r"([，,；;。！？!?]|\.(?=\s|$)|\n)", value)
+        cleaned: list[str] = []
+        for index in range(0, len(parts), 2):
+            clause = parts[index]
+            separator = parts[index + 1] if index + 1 < len(parts) else ""
+            if _UNSUPPORTED_NUMBER_MARKER not in clause:
+                cleaned.extend((clause, separator))
+        result = "".join(cleaned).strip()
+        return re.sub(r"^[，,；;。！？!?\s]+|[，,；;\s]+$", "", result)
+    if isinstance(value, list):
+        return [
+            cleaned
+            for item in value
+            if (cleaned := _remove_legacy_number_markers(item)) not in ("", None)
+        ]
+    if isinstance(value, dict):
+        return {key: _remove_legacy_number_markers(item) for key, item in value.items()}
+    return value
 
 
 def extract_report_cards_from_answer(answer: str) -> dict[str, Any]:

@@ -14,6 +14,21 @@ interface AgentExecutionProps {
   totalDuration?: number
 }
 
+const STEP_TRANSLATION_KEYS: Record<string, string> = {
+  planner: 'planner',
+  Planner: 'planner',
+  newsSearch: 'newsSearch',
+  'News Search': 'newsSearch',
+  ragRetrieve: 'ragRetrieve',
+  'RAG Retrieve': 'ragRetrieve',
+  financialReport: 'financialReport',
+  'Financial Report': 'financialReport',
+  synthesizer: 'synthesizer',
+  Synthesizer: 'synthesizer',
+  report: 'report',
+  Report: 'report',
+}
+
 export default function AgentExecution({ taskId, steps = [], traceId, totalDuration }: AgentExecutionProps) {
   const { t } = useTranslation()
   const completedSteps = steps.filter(s => s.status === 'completed').length
@@ -53,7 +68,7 @@ export default function AgentExecution({ taskId, steps = [], traceId, totalDurat
         </div>
         {traceId && (
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs text-primary-500">Trace:</span>
+            <span className="text-xs text-primary-500">{t('workflow.trace')}:</span>
             <span className="text-xs text-primary-400 font-mono">{traceId}</span>
           </div>
         )}
@@ -93,7 +108,7 @@ export default function AgentExecution({ taskId, steps = [], traceId, totalDurat
                       step.status === 'failed' ? 'text-red-400' :
                       'text-primary-500'
                     }`}>
-                      {step.name}
+                      {t(`research.agentSteps.${STEP_TRANSLATION_KEYS[step.name] || step.name}`, { defaultValue: step.name })}
                     </span>
                     {step.duration && (
                       <span className="text-xs text-primary-500 flex items-center gap-1">

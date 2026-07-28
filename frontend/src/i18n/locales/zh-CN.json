@@ -19,8 +19,11 @@
     "yes": "是",
     "no": "否",
     "refresh": "刷新",
+    "live": "实时",
     "viewAll": "查看全部",
     "noData": "暂无数据",
+    "max": "最大值",
+    "min": "最小值",
     "dataUnavailable": "数据暂不可用",
     "simulatedData": "模拟数据",
     "simulatedDataNotice": "用于功能演示的可复现模拟数据，不代表真实市场行情",
@@ -147,7 +150,16 @@
     "reasoning": "推理中",
     "reporting": "报告生成中",
     "completed": "已完成",
-    "confirmDelete": "确定要删除这个研究任务和报告吗？"
+    "confirmDelete": "确定要删除这个研究任务和报告吗？",
+    "defaultQuery": "请分析 {{symbol}} 的股价表现，并生成包含行情、新闻、知识库检索和财务数据的综合研究报告",
+    "agentSteps": {
+      "planner": "规划器",
+      "newsSearch": "新闻检索",
+      "ragRetrieve": "知识库检索",
+      "financialReport": "财务报告",
+      "synthesizer": "综合分析",
+      "report": "报告生成"
+    }
   },
   "chat": {
     "title": "聊天",
@@ -179,6 +191,15 @@
     "download": "下载",
     "share": "分享",
     "loadingReport": "加载报告中...",
+    "loadingChart": "图表加载中...",
+    "chartLoadsWhenVisible": "滚动到此处时加载图表",
+    "visuals": "数据图表",
+    "detailedAnalysis": "详细分析",
+    "severity": {
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
     "noReport": "暂无报告",
     "backToDashboard": "返回仪表盘",
     "viewFullReport": "查看完整报告"
@@ -204,7 +225,10 @@
     "activeTasks": "活跃任务",
     "ready": "就绪",
     "busy": "繁忙",
-    "offline": "离线"
+    "offline": "离线",
+    "hours": "小时",
+    "minutes": "分",
+    "seconds": "秒"
   },
   "workflow": {
     "title": "智能体工作流",
@@ -323,6 +347,11 @@
     "totalChunks": "文本块",
     "vectorStore": "向量存储",
     "embeddingMode": "嵌入模式",
+    "embeddingModes": {
+      "semantic": "语义向量",
+      "prod": "生产检索",
+      "dev": "开发模式"
+    },
     "uploadDocument": "上传文档",
     "dragDrop": "拖放文件到此处",
     "supportedTypes": "支持格式：.txt、.md、.json、.csv、.pdf、.docx",

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { ArrowLeft, RefreshCw, Download, Trash2, AlertCircle, Loader2, TrendingUp, AlertTriangle, Target, CheckCircle, Clock, BarChart3, Brain } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
@@ -176,7 +177,7 @@ ${t('research.priority')}: ${report.confidence ? `${(report.confidence * 100).to
   )
 }
 
-function ReportContent({ report, t }: { report: ReportResponse, t: (key: string) => string }) {
+function ReportContent({ report, t }: { report: ReportResponse, t: TFunction }) {
   return (
     <>
       {/* Title & Stats */}
@@ -259,7 +260,7 @@ function ReportContent({ report, t }: { report: ReportResponse, t: (key: string)
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm font-semibold text-primary-200">{risk.factor}</p>
                   <span className={`badge ${risk.severity === 'high' ? 'badge-error' : risk.severity === 'medium' ? 'badge-pending' : 'badge-success'}`}>
-                    {risk.severity?.toUpperCase()}
+                    {t(`report.severity.${risk.severity}`, { defaultValue: risk.severity?.toUpperCase() })}
                   </span>
                 </div>
                 <p className="text-xs text-primary-400">{risk.description}</p>

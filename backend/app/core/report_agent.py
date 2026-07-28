@@ -650,8 +650,20 @@ class ReportAgent:
         return {
             normalized
             for match in _NUMERIC_TOKEN_RE.finditer(text or "")
-            if (normalized := cls._normalize_number_token(match.group(0)))
+            if (normalized := cls._normalize_number_match(match))
         }
+
+    @classmethod
+    def _normalize_number_match(cls, match: re.Match) -> str:
+        token = match.group(0)
+        # In compact ranges such as ``3-6 months`` the regex sees ``-6``.
+        # Treat that hyphen as a separator, while preserving a real negative
+        # value such as ``change: -1.26%``.
+        if token.startswith("-") and match.start() > 0:
+            previous = match.string[match.start() - 1]
+            if previous.isdigit():
+                token = token[1:]
+        return cls._normalize_number_token(token)
 
     @staticmethod
     def _normalize_number_token(token: str) -> str:
@@ -675,17 +687,26 @@ class ReportAgent:
     @classmethod
     def _remove_unsupported_numbers(cls, value, allowed_numbers: set[str]):
         if isinstance(value, str):
-            return _NUMERIC_TOKEN_RE.sub(
-                lambda match: (
-                    match.group(0)
-                    if cls._normalize_number_token(match.group(0)) in allowed_numbers
-                    else "[unsupported number removed]"
-                ),
-                value,
-            )
+            parts = re.split(r"([，,；;。！？!?]|\.(?=\s|$)|\n)", value)
+            cleaned: list[str] = []
+            for index in range(0, len(parts), 2):
+                clause = parts[index]
+                separator = parts[index + 1] if index + 1 < len(parts) else ""
+                unsupported = any(
+                    cls._normalize_number_match(match) not in allowed_numbers
+                    for match in _NUMERIC_TOKEN_RE.finditer(clause)
+                )
+                if not unsupported:
+                    cleaned.extend((clause, separator))
+
+            result = "".join(cleaned).strip()
+            return re.sub(r"^[，,；;。！？!?\s]+|[，,；;\s]+$", "", result)
         if isinstance(value, list):
             return [
-                cls._remove_unsupported_numbers(item, allowed_numbers) for item in value
+                cleaned
+                for item in value
+                if (cleaned := cls._remove_unsupported_numbers(item, allowed_numbers))
+                not in ("", None)
             ]
         if isinstance(value, dict):
             return {
