@@ -405,6 +405,10 @@ jobs:
       ECS_SSH_PORT: ${{ secrets.ECS_SSH_PORT }}
       ECS_PROJECT_DIR: ${{ secrets.ECS_PROJECT_DIR }}
       SFA_DEFAULT_ADMIN_PASSWORD: ${{ secrets.SFA_DEFAULT_ADMIN_PASSWORD }}
+      ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+      FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+      FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+      NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
       RESET_ADMIN_PASSWORD_ON_DEPLOY: ${{ vars.RESET_ADMIN_PASSWORD_ON_DEPLOY || 'false' }}
       SSH_OPTS: "-o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=60 -o ServerAliveInterval=15"
     steps:
@@ -433,6 +437,10 @@ jobs:
           umask 077
           {
             printf 'SFA_DEFAULT_ADMIN_PASSWORD=%q\n' "$SFA_DEFAULT_ADMIN_PASSWORD"
+            printf 'ALPHA_VANTAGE_API_KEY=%q\n' "$ALPHA_VANTAGE_API_KEY"
+            printf 'FMP_API_KEY=%q\n' "$FMP_API_KEY"
+            printf 'FINNHUB_API_KEY=%q\n' "$FINNHUB_API_KEY"
+            printf 'NEWS_API_KEY=%q\n' "$NEWS_API_KEY"
             printf 'RESET_ADMIN_PASSWORD_ON_DEPLOY=%q\n' "$RESET_ADMIN_PASSWORD_ON_DEPLOY"
           } > "$APP_ENV_FILE"
           export SSHPASS="$ECS_SSH_PASSWORD"
@@ -470,8 +478,16 @@ jobs:
               fi
             }
             upsert_env_var "DEFAULT_ADMIN_PASSWORD" "${SFA_DEFAULT_ADMIN_PASSWORD:-}" "backend/.env"
+            upsert_env_var "ALPHA_VANTAGE_API_KEY" "${ALPHA_VANTAGE_API_KEY:-}" "backend/.env"
+            upsert_env_var "FMP_API_KEY" "${FMP_API_KEY:-}" "backend/.env"
+            upsert_env_var "FINNHUB_API_KEY" "${FINNHUB_API_KEY:-}" "backend/.env"
+            upsert_env_var "NEWS_API_KEY" "${NEWS_API_KEY:-}" "backend/.env"
             if ! grep -Eq '^DEFAULT_ADMIN_PASSWORD=.{12,}' backend/.env 2>/dev/null; then
               echo 'DEFAULT_ADMIN_PASSWORD is missing or too short in backend/.env. Set repository secret SFA_DEFAULT_ADMIN_PASSWORD.'
+              exit 1
+            fi
+            if ! grep -Eq '^ALPHA_VANTAGE_API_KEY=.+' backend/.env 2>/dev/null; then
+              echo 'ALPHA_VANTAGE_API_KEY is missing in backend/.env. Set repository secret ALPHA_VANTAGE_API_KEY.'
               exit 1
             fi
             nohup sh -c '
