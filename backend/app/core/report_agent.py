@@ -75,7 +75,12 @@ def _extract_rag_document_names(data: object) -> list[str]:
         if not isinstance(raw_name, str):
             continue
         name = " ".join(raw_name.split())[:200]
-        if not name or name.lower() == "unknown" or name in seen:
+        # Some legacy/indexed chunks carry placeholder source values. They
+        # are not user-facing documents and must not appear as citations.
+        if (
+            name.lower() in {"unknown", "test", "mock", "fallback", "static"}
+            or name in seen
+        ):
             continue
         seen.add(name)
         names.append(name)
