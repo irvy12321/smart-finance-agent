@@ -13,6 +13,39 @@
 
 > 架构总览、数据流与关键设计取舍见 [`DESIGN.md`](DESIGN.md)；可量化证据见下文「[RAG 检索质量评测](#rag-检索质量评测-rag-retrieval-evaluation)」与「[编排可靠性](#编排可靠性-orchestration-reliability)」两节。
 
+## 项目演示
+
+### 多阶段 Agent 研究工作台
+
+<p align="center">
+  <img src="docs/images/research-workflow.png" alt="多阶段 Agent 股票研究工作台" width="100%">
+</p>
+
+一次研究请求由 Planner（规划器）拆解任务，Executor（执行器）调度新闻、财务和 RAG 检索等工具，再由 Reasoner（推理器）与 Report Agent（报告代理）整理为包含数据摘要、图表、关键发现和风险因素的研究结果；右侧同步展示各阶段执行状态。
+
+<details>
+<summary><strong>查看更多界面：RAG 知识库与结构化报告</strong></summary>
+
+### 中文语义知识库
+
+<p align="center">
+  <img src="docs/images/rag-knowledge-base.png" alt="RAG 中文语义知识库管理界面" width="100%">
+</p>
+
+支持上传 `txt`、`md`、`json`、`csv`、`pdf` 和 `docx` 文档，完成中文句子感知切块、BGE 语义嵌入、FAISS 向量索引和检索；页面展示文档、文本块、向量数量及当前嵌入模式。
+
+### 可追踪研究报告
+
+<p align="center">
+  <img src="docs/images/research-report.png" alt="带数据来源和风险说明的结构化研究报告" width="100%">
+</p>
+
+研究结果持久化为可回看的结构化报告，保留任务完成情况、关键结论、风险因素、数据来源及可信度说明，便于追踪结论依据。
+
+</details>
+
+> 截图来自演示环境，页面中的金融信息仅用于研究与教育，不构成投资建议。
+
 ## 功能特性
 
 - **Multi-Agent 架构**: Planner → Executor → Reasoner 协同工作，Reasoner 内置 Self-Critique 自我批评循环（低置信度触发 critique→refine，失败自动降级）
