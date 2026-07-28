@@ -473,6 +473,33 @@ def update_task(task_id: str, **kwargs) -> bool:
         conn.close()
 
 
+def claim_pending_task(task_id: str) -> bool:
+    """Atomically move a pending task to running before scheduling it."""
+    conn = _get_connection()
+    try:
+        now = datetime.now().isoformat()
+        cursor = conn.execute(
+            """
+            UPDATE tasks
+            SET status = ?, progress = ?, current_stage = ?, message = ?, updated_at = ?
+            WHERE task_id = ? AND status = ?
+            """,
+            (
+                "running",
+                1.0,
+                "queued",
+                "Task execution queued.",
+                now,
+                task_id,
+                "pending",
+            ),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
+    finally:
+        conn.close()
+
+
 def update_task_result(task_id: str, result: dict[str, Any], events: list) -> bool:
     conn = _get_connection()
     try:

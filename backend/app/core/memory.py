@@ -76,7 +76,10 @@ class LongTermMemory:
             return []
         try:
             query_vec = self.embedder.embed_query(query)
-            results = self.store.search(query_vec, top_k=top_k or self.top_k)
+            # FAISS search and mutation share the same native index. Keep them
+            # serialized now that retrieval/archival may run in worker threads.
+            with self._write_lock:
+                results = self.store.search(query_vec, top_k=top_k or self.top_k)
             return [r for r in results if r.get("score", 0) > 0]
         except Exception as e:
             logger.warning(f"LongTermMemory.recall failed: {e}")

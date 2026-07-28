@@ -5,6 +5,7 @@ Chat API routes - 提供聊天接口
 2. Orchestrator 全流水线（金融研究查询：股价、新闻、分析等）
 """
 
+import asyncio
 import re
 import uuid
 from datetime import datetime
@@ -538,7 +539,7 @@ async def generate_chat_response(
 
         retriever = Retriever()
         if retriever.doc_count > 0:
-            results = retriever.retrieve(message, top_k=3)
+            results = await asyncio.to_thread(retriever.retrieve, message, top_k=3)
             if results:
                 rag_parts = ["[Knowledge Base Context]"]
                 for i, r in enumerate(results, 1):
