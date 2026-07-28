@@ -15,7 +15,17 @@
 
 ## 项目演示
 
-### 多阶段 Agent 研究工作台
+建议面试演示时按 **仪表盘 → 研究任务 → RAG 知识库 → 对话引用 → 完整报告 → 系统监控** 的顺序讲解，先展示产品体验，再说明 Agent 编排、数据溯源与工程可靠性。
+
+### 1. 仪表盘：行情、风险与最近任务
+
+<p align="center">
+  <img src="docs/images/demo-dashboard.png" alt="Smart Finance Agent 仪表盘" width="100%">
+</p>
+
+首页集中展示市场行情、热门股票、风险指标、AI 洞察和最近研究任务。演示数据会明确标注“模拟数据”，避免与真实行情混淆。
+
+### 2. 多阶段 Agent 研究工作台
 
 <p align="center">
   <img src="docs/images/research-workflow.png" alt="多阶段 Agent 股票研究工作台" width="100%">
@@ -24,27 +34,47 @@
 一次研究请求由 Planner（规划器）拆解任务，Executor（执行器）调度新闻、财务和 RAG 检索等工具，再由 Reasoner（推理器）与 Report Agent（报告代理）整理为包含数据摘要、图表、关键发现和风险因素的研究结果；右侧同步展示各阶段执行状态。
 
 <details>
-<summary><strong>查看更多界面：RAG 知识库与结构化报告</strong></summary>
+<summary><strong>查看更多界面：知识库、对话、报告与系统监控</strong></summary>
 
-### 中文语义知识库
-
-<p align="center">
-  <img src="docs/images/rag-knowledge-base.png" alt="RAG 中文语义知识库管理界面" width="100%">
-</p>
-
-支持上传 `txt`、`md`、`json`、`csv`、`pdf` 和 `docx` 文档，完成中文句子感知切块、BGE 语义嵌入、FAISS 向量索引和检索；页面展示文档、文本块、向量数量及当前嵌入模式。
-
-### 可追踪研究报告
+### 3. RAG 中文语义知识库
 
 <p align="center">
-  <img src="docs/images/research-report.png" alt="带数据来源和风险说明的结构化研究报告" width="100%">
+  <img src="docs/images/demo-rag-knowledge-base.png" alt="RAG 中文语义知识库管理界面" width="100%">
 </p>
 
-研究结果持久化为可回看的结构化报告，保留任务完成情况、关键结论、风险因素、数据来源及可信度说明，便于追踪结论依据。
+支持上传 `txt`、`md`、`json`、`csv`、`pdf` 和 `docx` 文档，完成文本切块、语义嵌入、FAISS 向量索引和检索；页面展示文档、文本块、向量数量及当前嵌入模式。
+
+### 4. 对话式研究与知识来源引用
+
+<p align="center">
+  <img src="docs/images/demo-chat-rag-citations.png" alt="带知识库来源引用和完整报告入口的研究对话" width="100%">
+</p>
+
+金融研究问题会自动进入完整 Agent 流程。聊天窗口返回适合快速阅读的摘要，明确列出命中的知识库文档，并提供完整报告入口。
+
+### 5. 可追踪的结构化研究报告
+
+<p align="center">
+  <img src="docs/images/demo-report-analysis.png" alt="包含数据来源和完整分析正文的结构化研究报告" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/images/demo-report-charts.png" alt="研究报告中的关键发现、风险因素和数据图表" width="100%">
+</p>
+
+研究结果持久化为可回看的结构化报告，保留任务完成情况、分析正文、关键结论、风险因素、数据来源、图表及可信度说明，便于追踪结论依据。
+
+### 6. Agent 运行监控与可观测性
+
+<p align="center">
+  <img src="docs/images/demo-system-observability.png" alt="Agent 请求、延迟、成功率和任务状态监控界面" width="100%">
+</p>
+
+系统页汇总请求量、成功率、任务状态及各 Agent 的调用次数和平均延迟，用于演示编排链路并快速定位失败环节。
 
 </details>
 
-> 截图来自演示环境，页面中的金融信息仅用于研究与教育，不构成投资建议。
+> 截图来自 ECS 演示环境；行情、新闻或风险指标可能包含已明确标注的模拟数据。页面中的金融信息仅用于研究与教育，不构成投资建议。
 
 ## 功能特性
 
