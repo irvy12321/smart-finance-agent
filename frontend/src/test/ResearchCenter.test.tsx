@@ -32,8 +32,8 @@ vi.mock('../components/research', () => ({
   StockPool: ({ onSelect }: { onSelect: (symbol: string) => void }) => (
     <button onClick={() => onSelect('AAPL')}>Pick AAPL</button>
   ),
-  ResearchReport: ({ isLoading }: { isLoading: boolean }) => (
-    <div data-testid="report-state">{isLoading ? 'loading' : 'idle'}</div>
+  ResearchReport: ({ isLoading, errorMessage }: { isLoading: boolean; errorMessage?: string | null }) => (
+    <div data-testid="report-state">{errorMessage || (isLoading ? 'loading' : 'idle')}</div>
   ),
   AgentExecution: () => <div>Agent execution</div>,
 }))
@@ -71,5 +71,34 @@ describe('ResearchCenter task recovery', () => {
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledWith('task-123'))
     expect(screen.getByTestId('report-state')).toHaveTextContent('loading')
     expect(mocks.toastError).not.toHaveBeenCalled()
+  })
+
+  it('shows the restart interruption instead of treating a saved task as a report', async () => {
+    localStorage.setItem('research_center_state', JSON.stringify({
+      selectedSymbol: 'AAPL',
+      taskId: 'interrupted-task',
+      isResearching: false,
+      steps: [{ name: 'Planner', status: 'completed', color: 'text-primary-300' }],
+      totalDuration: 5200,
+      startedAt: Date.now() - 5200,
+    }))
+    mocks.getStatus.mockResolvedValue({
+      task_id: 'interrupted-task',
+      status: 'failed',
+      progress: 30,
+      current_stage: 'interrupted',
+      message: 'Task was interrupted by a backend restart.',
+    })
+
+    render(
+      <MemoryRouter>
+        <ResearchCenter />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledWith('interrupted-task'))
+    await waitFor(() => expect(screen.getByTestId('report-state')).toHaveTextContent(
+      'The task was interrupted by a service restart. Please create a new research task.',
+    ))
   })
 })

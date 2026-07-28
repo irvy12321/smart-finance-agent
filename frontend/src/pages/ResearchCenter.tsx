@@ -21,10 +21,14 @@ interface SavedResearchState {
   selectedSymbol: string | null
   taskId: string | null
   isResearching: boolean
+  taskLifecycle?: TaskLifecycle
+  taskError?: string | null
   steps: TaskStep[]
   totalDuration?: number
   startedAt?: number
 }
+
+type TaskLifecycle = TaskStatusResponse['status'] | 'unknown'
 
 const STORAGE_KEY = 'research_center_state'
 const POLL_INTERVAL = 2000
@@ -116,6 +120,11 @@ export default function ResearchCenter() {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(initialState?.selectedSymbol || null)
   const [taskId, setTaskId] = useState<string | null>(initialState?.taskId || null)
   const [isResearching, setIsResearching] = useState(Boolean(initialState?.isResearching))
+  const [taskLifecycle, setTaskLifecycle] = useState<TaskLifecycle>(
+    initialState?.taskLifecycle || (initialState?.isResearching ? 'running' : 'unknown'),
+  )
+  const [taskError, setTaskError] = useState<string | null>(initialState?.taskError || null)
+  const [isValidatingTask, setIsValidatingTask] = useState(Boolean(initialState?.taskId && !initialState?.isResearching))
   const [steps, setSteps] = useState<TaskStep[]>(initialState?.steps?.length ? initialState.steps : [])
   const [totalDuration, setTotalDuration] = useState<number | undefined>(initialState?.totalDuration)
   const [startedAt, setStartedAt] = useState<number | undefined>(initialState?.startedAt)
@@ -134,11 +143,13 @@ export default function ResearchCenter() {
       const status = await taskApi.getStatus(id)
       const elapsed = Date.now() - startTime
 
+      setTaskLifecycle(status.status)
       setTotalDuration(elapsed)
       setSteps((prev) => updateStepsForStage(prev.length ? prev : createInitialSteps(), status, elapsed))
 
       if (status.status === 'completed') {
         stopPolling()
+        setTaskError(null)
         setIsResearching(false)
         toast.success(t('common.success'), t('research.completed'))
         return
@@ -146,13 +157,18 @@ export default function ResearchCenter() {
 
       if (status.status === 'failed') {
         stopPolling()
+        const failureMessage = status.current_stage === 'interrupted'
+          ? t('research.taskInterrupted')
+          : status.message || t('research.taskFailed')
+        setTaskError(failureMessage)
         setIsResearching(false)
-        toast.error(t('common.error'), t('research.taskFailed'))
+        toast.error(t('common.error'), failureMessage)
         return
       }
 
       if (elapsed > RESEARCH_TIMEOUT_MS) {
         stopPolling()
+        setTaskError(t('error.timeout'))
         setIsResearching(false)
         setSteps((prev) => prev.map((step) => (step.status === 'running' ? { ...step, status: 'failed' } : step)))
         toast.error(t('common.error'), t('error.timeout'))
@@ -182,11 +198,54 @@ export default function ResearchCenter() {
       selectedSymbol,
       taskId,
       isResearching,
+      taskLifecycle,
+      taskError,
       steps,
       totalDuration,
       startedAt,
     })
-  }, [isResearching, selectedSymbol, startedAt, steps, taskId, totalDuration])
+  }, [isResearching, selectedSymbol, startedAt, steps, taskError, taskId, taskLifecycle, totalDuration])
+
+  // Older saved UI state did not record the terminal task status. Resolve it
+  // before the report component is allowed to fetch a completed-only endpoint.
+  useEffect(() => {
+    if (!taskId || isResearching || taskLifecycle !== 'unknown') {
+      setIsValidatingTask(false)
+      return
+    }
+
+    let cancelled = false
+    setIsValidatingTask(true)
+    taskApi.getStatus(taskId)
+      .then((status) => {
+        if (cancelled) return
+        setTaskLifecycle(status.status)
+        setSteps((prev) => updateStepsForStage(prev.length ? prev : createInitialSteps(), status, totalDuration || 0))
+
+        if (status.status === 'failed') {
+          setTaskError(status.current_stage === 'interrupted'
+            ? t('research.taskInterrupted')
+            : status.message || t('research.taskFailed'))
+        } else if (status.status === 'running' || status.status === 'pending') {
+          setTaskError(null)
+          setStartedAt((value) => value || Date.now())
+          setIsResearching(true)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('Failed to validate saved research task:', err)
+          setTaskError(t('error.serverError'))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsValidatingTask(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isResearching, taskId, taskLifecycle, t, totalDuration])
 
   useEffect(() => {
     if (taskId && isResearching) {
@@ -209,6 +268,9 @@ export default function ResearchCenter() {
       const initialSteps = createInitialSteps()
 
       setIsResearching(true)
+      setTaskLifecycle('pending')
+      setTaskError(null)
+      setIsValidatingTask(false)
       setTaskId(null)
       setStartedAt(startTime)
       setTotalDuration(undefined)
@@ -231,6 +293,8 @@ export default function ResearchCenter() {
       }
     } catch (err) {
       stopPolling()
+      setTaskLifecycle('failed')
+      setTaskError(err instanceof Error ? err.message : t('research.taskFailed'))
       setIsResearching(false)
       setSteps((prev) => prev.map((step) => (step.status === 'running' ? { ...step, status: 'failed' } : step)))
       toast.error(t('common.error'), err instanceof Error ? err.message : t('research.taskFailed'))
@@ -280,7 +344,8 @@ export default function ResearchCenter() {
           <ResearchReport
             symbol={selectedSymbol}
             taskId={taskId}
-            isLoading={isResearching}
+            isLoading={isResearching || isValidatingTask}
+            errorMessage={taskError}
           />
         </div>
 

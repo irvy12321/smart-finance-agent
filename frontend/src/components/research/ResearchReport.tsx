@@ -30,6 +30,7 @@ interface ResearchReportProps {
   symbol: string | null
   taskId?: string | null
   isLoading?: boolean
+  errorMessage?: string | null
 }
 
 type RawRiskFactor =
@@ -41,7 +42,7 @@ type RawRiskFactor =
       severity?: string
     }
 
-export default function ResearchReport({ symbol, taskId, isLoading }: ResearchReportProps) {
+export default function ResearchReport({ symbol, taskId, isLoading, errorMessage }: ResearchReportProps) {
   const { t } = useTranslation()
   const [report, setReport] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -80,10 +81,10 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
   }, [taskId, symbol])
 
   useEffect(() => {
-    if (taskId && !isLoading) {
+    if (taskId && !isLoading && !errorMessage) {
       fetchReport()
     }
-  }, [taskId, isLoading, fetchReport])
+  }, [taskId, isLoading, errorMessage, fetchReport])
 
   if (!taskId && !symbol) {
     return (
@@ -108,18 +109,22 @@ export default function ResearchReport({ symbol, taskId, isLoading }: ResearchRe
     )
   }
 
-  if (error) {
+  const displayedError = errorMessage || error
+
+  if (displayedError) {
     return (
       <div className="bg-dark-card border border-dark-border rounded-lg h-full flex items-center justify-center">
         <div className="text-center text-red-400">
           <AlertTriangle className="w-8 h-8 mx-auto mb-3" />
-          <p className="text-sm">{error}</p>
-          <button
-            onClick={fetchReport}
-            className="mt-2 text-xs text-primary-500 hover:text-primary-300"
-          >
-            {t('common.refresh')}
-          </button>
+          <p className="text-sm">{displayedError}</p>
+          {!errorMessage && (
+            <button
+              onClick={fetchReport}
+              className="mt-2 text-xs text-primary-500 hover:text-primary-300"
+            >
+              {t('common.refresh')}
+            </button>
+          )}
         </div>
       </div>
     )
