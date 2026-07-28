@@ -45,6 +45,8 @@ const api = axios.create({
   },
 })
 
+const CHAT_REQUEST_TIMEOUT_MS = 180000
+
 // Token refresh state
 let isRefreshing = false
 let failedQueue: Array<{
@@ -369,9 +371,11 @@ export const chatApi = {
   },
 
   sendMessage: async (conversationId: string, message: string): Promise<ChatResponse> => {
-    const response = await api.post<ChatResponse>(`/chat/conversations/${conversationId}/messages`, {
-      message,
-    })
+    const response = await api.post<ChatResponse>(
+      `/chat/conversations/${conversationId}/messages`,
+      { message },
+      { timeout: CHAT_REQUEST_TIMEOUT_MS },
+    )
     return response.data
   },
 

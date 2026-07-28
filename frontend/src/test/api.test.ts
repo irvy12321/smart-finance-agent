@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import axios from 'axios'
-import { taskApi, authApi } from '../services/api'
+import { taskApi, authApi, chatApi } from '../services/api'
 
 vi.mock('axios', () => {
   const mockAxios = {
@@ -70,6 +70,34 @@ describe('taskApi', () => {
 
     expect(result.tasks).toHaveLength(1)
     expect(result.tasks[0].task_id).toBe('1')
+  })
+})
+
+describe('chatApi', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('uses the extended timeout for financial research responses', async () => {
+    const mockResponse = {
+      data: {
+        conversation_id: 'conv-1',
+        message: { role: 'assistant', content: 'Done', timestamp: '' },
+        response: 'Done',
+        sources: [],
+        confidence: 0.9,
+        timestamp: '',
+      },
+    }
+    mockedAxios.post.mockResolvedValueOnce(mockResponse)
+
+    await chatApi.sendMessage('conv-1', 'Analyze AAPL')
+
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      '/chat/conversations/conv-1/messages',
+      { message: 'Analyze AAPL' },
+      { timeout: 180000 },
+    )
   })
 })
 
