@@ -96,7 +96,7 @@ describe('chatApi', () => {
     expect(mockedAxios.post).toHaveBeenCalledWith(
       '/chat/conversations/conv-1/messages',
       { message: 'Analyze AAPL' },
-      { timeout: 180000 },
+      { timeout: 360000 },
     )
   })
 })
