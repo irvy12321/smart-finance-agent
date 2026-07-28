@@ -410,7 +410,7 @@ jobs:
       FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
       NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
       RESET_ADMIN_PASSWORD_ON_DEPLOY: ${{ vars.RESET_ADMIN_PASSWORD_ON_DEPLOY || 'false' }}
-      SSH_OPTS: "-o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=60 -o ServerAliveInterval=15"
+      SSH_OPTS: "-o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=60 -o ServerAliveInterval=15 -o ControlMaster=auto -o ControlPersist=300 -o ControlPath=/tmp/sfa-ssh-%C"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -444,9 +444,25 @@ jobs:
             printf 'RESET_ADMIN_PASSWORD_ON_DEPLOY=%q\n' "$RESET_ADMIN_PASSWORD_ON_DEPLOY"
           } > "$APP_ENV_FILE"
           export SSHPASS="$ECS_SSH_PASSWORD"
-          sshpass -e scp $SSH_OPTS -P "$PORT" /tmp/src.tar.gz "$ECS_SSH_USER@$ECS_HOST:/tmp/src.tar.gz"
-          sshpass -e scp $SSH_OPTS -P "$PORT" /tmp/sfa-backend.tar.gz "$ECS_SSH_USER@$ECS_HOST:/tmp/sfa-backend.tar.gz"
-          sshpass -e scp $SSH_OPTS -P "$PORT" "$APP_ENV_FILE" "$ECS_SSH_USER@$ECS_HOST:$APP_ENV_FILE"
+          copy_with_retry() {
+            local source="$1"
+            local target="$2"
+            local attempt
+            for attempt in $(seq 1 5); do
+              if sshpass -e scp $SSH_OPTS -P "$PORT" "$source" "$target"; then
+                return 0
+              fi
+              if [ "$attempt" -lt 5 ]; then
+                echo "SCP attempt $attempt failed; retrying in $((attempt * 10)) seconds."
+                sleep $((attempt * 10))
+              fi
+            done
+            echo "SCP failed after 5 attempts: $source"
+            return 1
+          }
+          copy_with_retry /tmp/src.tar.gz "$ECS_SSH_USER@$ECS_HOST:/tmp/src.tar.gz"
+          copy_with_retry /tmp/sfa-backend.tar.gz "$ECS_SSH_USER@$ECS_HOST:/tmp/sfa-backend.tar.gz"
+          copy_with_retry "$APP_ENV_FILE" "$ECS_SSH_USER@$ECS_HOST:$APP_ENV_FILE"
           rm -f "$APP_ENV_FILE"
           REMOTE_ENV=$(printf "PROJECT_DIR=%q OK_FILE=%q FAIL_FILE=%q LOG_FILE=%q APP_ENV_FILE=%q" "$ECS_PROJECT_DIR" "$OK_FILE" "$FAIL_FILE" "$LOG_FILE" "$APP_ENV_FILE")
           sshpass -e ssh $SSH_OPTS -p "$PORT" "$ECS_SSH_USER@$ECS_HOST" "$REMOTE_ENV bash -s" <<'REMOTE_SCRIPT'
