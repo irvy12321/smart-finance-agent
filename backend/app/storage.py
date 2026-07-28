@@ -573,6 +573,62 @@ def fail_interrupted_running_tasks() -> int:
         conn.close()
 
 
+def fail_interrupted_running_tasks_once(boot_id: str | None) -> int | None:
+    """Recover stale tasks once for a complete server boot.
+
+    Uvicorn starts the FastAPI lifespan independently in every worker. A shared
+    boot id lets the first worker perform recovery while later or restarted
+    workers leave tasks owned by healthy sibling workers untouched.
+    """
+    if not boot_id:
+        return fail_interrupted_running_tasks()
+
+    conn = _get_connection()
+    try:
+        now = datetime.now().isoformat()
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS service_boot_recovery (
+                boot_id TEXT PRIMARY KEY,
+                recovered_at TEXT NOT NULL
+            )
+            """
+        )
+        claim = conn.execute(
+            "INSERT OR IGNORE INTO service_boot_recovery (boot_id, recovered_at) VALUES (?, ?)",
+            (boot_id, now),
+        )
+        if claim.rowcount == 0:
+            conn.commit()
+            return None
+
+        cursor = conn.execute(
+            """
+            UPDATE tasks
+            SET status = ?,
+                current_stage = ?,
+                message = ?,
+                updated_at = ?
+            WHERE status = ?
+            """,
+            (
+                "failed",
+                "interrupted",
+                "Task was interrupted by a backend restart. Please start a new research task.",
+                now,
+                "running",
+            ),
+        )
+        conn.commit()
+        return cursor.rowcount
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def list_tasks(user_id: int | None = None) -> list[dict[str, Any]]:
     conn = _get_connection()
     try:
