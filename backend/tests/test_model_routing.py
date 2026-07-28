@@ -68,6 +68,13 @@ def test_select_model_by_complexity():
     assert r._select_model(0.9) == "H"  # high tier -> high quality
 
 
+def test_chinese_knowledge_base_query_routes_to_rag():
+    router = SmartRouter(config=SmartRouterConfig())
+    decision = router.assess("请结合知识库文档说明RAG的作用，并注明资料来源")
+    assert decision.task_type in {"rag", "hybrid"}
+    assert decision.tool_scores["rag_retrieve"] > 0
+
+
 def test_route_model_applies_to_all_agents():
     router = LiteLLMRouter()
     token = router.set_route_model("openai/glm-4-flash")

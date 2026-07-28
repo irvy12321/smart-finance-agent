@@ -11,6 +11,7 @@ import re
 from unittest.mock import MagicMock
 
 from app.core.planner import PLANNER_SYSTEM, PlannerAgent
+from app.infrastructure.smart_router import RouteDecision
 from app.tools.financial_report_tool import FinancialAnalysisTool, FinancialReportTool
 from app.tools.news_summary_tool import NewsSummaryTool
 from app.tools.registry import ToolRegistry
@@ -106,3 +107,21 @@ def test_financial_plan_tools_are_preserved_not_coerced():
         "financial_analysis",
         "llm_synthesize",
     ]
+
+
+def test_required_rag_tool_is_added_when_route_detects_knowledge_request():
+    planner = _planner()
+    subtasks = planner._build_subtasks(
+        {
+            "subtasks": [
+                {"task_id": "t1", "tool_name": "llm_synthesize"},
+            ]
+        }
+    )
+    decision = RouteDecision(
+        task_type="rag", tool_scores={"rag_retrieve": 0.8, "llm_synthesize": 0.9}
+    )
+    planner._ensure_required_route_tools(subtasks, "请结合知识库文档注明来源", decision)
+    planner._validate_dag(subtasks)
+    assert [task.tool_name for task in subtasks] == ["rag_retrieve", "llm_synthesize"]
+    assert subtasks[-1].depends_on == ["required_rag_retrieve"]
