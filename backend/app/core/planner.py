@@ -201,6 +201,7 @@ class PlannerAgent:
                 )
                 plan_data = self._parse_response(response)
                 subtasks = self._build_subtasks(plan_data, route_decision)
+                self._ensure_required_route_tools(subtasks, safe_query, route_decision)
                 self._validate_dag(subtasks)
 
                 plan = Plan(
@@ -345,6 +346,59 @@ class PlannerAgent:
             raise PlannerError("Planner produced no usable subtasks")
 
         return subtasks
+
+    @staticmethod
+    def _ensure_required_route_tools(
+        subtasks: list[SubTask],
+        query: str,
+        route_decision: RouteDecision | None,
+    ) -> None:
+        """Keep explicit knowledge-base requests grounded in retrieved docs.
+
+        The planner LLM is allowed to choose the most useful DAG, but it must
+        not silently omit a tool that the deterministic router identified as a
+        direct requirement.  This is especially important for multilingual
+        prompts where the model may synthesize a plausible answer without
+        calling RAG at all.
+        """
+        if not route_decision or "rag_retrieve" not in route_decision.tool_scores:
+            return
+        if route_decision.tool_scores.get("rag_retrieve", 0.0) <= 0.0:
+            return
+        if any(task.tool_name == "rag_retrieve" for task in subtasks):
+            return
+
+        rag_task_id = "required_rag_retrieve"
+        existing_ids = {task.task_id for task in subtasks}
+        suffix = 2
+        while rag_task_id in existing_ids:
+            rag_task_id = f"required_rag_retrieve_{suffix}"
+            suffix += 1
+
+        rag_task = SubTask(
+            task_id=rag_task_id,
+            tool_name="rag_retrieve",
+            params={"query": query, "top_k": 5},
+            description="Retrieve relevant local knowledge-base documents and source metadata",
+            priority=3,
+            tool_priority_score=round(
+                route_decision.tool_scores.get("rag_retrieve", 0.7), 3
+            ),
+            reasoning="The query explicitly references the knowledge base or source documents.",
+            confidence=round(
+                route_decision.tool_scores.get("rag_retrieve", 0.7) * 0.9, 2
+            ),
+        )
+        subtasks.insert(0, rag_task)
+
+        # Ensure the synthesis node receives the retrieved chunks through the
+        # existing dependency-output injection path.
+        for task in subtasks[1:]:
+            if (
+                task.tool_name == "llm_synthesize"
+                and rag_task_id not in task.depends_on
+            ):
+                task.depends_on.append(rag_task_id)
 
     @staticmethod
     def _validate_dag(subtasks: list[SubTask]) -> None:

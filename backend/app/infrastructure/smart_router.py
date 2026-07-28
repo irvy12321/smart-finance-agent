@@ -68,6 +68,15 @@ TOOL_PATTERNS = {
         "knowledge",
         "document",
         "analysis of",
+        # Chinese queries are common in the UI and must take the same RAG
+        # route as their English equivalents.
+        "知识库",
+        "知识库文档",
+        "文档来源",
+        "参考资料",
+        "资料来源",
+        "根据文档",
+        "基于知识",
     ],
     "news_search": [
         "latest",
@@ -81,6 +90,13 @@ TOOL_PATTERNS = {
         "just",
         "this week",
         "this month",
+        "最新",
+        "近期",
+        "新闻",
+        "消息",
+        "公告",
+        "本周",
+        "本月",
     ],
     "crawler": [
         "sec filing",
