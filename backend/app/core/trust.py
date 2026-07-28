@@ -14,6 +14,7 @@ MOCK_WARNING = "SIMULATED DATA - NOT FOR INVESTMENT"
 # Relative reliability of each known data source.
 SOURCE_RELIABILITY: dict[str, str] = {
     "alpha_vantage": "high",
+    "finnhub": "high",
     "yahoo_finance": "high",
     "fmp": "high",
     "newsapi": "medium",

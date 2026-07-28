@@ -5,7 +5,7 @@
 import hashlib
 import os
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 
@@ -19,6 +19,7 @@ logger = get_logger("stock_price_tool")
 # 缓存 TTL 配置
 STOCK_PRICE_CACHE_TTL = 60  # 股票价格缓存 60 秒
 STOCK_HISTORY_CACHE_TTL = 300  # 历史数据缓存 300 秒
+FINNHUB_QUOTE_URL = "https://finnhub.io/api/v1/quote"
 
 
 class RateLimitError(RuntimeError):
@@ -40,6 +41,32 @@ def _raise_if_rate_limited(data: dict) -> None:
     message = data.get("Note") or data.get("Information")
     if message:
         raise RateLimitError(message)
+
+
+def _normalize_finnhub_quote(symbol: str, quote: dict) -> dict:
+    """Normalize a Finnhub quote without inventing unavailable fields."""
+    price = float(quote.get("c") or 0)
+    if price <= 0:
+        raise ValueError("Finnhub returned an empty quote")
+
+    quote_timestamp = int(quote.get("t") or 0)
+    timestamp = (
+        datetime.fromtimestamp(quote_timestamp, tz=timezone.utc).isoformat()
+        if quote_timestamp > 0
+        else datetime.now(timezone.utc).isoformat()
+    )
+    return {
+        "symbol": symbol,
+        "price": price,
+        "change": float(quote.get("d") or 0),
+        "change_percent": float(quote.get("dp") or 0),
+        "previous_close": float(quote.get("pc") or 0),
+        "open": float(quote.get("o") or 0),
+        "high": float(quote.get("h") or 0),
+        "low": float(quote.get("l") or 0),
+        "source": "finnhub",
+        "timestamp": timestamp,
+    }
 
 
 def _symbol_rng(symbol: str) -> "random.Random":
@@ -205,8 +232,9 @@ class StockPriceTool(BaseTool):
         "Queries real-time stock price and market data for a given stock symbol"
     )
 
-    def __init__(self, api_key: str = ""):
+    def __init__(self, api_key: str = "", finnhub_key: str = ""):
         self.api_key = api_key or os.getenv("ALPHA_VANTAGE_API_KEY", "")
+        self.finnhub_key = finnhub_key or os.getenv("FINNHUB_API_KEY", "")
         self._cache = get_cache()
 
     async def execute(self, **kwargs) -> ToolResult:
@@ -223,18 +251,30 @@ class StockPriceTool(BaseTool):
             logger.debug(f"Stock price cache hit: {symbol}")
             return cached_result
 
-        if not self.api_key:
-            return self._unavailable(symbol, "ALPHA_VANTAGE_API_KEY not configured")
+        errors: list[str] = []
+        providers = (
+            ("Finnhub", self.finnhub_key, self._fetch_finnhub_price),
+            ("Alpha Vantage", self.api_key, self._fetch_real_price),
+        )
+        for provider, api_key, fetch in providers:
+            if not api_key:
+                errors.append(f"{provider} API key not configured")
+                continue
+            try:
+                result = await fetch(symbol)
+                if result.success:
+                    self._cache.set(cache_key, result, ttl=STOCK_PRICE_CACHE_TTL)
+                    return result
+                errors.append(f"{provider} returned an unsuccessful result")
+            except Exception as e:
+                safe_error = redact_sensitive_text(e)
+                logger.error(
+                    f"{provider} stock price query failed for {symbol}: {safe_error}"
+                )
+                errors.append(f"{provider}: {safe_error}")
 
-        try:
-            result = await self._fetch_real_price(symbol)
-            if result.success:
-                self._cache.set(cache_key, result, ttl=STOCK_PRICE_CACHE_TTL)
-            return result
-        except Exception as e:
-            safe_error = redact_sensitive_text(e)
-            logger.error(f"Stock price query failed for {symbol}: {safe_error}")
-            return self._unavailable(symbol, f"real data unavailable: {safe_error}")
+        reason = "; ".join(errors) or "no real data provider configured"
+        return self._unavailable(symbol, f"real data unavailable: {reason}")
 
     def _unavailable(self, symbol: str, reason: str) -> ToolResult:
         """Return an explicit failure, or a clearly-labelled mock if ALLOW_MOCK_DATA is set."""
@@ -311,6 +351,32 @@ class StockPriceTool(BaseTool):
         except Exception as e:
             safe_error = redact_sensitive_text(e)
             logger.error(f"Alpha Vantage API error for {symbol}: {safe_error}")
+            raise
+
+    async def _fetch_finnhub_price(self, symbol: str) -> ToolResult:
+        """Fetch a real-time quote from Finnhub."""
+        proxy = os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
+        params = {"symbol": symbol, "token": self.finnhub_key}
+        timeout = aiohttp.ClientTimeout(total=20)
+
+        try:
+            async with (
+                aiohttp.ClientSession(timeout=timeout) as session,
+                session.get(FINNHUB_QUOTE_URL, params=params, proxy=proxy) as resp,
+            ):
+                resp.raise_for_status()
+                quote = await resp.json()
+                data = _normalize_finnhub_quote(symbol, quote)
+                return ToolResult(
+                    success=True,
+                    data=data,
+                    tool_name=self.name,
+                    source="finnhub",
+                    is_mock=False,
+                )
+        except Exception as e:
+            safe_error = redact_sensitive_text(e)
+            logger.error(f"Finnhub API error for {symbol}: {safe_error}")
             raise
 
     def _mock_price_sync(self, symbol: str) -> ToolResult:
