@@ -1,12 +1,13 @@
 import pytest
 
-from app.tools.base_tool import MOCK_WARNING, mock_enabled
+from app.tools.base_tool import MOCK_WARNING, ToolResult, mock_enabled
 from app.tools.financial_report_tool import FinancialReportTool
 from app.tools.news_summary_tool import NewsSummaryTool
 from app.tools.stock_price_tool import (
     RateLimitError,
     StockHistoryTool,
     StockPriceTool,
+    _normalize_finnhub_quote,
     _parse_percent,
     _raise_if_rate_limited,
 )
@@ -76,6 +77,99 @@ def test_raise_if_rate_limited_detects_note():
         _raise_if_rate_limited({"Information": "rate limit reached"})
     # A normal payload must not raise.
     _raise_if_rate_limited({"Global Quote": {"05. price": "1"}})
+
+
+def test_normalize_finnhub_quote_uses_only_returned_market_values():
+    result = _normalize_finnhub_quote(
+        "AAPL",
+        {
+            "c": 210.5,
+            "d": 1.25,
+            "dp": 0.5972,
+            "h": 212.0,
+            "l": 208.0,
+            "o": 209.0,
+            "pc": 209.25,
+            "t": 1_700_000_000,
+        },
+    )
+
+    assert result["symbol"] == "AAPL"
+    assert result["price"] == pytest.approx(210.5)
+    assert result["change_percent"] == pytest.approx(0.5972)
+    assert result["source"] == "finnhub"
+    assert "volume" not in result
+
+
+@pytest.mark.asyncio
+async def test_stock_price_prefers_finnhub_without_calling_alpha(monkeypatch):
+    monkeypatch.setenv("ALLOW_MOCK_DATA", "true")
+    tool = StockPriceTool(api_key="alpha-key", finnhub_key="finnhub-key")
+
+    async def finnhub_success(symbol: str):
+        return ToolResult(
+            success=True,
+            data={"symbol": symbol, "price": 210.5, "source": "finnhub"},
+            tool_name="stock_price",
+            source="finnhub",
+        )
+
+    async def alpha_must_not_run(symbol: str):
+        raise AssertionError(f"Alpha should not run for {symbol}")
+
+    monkeypatch.setattr(tool, "_fetch_finnhub_price", finnhub_success)
+    monkeypatch.setattr(tool, "_fetch_real_price", alpha_must_not_run)
+
+    result = await tool.execute(symbol="PRIMARY1")
+
+    assert result.success is True
+    assert result.is_mock is False
+    assert result.source == "finnhub"
+
+
+@pytest.mark.asyncio
+async def test_stock_price_uses_alpha_after_finnhub_failure(monkeypatch):
+    monkeypatch.setenv("ALLOW_MOCK_DATA", "true")
+    tool = StockPriceTool(api_key="alpha-key", finnhub_key="finnhub-key")
+
+    async def finnhub_failure(symbol: str):
+        raise RuntimeError(f"Finnhub unavailable for {symbol}")
+
+    async def alpha_success(symbol: str):
+        return ToolResult(
+            success=True,
+            data={"symbol": symbol, "price": 210.5, "source": "alpha_vantage"},
+            tool_name="stock_price",
+            source="alpha_vantage",
+        )
+
+    monkeypatch.setattr(tool, "_fetch_finnhub_price", finnhub_failure)
+    monkeypatch.setattr(tool, "_fetch_real_price", alpha_success)
+
+    result = await tool.execute(symbol="FALLBACK1")
+
+    assert result.success is True
+    assert result.is_mock is False
+    assert result.source == "alpha_vantage"
+
+
+@pytest.mark.asyncio
+async def test_stock_price_uses_labelled_mock_after_real_providers_fail(monkeypatch):
+    monkeypatch.setenv("ALLOW_MOCK_DATA", "true")
+    tool = StockPriceTool(api_key="alpha-key", finnhub_key="finnhub-key")
+
+    async def provider_failure(symbol: str):
+        raise RuntimeError(f"provider unavailable for {symbol}")
+
+    monkeypatch.setattr(tool, "_fetch_finnhub_price", provider_failure)
+    monkeypatch.setattr(tool, "_fetch_real_price", provider_failure)
+
+    result = await tool.execute(symbol="FALLBACK2")
+
+    assert result.success is True
+    assert result.is_mock is True
+    assert result.source == "mock"
+    assert result.warning == MOCK_WARNING
 
 
 @pytest.mark.asyncio

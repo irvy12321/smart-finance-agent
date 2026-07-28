@@ -2,6 +2,7 @@ from app.core.trust import (
     MOCK_WARNING,
     DataEnvelope,
     aggregate_confidence,
+    source_reliability_tier,
 )
 
 
@@ -13,6 +14,10 @@ def test_envelope_real_has_no_warning():
     assert d["source"] == "alpha_vantage"
     assert d["warning"] == ""
     assert "fetched_at" in d
+
+
+def test_finnhub_is_a_high_reliability_source():
+    assert source_reliability_tier("finnhub") == "high"
 
 
 def test_envelope_mock_carries_warning():
