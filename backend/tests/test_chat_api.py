@@ -68,11 +68,15 @@ async def test_send_financial_message(client: AsyncClient, mock_storage):
         response = await client.post(
             "/api/chat/conversations/test-conv/messages",
             json={"message": "What is the stock price of AAPL?"},
+            headers={"Accept-Language": "zh-CN"},
         )
 
     assert response.status_code == 200
     data = response.json()
     assert data["confidence"] == 0.9
+    mock_orchestrator.run.assert_awaited_once_with(
+        "What is the stock price of AAPL?", language="zh"
+    )
 
 
 @pytest.mark.asyncio

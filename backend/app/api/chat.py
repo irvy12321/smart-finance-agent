@@ -516,7 +516,7 @@ async def generate_orchestrator_response(
 ) -> tuple[str, list, float, str | None]:
     """
     使用 Orchestrator 全流水线处理金融研究查询
-    带 90 秒超时保护，超时自动降级到直接 LLM
+    带可配置超时保护，超时自动降级到直接 LLM
     返回: (response_text, sources, confidence, report_task_id)
     """
     import asyncio
@@ -524,7 +524,8 @@ async def generate_orchestrator_response(
     try:
         logger.info(f"[orchestrator] Processing financial query: {message[:80]}...")
         result = await asyncio.wait_for(
-            orchestrator.run(message), timeout=CHAT_ORCHESTRATOR_TIMEOUT_SECONDS
+            orchestrator.run(message, language=language),
+            timeout=CHAT_ORCHESTRATOR_TIMEOUT_SECONDS,
         )
 
         sources = []

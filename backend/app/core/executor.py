@@ -101,10 +101,9 @@ class ExecutorAgent:
             circuit_breaker_mgr=self.circuit_breaker_mgr,
             step_timeout=fallback_step_timeout,
         )
-        self._current_language = "en"
 
     @traced("executor.execute")
-    async def execute(self, plan: Plan) -> ExecutionResult:
+    async def execute(self, plan: Plan, language: str = "en") -> ExecutionResult:
         trace = TraceContext()
         result = ExecutionResult(plan=plan)
 
@@ -164,7 +163,9 @@ class ExecutorAgent:
                 with trace.span("parallel_batch", tasks=ready, round=round_num):
                     batch_results = await asyncio.gather(
                         *[
-                            self._execute_task(plan.subtasks, tid, completed, trace)
+                            self._execute_task(
+                                plan.subtasks, tid, completed, trace, language
+                            )
                             for tid in ready
                         ],
                         return_exceptions=True,
@@ -224,7 +225,7 @@ class ExecutorAgent:
                 result.final_answer = synth.data
             else:
                 result.final_answer = await self._auto_synthesize(
-                    plan, result.task_results, trace
+                    plan, result.task_results, trace, language
                 )
 
         result.total_duration_ms = trace.summary()["total_ms"]
@@ -253,6 +254,7 @@ class ExecutorAgent:
         task_id: str,
         completed: dict[str, TaskResult],
         trace: TraceContext,
+        language: str = "en",
     ) -> TaskResult:
         task = next((t for t in subtasks if t.task_id == task_id), None)
         if not task:
@@ -295,7 +297,7 @@ class ExecutorAgent:
             )
 
         if task.tool_name == "llm_synthesize":
-            result = await self._run_synthesize(task, completed, trace)
+            result = await self._run_synthesize(task, completed, trace, language)
         else:
             tool = self.registry.get(task.tool_name)
             if not tool:
@@ -450,7 +452,11 @@ class ExecutorAgent:
             tool_circuit_breaker_state.labels(tool_name=tool_name).set(value)
 
     async def _run_synthesize(
-        self, task: SubTask, completed: dict[str, TaskResult], trace: TraceContext
+        self,
+        task: SubTask,
+        completed: dict[str, TaskResult],
+        trace: TraceContext,
+        language: str = "en",
     ) -> TaskResult:
         context_parts = []
         failed_context_parts = []
@@ -486,7 +492,6 @@ class ExecutorAgent:
             else synthesis_prompt
         )
 
-        language = getattr(self, "_current_language", "en")
         if language == "zh":
             system = "你是一位研究分析师。根据提供的数据提供清晰、结构化、全面的分析。必须使用中文回复。"
             full_prompt += "\n\n请使用中文回复。"
@@ -505,7 +510,7 @@ class ExecutorAgent:
             else:
                 answer = await self.llm.complete(
                     prompt=full_prompt,
-                    system="You are a research analyst. Provide a clear, structured, and comprehensive analysis based on the provided data.",
+                    system=system,
                     temperature=0.3,
                     max_tokens=4096,
                 )
@@ -519,7 +524,11 @@ class ExecutorAgent:
         )
 
     async def _auto_synthesize(
-        self, plan: Plan, results: list[TaskResult], trace: TraceContext
+        self,
+        plan: Plan,
+        results: list[TaskResult],
+        trace: TraceContext,
+        language: str = "en",
     ) -> str:
         context_parts = []
         for r in results:
@@ -532,11 +541,10 @@ class ExecutorAgent:
             logger.warning("No successful task results to synthesize")
             return (
                 "No successful task results to synthesize."
-                if self._current_language == "en"
+                if language == "en"
                 else "没有成功的任务结果可供综合分析。"
             )
 
-        language = getattr(self, "_current_language", "en")
         logger.info(
             f"Auto-synthesizing with language={language}, {len(context_parts)} context parts"
         )
