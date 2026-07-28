@@ -139,6 +139,7 @@
     "queryRequired": "请输入研究查询",
     "taskCreated": "任务创建成功",
     "taskFailed": "任务失败",
+    "taskInterrupted": "任务因服务重启而中断，请新建研究任务。",
     "researchProgress": "研究进度",
     "currentStage": "当前阶段",
     "planning": "规划中",

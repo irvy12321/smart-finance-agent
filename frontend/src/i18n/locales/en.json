@@ -139,6 +139,7 @@
     "queryRequired": "Please enter a research query",
     "taskCreated": "Task created successfully",
     "taskFailed": "Task failed",
+    "taskInterrupted": "The task was interrupted by a service restart. Please create a new research task.",
     "researchProgress": "Research Progress",
     "currentStage": "Current Stage",
     "planning": "Planning",
