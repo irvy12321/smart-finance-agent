@@ -9,6 +9,7 @@ build/
 .coverage
 coverage.json
 .pytest_cache/
+.pytest-tmp*/
 
 # Environment
 .env
